@@ -1,7 +1,8 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
-> **RASCUNHO v0.9 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
-> v0.9: acesso público só ao site e à API de leitura (sem proxy de acesso); site servido do servidor autohospedado, com espelho no GitHub Pages.
+> **RASCUNHO v0.10 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> v0.10: site publicado só no servidor autohospedado, atualizado a partir da branch `junior` a cada 10 minutos.
+> v0.9: acesso público só ao site e à API de leitura (sem proxy de acesso); site servido do servidor autohospedado.
 > v0.8: trava de renda mínima nas 5 recomendadas (`gold.parametro_ranking`, coluna `elegivel_recomendacao`, teste 14).
 > v0.7: gold implementada (seção 3.3 reflete `sql/gold/`; posição na região; nota de riqueza agregada; `mes_parcial`).
 > v0.6: regras da gold alinhadas ao prd v0.3 (redistribuição de peso, uma cidade por região imediata no top 5, limites P5/P95 no espaço competitivo, CAGR da tendência).
@@ -61,7 +62,7 @@ flowchart LR
     API --> APP["Streamlit Cloud<br/>src/app"]
     G -.->|"snapshot JSON<br/>src/exportacao"| SNAP["site/dados/"]
     SNAP -.->|fallback| APP
-    SNAP --> SITE["Site de apoio<br/>servidor autohospedado<br/>+ espelho no GitHub Pages"]
+    SNAP --> SITE["Site de apoio<br/>servidor autohospedado"]
 ```
 
 **Princípios**
@@ -699,8 +700,8 @@ nos *Secrets* do Streamlit, nunca no repositório.
 
 - **Stack:** HTML, CSS e JavaScript estáticos (ES modules), **sem etapa de build**; bibliotecas de mapa e gráficos por CDN
   com versão fixa; malha municipal do IBGE.
-- **Publicação:** servido pelo servidor autohospedado em https://radar-expansao.lovelearning.com.br; o GitHub Pages (https://jj-junior.github.io/radar-expansao/),
-  publicado por GitHub Actions (`.github/workflows/site.yml`), fica como espelho e reserva.
+- **Publicação:** servido pelo servidor autohospedado em https://radar-expansao.lovelearning.com.br, que atualiza os arquivos a partir da
+  branch `junior` do repositório a cada 10 minutos. É o único endereço do site.
 - **Dados:** JSON exportados da gold por `src/exportacao/exportar_site.py`, um arquivo por tabela, com os mesmos nomes de colunas.
 - Para abrir localmente: `python -m http.server 8000 --directory site`.
 
@@ -713,7 +714,7 @@ nos *Secrets* do Streamlit, nunca no repositório.
 | Automação | n8n **autohospedado via Docker** |
 | Ingestão | Cenário A: container de ETL em Python · Cenário B: nós do n8n |
 | Dashboard | Streamlit + Plotly, publicado no Streamlit Cloud, lendo a gold pela API REST |
-| Site de apoio | HTML/CSS/JS estático, servido pelo servidor autohospedado, com espelho no GitHub Pages |
+| Site de apoio | HTML/CSS/JS estático, servido pelo servidor autohospedado |
 | Versionamento | Git + GitHub (repositório público) |
 
 **Conexões**
