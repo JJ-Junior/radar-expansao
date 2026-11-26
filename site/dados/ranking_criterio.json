@@ -1,0 +1,8 @@
+{"tabela": "gold.ranking_criterio", "gerado_em": "2026-11-26T12:59:30-03:00", "colunas": ["criterio", "descricao", "fonte", "peso", "sentido", "versao_pesos"],"linhas":[
+["mercado","Tamanho de mercado: população estimada mais recente","IBGE 6579 (estimativas de população)",0.25,"maior_melhor","prd-v0.2"],
+["poder_compra","Poder de compra: renda domiciliar per capita média","IBGE 10295 (Censo 2022)",0.25,"maior_melhor","prd-v0.2"],
+["espaco_competitivo","Espaço competitivo: academias (CNAE 93.13-1) por 10 mil habitantes","IBGE 9418 (Cadastro Central de Empresas)",0.2,"menor_melhor","prd-v0.2"],
+["crescimento","Crescimento anual da população desde o Censo 2022","IBGE 4714 (Censo 2022) + 6579 (estimativas)",0.15,"maior_melhor","prd-v0.2"],
+["riqueza","Riqueza local: PIB per capita (nível 5% + tendência de 5 anos 5%)","IBGE 5938 (PIB dos Municípios)",0.1,"maior_melhor","prd-v0.2"],
+["mercado_formal","Mercado formal: salário médio mensal dos empregos formais","IBGE 9509 (Cadastro Central de Empresas)",0.05,"maior_melhor","prd-v0.2"]
+]}
