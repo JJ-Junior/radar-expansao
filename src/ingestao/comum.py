@@ -85,7 +85,10 @@ class ErroDefinitivo(ErroAPI):
 
 # --------------------------------------------------------------------------- log
 def configurar_log() -> None:
-    """Log simples no terminal, com hora."""
+    """Log simples no terminal, com hora (sempre em UTF-8, para os acentos sairem certos)."""
+    for fluxo in (sys.stdout, sys.stderr):
+        if hasattr(fluxo, "reconfigure"):
+            fluxo.reconfigure(encoding="utf-8", errors="replace")
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(levelname)-7s %(message)s",
