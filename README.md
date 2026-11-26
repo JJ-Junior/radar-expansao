@@ -6,8 +6,9 @@
 > |---|---|
 > | 1 · Planejamento (`prd.md`, `spec.md`, `agents.md`) | ✅ rascunhos em revisão pelo squad |
 > | 2 · Exploração das APIs | ✅ concluída (achados em `spec.md`, seção 2) |
-> | 3 · Camada bronze (ingestão em Python) | ✅ código e DDL prontos e testados (carga inicial + incremental) · carga no banco do projeto pendente |
-> | 4 · Silver · 5 · Gold · 6 · n8n · 7 · Streamlit | ⏳ próximas etapas |
+> | 3 · Camada bronze (ingestão em Python) | ✅ concluída: 13 recursos carregados no banco do projeto; incremental sem duplicar |
+> | 4 · Camada silver (modelo estrela) | ✅ concluída: 5 dimensões, 2 fatos, 12 testes de qualidade passando |
+> | 5 · Gold · 6 · n8n · 7 · Streamlit | ⏳ próximas etapas |
 > | Extra · Site de apoio | ✅ publicado com prévia dos dados |
 
 Sistema que cruza dados oficiais do **IBGE** e do **Banco Central** para responder a uma pergunta de negócio:
@@ -107,7 +108,18 @@ Cada fonte também roda sozinha (`--fonte ibge` ou `--fonte bcb`, ou `python -m 
 Ao final, o terminal mostra uma tabela por recurso (status, chamadas, respostas novas, segundos), e o mesmo resultado fica em
 `bronze.execucao`. Rodar de novo não duplica nada: respostas iguais são reconhecidas pelo hash.
 
-**Passos seguintes** — silver, gold e dashboard: _(a preencher quando as etapas forem concluídas)_.
+**Passo 4 — camada silver** (cria as tabelas, transforma a bronze e roda os testes de qualidade):
+
+```powershell
+python -m src.transformacao.criar_estrutura --camadas silver
+python -m src.transformacao.executar
+```
+
+A transformação é a função SQL `silver.atualizar()`: "achata" o JSON do IBGE em município + ano + valor, converte tipos,
+troca os símbolos da fonte (`-`, `...`, `X`, `..`) por nulo com uma flag explicando o motivo e grava sem duplicar.
+Ao final, o terminal mostra os 12 testes de qualidade (esperado × obtido); se algum falhar, o comando termina com erro.
+
+**Passos seguintes** — gold e dashboard: _(a preencher quando as etapas forem concluídas)_.
 
 ## 7. Estrutura do repositório
 

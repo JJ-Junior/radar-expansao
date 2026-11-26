@@ -64,4 +64,5 @@ O que muda no próximo pedido (e, se for regra, o que entrou no agents.md).
 | 1 | [02-validacao-cnae-academias.md](etapa-1-planejamento/02-validacao-cnae-academias.md) | Validação do código CNAE 93.13-1 na API do IBGE |
 | 1 | [03-infraestrutura-e-cenarios-de-ingestao.md](etapa-1-planejamento/03-infraestrutura-e-cenarios-de-ingestao.md) | Supabase e n8n autohospedados, acesso à gold e cenários de ingestão |
 | 3 | [01-ingestao-python.md](etapa-3-bronze/01-ingestao-python.md) | Camada bronze e ingestão em Python (cenário A) |
+| 4 | [01-modelo-estrela.md](etapa-4-silver/01-modelo-estrela.md) | Camada silver: modelo estrela, transformação única e testes de qualidade |
 | extra | [01-site-estatico.md](extra-site-de-apoio/01-site-estatico.md) | Site de apoio estático no GitHub Pages |

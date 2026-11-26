@@ -1,10 +1,11 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
-> **RASCUNHO v0.4 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
-> v0.2: Supabase e n8n autohospedados via Docker; ingestão descrita em dois cenários (Python e n8n) com o mesmo contrato da bronze.
+> **RASCUNHO v0.5 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> v0.5: silver implementada (seções 3.2 e 4); `dim_indicador` com agregado/variável/série; `dim_municipio` com regiões imediata e intermediária.
 > v0.4: bronze implementada (seção 3.1 reflete o DDL de `sql/bronze/`); lote do IPCA por ano; app envia a chave anônima + token de leitura.
 > v0.3: container de ETL disparado pelo n8n (cenário A); trava contra execução simultânea; fuso America/Sao_Paulo;
 > dashboard lendo a gold pela API REST do Supabase com fallback em snapshot; conexão com `DB_SSLMODE` configurável; stack do site definida.
+> v0.2: Supabase e n8n autohospedados via Docker; ingestão descrita em dois cenários (Python e n8n) com o mesmo contrato da bronze.
 > Fonte da verdade técnica do projeto: toda mudança de modelo, endpoint ou regra é registrada aqui **antes** de ir para o código.
 
 ---
@@ -222,6 +223,16 @@ Cada cenário filtra a própria `origem_carga` na view, para um não "esconder" 
 
 ### 3.2 Silver — modelo estrela
 
+DDL implementado em `sql/silver/` (rodar como `etl_radar` com `python -m src.transformacao.criar_estrutura`; idempotente):
+
+| Arquivo | Conteúdo |
+|---|---|
+| `01_dimensoes.sql` | `dim_regiao`, `dim_uf`, `dim_municipio`, `dim_calendario` (gerada, 2000–2030) e `dim_indicador` (catálogo com a origem de cada indicador) |
+| `02_fatos.sql` | `fato_indicador_municipal` e `fato_indicador_macro` |
+| `03_funcoes_apoio.sql` | `silver.valor_numerico()`, `silver.flag_valor()` e `silver.bronze_vigente(origem)` |
+| `04_atualizar_silver.sql` | `silver.atualizar(origem)`: a transformação bronze → silver (seção 4) |
+| `05_testes_qualidade.sql` | `silver.vw_testes_qualidade`: testes do "pronto quando" (esperado × obtido) |
+
 ```mermaid
 erDiagram
     dim_regiao ||--o{ dim_uf : contem
@@ -233,92 +244,90 @@ erDiagram
 ```
 
 ```sql
-CREATE SCHEMA IF NOT EXISTS silver;
-
 CREATE TABLE silver.dim_regiao (
-    regiao_id     smallint PRIMARY KEY,       -- 1 a 5 (código IBGE)
-    regiao_sigla  char(2)  NOT NULL UNIQUE,   -- N, NE, SE, S, CO
-    regiao_nome   text     NOT NULL
+    regiao_id smallint PRIMARY KEY, regiao_sigla char(2) NOT NULL UNIQUE, regiao_nome text NOT NULL,
+    bronze_id bigint NOT NULL, atualizado_em timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE silver.dim_uf (
-    uf_id      smallint PRIMARY KEY,          -- 11 a 53 (código IBGE)
-    uf_sigla   char(2)  NOT NULL UNIQUE,
-    uf_nome    text     NOT NULL,
-    regiao_id  smallint NOT NULL REFERENCES silver.dim_regiao
+    uf_id smallint PRIMARY KEY, uf_sigla char(2) NOT NULL UNIQUE, uf_nome text NOT NULL,
+    regiao_id smallint NOT NULL REFERENCES silver.dim_regiao,
+    bronze_id bigint NOT NULL, atualizado_em timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE silver.dim_municipio (
-    municipio_id             integer  PRIMARY KEY,   -- 7 dígitos (código IBGE)
-    municipio_nome           text     NOT NULL,
-    uf_id                    smallint NOT NULL REFERENCES silver.dim_uf,
-    regiao_id                smallint NOT NULL REFERENCES silver.dim_regiao,
-    mesorregiao_id           integer,
-    microrregiao_id          integer,                -- pode ser nulo (municípios recentes)
-    regiao_intermediaria_id  integer,
-    regiao_imediata_id       integer,
-    bronze_id                bigint   NOT NULL,      -- bronze.api_resposta.resposta_id
-    atualizado_em            timestamptz NOT NULL DEFAULT now()
+    municipio_id              integer  PRIMARY KEY,          -- 7 dígitos (código IBGE)
+    municipio_nome            text     NOT NULL,
+    uf_id                     smallint NOT NULL REFERENCES silver.dim_uf,
+    regiao_id                 smallint NOT NULL REFERENCES silver.dim_regiao,
+    regiao_intermediaria_id   integer,  regiao_intermediaria_nome text,
+    regiao_imediata_id        integer,  regiao_imediata_nome      text,   -- usada pelo prd
+    mesorregiao_id            integer,  mesorregiao_nome          text,
+    microrregiao_id           integer,  microrregiao_nome         text,   -- pode ser nulo
+    bronze_id                 bigint   NOT NULL,
+    atualizado_em             timestamptz NOT NULL DEFAULT now()
 );
 
 CREATE TABLE silver.dim_calendario (
-    data         date     PRIMARY KEY,               -- 2000-01-01 a 2030-12-31 (generate_series)
-    ano          smallint NOT NULL,
-    trimestre    smallint NOT NULL,
-    mes          smallint NOT NULL,
-    ano_mes      integer  NOT NULL,                  -- 202610
-    nome_mes     text     NOT NULL,
-    dia_semana   smallint NOT NULL,                  -- 1 = segunda ... 7 = domingo
-    eh_fim_de_semana boolean NOT NULL
+    data date PRIMARY KEY, ano smallint NOT NULL, trimestre smallint NOT NULL, mes smallint NOT NULL,
+    ano_mes integer NOT NULL, nome_mes text NOT NULL, dia_semana smallint NOT NULL, eh_fim_de_semana boolean NOT NULL
 );
 
--- Catálogo dos indicadores: liga cada fato à sua origem na API.
 CREATE TABLE silver.dim_indicador (
-    indicador_id   text     PRIMARY KEY,   -- ex.: 'populacao_estimada', 'pib', 'academias_qtd', 'selic_meta'
-    indicador_nome text     NOT NULL,
-    fonte          text     NOT NULL,      -- 'IBGE' | 'BCB'
-    codigo_origem  text     NOT NULL,      -- ex.: '6579/9324', '9418/2585/12762[117856]', 'sgs 432'
-    unidade        text     NOT NULL,      -- 'pessoas', 'mil R$', 'R$', '%', '% a.a.', 'unidades'
-    periodicidade  text     NOT NULL,      -- 'anual', 'decenal', 'mensal', 'diaria'
-    descricao      text
+    indicador_id   text PRIMARY KEY,      -- 'populacao_estimada', 'pib', 'academias_qtd', 'selic_meta'...
+    indicador_nome text NOT NULL,
+    fonte          text NOT NULL,         -- 'IBGE' | 'BCB'
+    agregado       integer,               -- IBGE: tabela    } a transformação usa estas três
+    variavel       integer,               -- IBGE: variável  } colunas para ligar a resposta
+    serie_bcb      integer,               -- BCB: série SGS  } da bronze ao indicador
+    codigo_origem  text NOT NULL,         -- forma legível: '9418/2585 · 12762[117856]'
+    unidade        text NOT NULL,         -- 'pessoas', 'mil R$', 'R$', '%', '% a.a.', 'unidades'
+    periodicidade  text NOT NULL,         -- 'anual' | 'decenal' | 'mensal' | 'diaria'
+    nivel          text NOT NULL,         -- 'municipal' | 'macro'
+    descricao      text,
+    UNIQUE (agregado, variavel), UNIQUE (serie_bcb)
 );
 
 CREATE TABLE silver.fato_indicador_municipal (
     municipio_id  integer  NOT NULL REFERENCES silver.dim_municipio,
     indicador_id  text     NOT NULL REFERENCES silver.dim_indicador,
     ano           smallint NOT NULL,
-    valor         numeric,                              -- nulo quando a fonte mandou símbolo
-    flag_valor    text     NOT NULL DEFAULT 'ok',       -- 'ok' | 'zero_absoluto' | 'nao_disponivel' | 'sigilo' | 'nao_se_aplica'
+    valor         numeric,                -- nulo quando a fonte mandou símbolo
+    flag_valor    text     NOT NULL,      -- 'ok' | 'zero_absoluto' | 'nao_disponivel' | 'sigilo' | 'nao_se_aplica' | 'invalido'
     bronze_id     bigint   NOT NULL,
     atualizado_em timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (municipio_id, indicador_id, ano)
 );
 
 CREATE TABLE silver.fato_indicador_macro (
-    indicador_id  text     NOT NULL REFERENCES silver.dim_indicador,
-    data          date     NOT NULL REFERENCES silver.dim_calendario,  -- mensal: primeiro dia do mês
+    indicador_id  text NOT NULL REFERENCES silver.dim_indicador,
+    data          date NOT NULL REFERENCES silver.dim_calendario,   -- mensal: 1º dia do mês
     valor         numeric,
-    flag_valor    text     NOT NULL DEFAULT 'ok',
-    bronze_id     bigint   NOT NULL,
+    flag_valor    text NOT NULL,
+    bronze_id     bigint NOT NULL,
     atualizado_em timestamptz NOT NULL DEFAULT now(),
     PRIMARY KEY (indicador_id, data)
 );
 ```
 
-Indicadores previstos em `dim_indicador`:
+`bronze_id` existe em toda linha que vem da bronze (regiões, UFs, municípios e fatos). `dim_calendario` e `dim_indicador`
+são geradas pelo próprio DDL e não têm origem na bronze.
 
-| indicador_id | Origem | Fato |
-|---|---|---|
-| `populacao_estimada` | IBGE 6579/9324 | municipal |
-| `populacao_censo` | IBGE 4714/93 | municipal |
-| `area_km2` | IBGE 4714/6318 | municipal |
-| `pib` | IBGE 5938/37 (mil R$) | municipal |
-| `renda_dom_per_capita` | IBGE 10295/13431 | municipal |
-| `academias_qtd` | IBGE 9418/2585 · CNAE 93.13-1 | municipal |
-| `salario_medio` | IBGE 9509/10143 | municipal |
-| `ipca_mensal`, `ipca_12m` | IBGE 7060/63 e 2265 · 315[7169] | macro |
-| `selic_meta` | BCB SGS 432 | macro |
-| `dolar_venda` | BCB SGS 10813 | macro |
+Indicadores em `dim_indicador`:
+
+| indicador_id | Origem | Nível | Unidade |
+|---|---|---|---|
+| `populacao_estimada` | IBGE 6579/9324 | municipal | pessoas |
+| `populacao_censo`, `area_km2`, `densidade_demografica` | IBGE 4714/93, 6318, 614 | municipal | pessoas, km², hab/km² |
+| `pib` | IBGE 5938/37 | municipal | mil R$ |
+| `vab_total`, `vab_agropecuaria`, `vab_industria`, `vab_servicos`, `vab_administracao_publica`, `impostos_liquidos` | IBGE 5938/498, 513, 517, 6575, 525, 543 (até 2021) | municipal | mil R$ |
+| `renda_dom_per_capita` | IBGE 10295/13431 | municipal | R$ |
+| `academias_qtd` | IBGE 9418/2585 · CNAE 93.13-1 | municipal | unidades |
+| `salario_medio` | IBGE 9509/10143 | municipal | R$ |
+| `ipca_mensal`, `ipca_12m` | IBGE 7060/63 e 2265 · 315[7169] | macro | % |
+| `selic_meta` | BCB SGS 432 | macro | % a.a. |
+| `dolar_venda` | BCB SGS 10813 | macro | R$ |
+| `ipca_mensal_bcb` | BCB SGS 433 (conferência do IPCA do IBGE) | macro | % |
 
 ### 3.3 Gold — tabelas de consumo
 
@@ -446,6 +455,22 @@ Script completo e idempotente (schemas, papéis, permissões e RLS em todas as t
 8. **Selic com datas futuras:** a silver guarda só `data <= current_date`; o futuro continua na bronze.
 9. **Unidades preservadas:** PIB fica em mil R$ na silver (unidade em `dim_indicador`); conversões acontecem na gold.
 10. **Rastreio:** toda linha leva `bronze_id`.
+
+**Implementação (um único caminho para os cenários A e B).** As regras acima estão na função `silver.atualizar(origem)`
+(`sql/silver/04_atualizar_silver.sql`). O cenário A a chama por `python -m src.transformacao.executar`; o cenário B chama
+o mesmo job ou faz `SELECT * FROM silver.atualizar()` pelo nó Postgres. A função:
+
+- materializa a resposta vigente de cada `(recurso, lote)` (`silver.bronze_vigente`);
+- liga cada variável do IBGE ao indicador por `parametros->>'agregado'` + `id` da variável, e cada série do BCB por
+  `parametros->>'serie'` — **por isso os dois cenários gravam esses campos em `parametros`**;
+- usa `jsonb_array_elements` / `jsonb_each_text` para achatar o JSON; `DISTINCT ON` + `ON CONFLICT DO UPDATE` para não
+  duplicar; só reescreve uma linha quando valor, flag ou `bronze_id` mudaram (rodar de novo sem bronze nova grava 0 linhas);
+- devolve as linhas gravadas por tabela.
+
+**Testes de qualidade** (`silver.vw_testes_qualidade`, rodados pelo `executar.py`, que termina com erro se algum falhar):
+5 regiões · 27 UFs · 5.571 municípios · nenhum município sem região imediata · nenhum município citado na bronze sem par
+na `dim_municipio` · todo indicador com linhas · nenhum valor com formato inválido · coerência entre valor nulo e flag ·
+toda linha rastreável até a bronze · nenhuma data futura nos fatos macro · IPCA do IBGE igual ao do BCB em todos os meses.
 
 ## 5. Regras silver → gold
 
