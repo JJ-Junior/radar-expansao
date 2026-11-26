@@ -1,6 +1,7 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
-> **RASCUNHO v0.8 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> **RASCUNHO v0.9 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> v0.9: acesso público só ao site e à API de leitura (sem proxy de acesso); site servido do servidor autohospedado, com espelho no GitHub Pages.
 > v0.8: trava de renda mínima nas 5 recomendadas (`gold.parametro_ranking`, coluna `elegivel_recomendacao`, teste 14).
 > v0.7: gold implementada (seção 3.3 reflete `sql/gold/`; posição na região; nota de riqueza agregada; `mes_parcial`).
 > v0.6: regras da gold alinhadas ao prd v0.3 (redistribuição de peso, uma cidade por região imediata no top 5, limites P5/P95 no espaço competitivo, CAGR da tendência).
@@ -60,7 +61,7 @@ flowchart LR
     API --> APP["Streamlit Cloud<br/>src/app"]
     G -.->|"snapshot JSON<br/>src/exportacao"| SNAP["site/dados/"]
     SNAP -.->|fallback| APP
-    SNAP --> SITE["Site de apoio<br/>GitHub Pages"]
+    SNAP --> SITE["Site de apoio<br/>servidor autohospedado<br/>+ espelho no GitHub Pages"]
 ```
 
 **Princípios**
@@ -669,18 +670,37 @@ Workflows exportados (sempre **sem credenciais**): `n8n/radar-expansao-cenario-a
 - **Fonte principal: API REST do Supabase**, lida com `requests`:
   `GET {SUPABASE_URL}/rest/v1/{tabela}` com os headers `apikey: <chave anônima>` (o gateway exige uma chave de consumidor), `Authorization: Bearer <token do papel web_leitor>` e `Accept-Profile: gold`. Sem o token de leitura, a chave anônima sozinha recebe 401.
   - A API expõe **só o schema `gold`**, com papel somente leitura e RLS (seção 3.4).
-  - A API fica atrás de um proxy de acesso: o app envia também `CF-Access-Client-Id` e `CF-Access-Client-Secret`; sem eles a requisição é barrada antes de chegar ao servidor.
   - Chaves e headers ficam em `st.secrets` e só existem no servidor do Streamlit; nunca chegam ao navegador do visitante.
   - Consultas com `st.cache_data` (validade de 1 hora) e paginação se a tabela passar do limite de linhas da API.
 - **Fallback: snapshot da gold no repositório.** Se a API não responder (timeout de 10 s ou erro), o app lê os JSON da gold
   em `site/dados/` (os mesmos usados pelo site, formato colunar `{colunas, linhas}`, contrato em `site/dados/README.md`) e
   mostra o aviso **"dados de <data do snapshot>"** (campo `gerado_em` de `site/dados/meta.json`).
 
-### 9.2 Site de apoio
+### 9.2 Segurança do acesso público
+
+Só duas coisas têm endereço público: o **site de apoio** (estático, sem credencial nenhuma) e a **API REST de leitura da gold**.
+Não há proxy de acesso na frente da API; a proteção fica em camadas no próprio Supabase:
+
+| Camada | Como |
+|---|---|
+| Caminho publicado | só `/rest/v1/` do gateway; qualquer outro caminho (Studio, autenticação, armazenamento) não é publicado |
+| Chave de consumidor | o gateway exige `apikey` (chave anônima); sem ela, 401 |
+| Papel de leitura | o token `web_leitor` só tem `SELECT` nas tabelas de consumo da gold; a chave anônima sozinha não lê nada (401) |
+| Schemas | a API expõe só `gold`; pedir `bronze` ou `silver` devolve erro |
+| RLS | ligado em todas as tabelas da gold, com política só de leitura para `web_leitor` |
+| Escrita | `POST`/`PATCH`/`DELETE` com o token de leitura → 403 |
+| Abuso | limite de requisições (rate limit) no endereço da API |
+| Segredos | `apikey` e token ficam em `st.secrets` no servidor do Streamlit; nunca chegam ao navegador do visitante |
+
+**Studio e n8n não têm endereço público**: a administração é feita só por túnel SSH. O endereço da API fica apenas no `.env` e
+nos *Secrets* do Streamlit, nunca no repositório.
+
+### 9.3 Site de apoio
 
 - **Stack:** HTML, CSS e JavaScript estáticos (ES modules), **sem etapa de build**; bibliotecas de mapa e gráficos por CDN
   com versão fixa; malha municipal do IBGE.
-- **Publicação:** GitHub Pages, por GitHub Actions (`.github/workflows/site.yml`).
+- **Publicação:** servido pelo servidor autohospedado em https://radar-expansao.lovelearning.com.br; o GitHub Pages (https://jj-junior.github.io/radar-expansao/),
+  publicado por GitHub Actions (`.github/workflows/site.yml`), fica como espelho e reserva.
 - **Dados:** JSON exportados da gold por `src/exportacao/exportar_site.py`, um arquivo por tabela, com os mesmos nomes de colunas.
 - Para abrir localmente: `python -m http.server 8000 --directory site`.
 
@@ -693,7 +713,7 @@ Workflows exportados (sempre **sem credenciais**): `n8n/radar-expansao-cenario-a
 | Automação | n8n **autohospedado via Docker** |
 | Ingestão | Cenário A: container de ETL em Python · Cenário B: nós do n8n |
 | Dashboard | Streamlit + Plotly, publicado no Streamlit Cloud, lendo a gold pela API REST |
-| Site de apoio | HTML/CSS/JS estático no GitHub Pages |
+| Site de apoio | HTML/CSS/JS estático, servido pelo servidor autohospedado, com espelho no GitHub Pages |
 | Versionamento | Git + GitHub (repositório público) |
 
 **Conexões**
@@ -714,9 +734,9 @@ Variáveis (modelo em `.env.example` e `.streamlit/secrets.toml.example`):
 | `SUPABASE_URL` | endereço da API REST do Supabase |
 | `SUPABASE_ANON_KEY` | chave anônima do Supabase (exigida pelo gateway; sozinha não lê nada) |
 | `SUPABASE_CHAVE_LEITURA` | token do papel `web_leitor` (somente leitura na gold) |
-| `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` | credenciais de serviço do proxy de acesso da API |
 
-Endereços, nomes e detalhes do servidor **não** entram no repositório.
+Endereços, nomes e detalhes do servidor **não** entram no repositório — a única exceção é o endereço público do site
+(https://radar-expansao.lovelearning.com.br).
 
 **Instalação e operação da infraestrutura:** guia em [`docs/instalacao.md`](docs/instalacao.md) e modelos em `infra/`
 (override do Supabase em perfil enxuto, compose do n8n, `infra/sql/00_schemas_roles.sql` com schemas, papéis e RLS, e
@@ -754,7 +774,7 @@ streamlit run src/app/app.py
 - ✅ Supabase e n8n autohospedados via Docker (seções 1 e 10).
 - ✅ Conexões e variáveis de ambiente (seção 10) e leitura da gold pela API REST com fallback (seção 9.1).
 - ✅ Disparo do Python pelo n8n: container de ETL com jobs fixos por HTTP interno (seção 8.1).
-- ✅ Stack do site de apoio (seção 9.2).
+- ✅ Stack, hospedagem e segurança do acesso público (seções 9.2 e 9.3).
 - ⏳ Cenário de ingestão da entrega: A (Python) ou B (n8n), após a comparação (seção 8.5).
 - ⏳ Limiares do semáforo macro (seção 5.1).
 - ⏳ Data de início do histórico do BCB (proposta: 01/01/2015).

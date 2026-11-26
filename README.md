@@ -10,7 +10,7 @@
 > | 4 · Camada silver (modelo estrela) | ✅ concluída: 5 dimensões, 2 fatos, 12 testes de qualidade passando |
 > | 5 · Camada gold (ranking, contexto macro, semáforo) | ✅ concluída: tabelas de consumo + parâmetros do ranking, 14 testes de qualidade passando |
 > | 6 · n8n · 7 · Streamlit | ⏳ próximas etapas |
-> | Extra · Site de apoio | ✅ publicado com prévia dos dados |
+> | Extra · Site de apoio | ✅ publicado em https://radar-expansao.lovelearning.com.br (espelho no GitHub Pages) |
 
 Sistema que cruza dados oficiais do **IBGE** e do **Banco Central** para responder a uma pergunta de negócio:
 **onde abrir a próxima unidade — e se o momento econômico favorece abrir agora ou esperar.**
@@ -18,6 +18,7 @@ Sistema que cruza dados oficiais do **IBGE** e do **Banco Central** para respond
 Projeto Integrador do Data Challenger 2 da Pós Tech em Engenharia de Dados & IA, no cenário da consultoria fictícia **Bússola Pública**.
 
 - **Repositório:** https://github.com/JJ-Junior/radar-expansao
+- **Site de apoio:** https://radar-expansao.lovelearning.com.br (espelho: https://jj-junior.github.io/radar-expansao/)
 - **Dashboard publicado:** em breve
 - **Entrega:** 20/12/2026
 
@@ -47,10 +48,11 @@ flowchart LR
     B --> S[(silver<br/>modelo estrela)]
     S --> G[(gold<br/>tabelas de consumo)]
     G -->|API REST| APP[Streamlit<br/>dashboard]
-    G -->|JSON exportado| SITE[Site de apoio<br/>GitHub Pages]
+    G -->|JSON exportado| SITE[Site de apoio<br/>autohospedado + espelho]
 ```
 
 **Supabase e n8n autohospedados via Docker.** O dashboard lê só a camada gold, pela API REST do Supabase, com permissão somente leitura.
+Na internet ficam só o site de apoio e a API de leitura da gold; Studio e n8n são administrados apenas por túnel SSH.
 
 Detalhes completos (endpoints, modelo das tabelas, regras de transformação, lotes, carga incremental e os dois cenários de ingestão) em [`spec.md`](spec.md).
 

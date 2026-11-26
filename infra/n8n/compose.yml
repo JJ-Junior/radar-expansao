@@ -8,12 +8,12 @@
 # Dentro da rede "radar", o banco e alcancado em supabase-db:5432.
 # =============================================================================
 
-name: radar-n8n
+name: n8n-radar
 
 services:
   n8n:
     image: docker.n8n.io/n8nio/n8n:${N8N_VERSAO:?defina N8N_VERSAO no .env (versao fixa)}
-    container_name: radar-n8n
+    container_name: n8n-radar
     restart: unless-stopped
     ports:
       - "127.0.0.1:5678:5678"

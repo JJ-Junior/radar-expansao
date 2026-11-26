@@ -215,9 +215,9 @@ Cada tarefa numerada (`F2.3`, `F4.2`...) é pensada para virar **uma Issue no Gi
 
 - **Entregáveis:** `site/` publicado, com metodologia, arquitetura e vitrine de dados da gold.
 - **Pronto quando:** publicado com link no README; números iguais aos do dashboard; sem nenhuma credencial no código.
-- **Depende de:** F4. Stack definida: HTML/CSS/JS estático no GitHub Pages (`spec.md`, seção 9.2).
+- **Depende de:** F4. Stack definida: HTML/CSS/JS estático, servido pelo servidor autohospedado, com espelho no GitHub Pages (`spec.md`, seção 9.3).
 - **Tarefas:**
-  - [x] F7.1 Definir a stack e a hospedagem do site (HTML/CSS/JS estático no GitHub Pages)
+  - [x] F7.1 Definir a stack e a hospedagem do site (HTML/CSS/JS estático no servidor autohospedado + espelho no GitHub Pages)
   - [ ] F7.2 Exportar os dados da gold para arquivos lidos pelo site
   - [ ] F7.3 Páginas de metodologia, arquitetura e vitrine de dados
   - [ ] F7.4 Publicar e colocar o link no README

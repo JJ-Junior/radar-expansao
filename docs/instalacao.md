@@ -24,7 +24,7 @@ flowchart LR
     N8N --> DB
     KONG --> REST --> DB
     STUDIO --> DB
-    APP["Streamlit Cloud"] -. "opcional: túnel com controle de acesso" .-> KONG
+    APP["Streamlit Cloud"] -. "API de leitura publicada (só /rest/v1/)" .-> KONG
 ```
 
 Nenhuma porta é publicada para a rede ou para a internet: tudo escuta em `127.0.0.1` do servidor.
@@ -264,18 +264,21 @@ Com o túnel aberto: Postgres em `localhost:5432` (o `.env` do projeto já apont
 > `-L 54322:127.0.0.1:5432`, e troque no `.env` a linha `DB_PORT=54322`. Para conferir quem usa a porta:
 > `Get-NetTCPConnection -LocalPort 5432 -State Listen` (Windows) ou `sudo ss -ltnp | grep 5432` (Linux).
 
-### 5.2 Túnel com controle de acesso (opcional, para o Streamlit Cloud)
+### 5.2 Publicar só a API de leitura (para o Streamlit Cloud)
 
-O Streamlit Cloud precisa alcançar a API REST sem um túnel SSH. Uma forma sem abrir portas no roteador é um túnel de saída
-(por exemplo, Cloudflare Tunnel) com uma camada de controle de acesso (por exemplo, Cloudflare Access):
+O Streamlit Cloud precisa alcançar a API REST sem túnel SSH. Publique **apenas** o caminho `/rest/v1/` do gateway, por um
+proxy reverso ou um túnel de saída (sem abrir portas no roteador), e mantenha o resto fechado:
 
-1. Criar um túnel e rodar o conector em container, na rede `radar`, com o token do túnel num `.env` (nunca no repositório).
-2. Publicar **só** o caminho `/rest/v1/` do gateway: `https://<api.seu-dominio>` → `http://supabase-kong:8000`, com regra de caminho
-   `^/rest/v1/` (qualquer outro caminho cai em 404).
-3. Exigir um **token de serviço** na API (política do tipo *Service Auth*). O Streamlit envia `CF-Access-Client-Id` e
-   `CF-Access-Client-Secret`; sem eles a requisição é barrada antes de chegar ao servidor.
-4. Studio e n8n, se forem publicados, ficam atrás de login por e-mail (política com os e-mails do squad) **e** do login próprio de cada um.
-5. Opcional: acesso ao Postgres para o squad com `cloudflared access tcp --hostname <db.seu-dominio> --url localhost:5432`.
+1. `https://<api.seu-dominio>` → `http://supabase-kong:8000`, aceitando só caminhos que começam com `/rest/v1/`
+   (qualquer outro caminho devolve 404).
+2. O dashboard envia `apikey: <ANON_KEY>` e `Authorization: Bearer <token-web_leitor>`; com a seção 3 aplicada, a chave anônima
+   sozinha recebe 401 e o token de leitura não consegue escrever (403).
+3. Configure um **limite de requisições** (rate limit) no endereço da API.
+4. **Studio e n8n não são publicados**: a administração continua pelo túnel SSH da seção 5.1.
+5. Opcional: uma camada extra de controle de acesso na frente da API (por exemplo, um token de serviço exigido pelo proxy).
+   O projeto não usa; se usar, os cabeçalhos extras vão só nos *Secrets* do Streamlit.
+
+O endereço da API fica só no `.env` e nos *Secrets* do Streamlit, nunca no repositório.
 
 ---
 
