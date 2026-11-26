@@ -63,4 +63,5 @@ O que muda no próximo pedido (e, se for regra, o que entrou no agents.md).
 | 1 | [01-rascunho-prd.md](etapa-1-planejamento/01-rascunho-prd.md) | Rascunho do prd.md para a rede de academias |
 | 1 | [02-validacao-cnae-academias.md](etapa-1-planejamento/02-validacao-cnae-academias.md) | Validação do código CNAE 93.13-1 na API do IBGE |
 | 1 | [03-infraestrutura-e-cenarios-de-ingestao.md](etapa-1-planejamento/03-infraestrutura-e-cenarios-de-ingestao.md) | Supabase e n8n autohospedados, acesso à gold e cenários de ingestão |
+| 3 | [01-ingestao-python.md](etapa-3-bronze/01-ingestao-python.md) | Camada bronze e ingestão em Python (cenário A) |
 | extra | [01-site-estatico.md](extra-site-de-apoio/01-site-estatico.md) | Site de apoio estático no GitHub Pages |

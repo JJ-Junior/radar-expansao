@@ -119,6 +119,10 @@ load_dotenv()  # credenciais vêm do .env, nunca do código
 - Credenciais só por variável de ambiente (`.env` local, `st.secrets` no Streamlit Cloud, credencial do n8n).
 - Toda chamada de API: `timeout`, `try/except`, até 3 tentativas e registro em `bronze.execucao`.
 - Funções pequenas, com docstring de uma linha. Comentários explicam o **porquê**, não o óbvio.
+- Scripts de `src/` rodam **como módulo, a partir da raiz do repositório** (`python -m src.ingestao.carga_inicial`),
+  para os imports `from src.ingestao.comum import ...` funcionarem em qualquer máquina.
+- Arquivos de `sql/` são **idempotentes** (`IF NOT EXISTS`, `CREATE OR REPLACE`, `ON CONFLICT DO NOTHING`) e rodam como `etl_radar`
+  pelo `python -m src.transformacao.criar_estrutura`.
 
 ## 5. O assistente de IA SEMPRE deve
 

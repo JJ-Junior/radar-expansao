@@ -1,6 +1,14 @@
 # Radar de Expansão
 
-> **Status:** em construção — Etapa 1 (planejamento). Seções marcadas com _(a preencher)_ serão completadas ao longo do projeto.
+> **Status:** em construção. Seções marcadas com _(a preencher)_ serão completadas ao longo do projeto.
+>
+> | Etapa | Situação |
+> |---|---|
+> | 1 · Planejamento (`prd.md`, `spec.md`, `agents.md`) | ✅ rascunhos em revisão pelo squad |
+> | 2 · Exploração das APIs | ✅ concluída (achados em `spec.md`, seção 2) |
+> | 3 · Camada bronze (ingestão em Python) | ✅ código e DDL prontos e testados (carga inicial + incremental) · carga no banco do projeto pendente |
+> | 4 · Silver · 5 · Gold · 6 · n8n · 7 · Streamlit | ⏳ próximas etapas |
+> | Extra · Site de apoio | ✅ publicado com prévia dos dados |
 
 Sistema que cruza dados oficiais do **IBGE** e do **Banco Central** para responder a uma pergunta de negócio:
 **onde abrir a próxima unidade — e se o momento econômico favorece abrir agora ou esperar.**
@@ -82,7 +90,24 @@ Copy-Item .streamlit\secrets.toml.example .streamlit\secrets.toml   # segredos d
 
 Os campos estão explicados no [`.env.example`](.env.example) e no [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example).
 
-**Passos seguintes** — carga, transformação e dashboard: _(a preencher quando os scripts existirem)_.
+**Passo 2 — criar as tabelas da bronze** (idempotente; roda os arquivos de `sql/bronze/` na ordem):
+
+```powershell
+python -m src.transformacao.criar_estrutura --camadas bronze
+```
+
+**Passo 3 — carga da bronze** (cenário A, Python):
+
+```powershell
+python -m src.ingestao.carga_inicial          # todo o histórico do IBGE e do BCB, em lotes
+python -m src.ingestao.carga_incremental      # só o que é novo ou foi revisado (o que o n8n roda toda semana)
+```
+
+Cada fonte também roda sozinha (`--fonte ibge` ou `--fonte bcb`, ou `python -m src.ingestao.bcb_sgs --modo incremental`).
+Ao final, o terminal mostra uma tabela por recurso (status, chamadas, respostas novas, segundos), e o mesmo resultado fica em
+`bronze.execucao`. Rodar de novo não duplica nada: respostas iguais são reconhecidas pelo hash.
+
+**Passos seguintes** — silver, gold e dashboard: _(a preencher quando as etapas forem concluídas)_.
 
 ## 7. Estrutura do repositório
 

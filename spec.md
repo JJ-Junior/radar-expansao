@@ -1,7 +1,8 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
-> **RASCUNHO v0.3 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> **RASCUNHO v0.4 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
 > v0.2: Supabase e n8n autohospedados via Docker; ingestão descrita em dois cenários (Python e n8n) com o mesmo contrato da bronze.
+> v0.4: bronze implementada (seção 3.1 reflete o DDL de `sql/bronze/`); lote do IPCA por ano; app envia a chave anônima + token de leitura.
 > v0.3: container de ETL disparado pelo n8n (cenário A); trava contra execução simultânea; fuso America/Sao_Paulo;
 > dashboard lendo a gold pela API REST do Supabase com fallback em snapshot; conexão com `DB_SSLMODE` configurável; stack do site definida.
 > Fonte da verdade técnica do projeto: toda mudança de modelo, endpoint ou regra é registrada aqui **antes** de ir para o código.
@@ -145,6 +146,8 @@ Armadilhas:
 - A série 432 traz **datas futuras** (a meta vale até o próximo Copom).
 - Código inexistente pode devolver HTTP 200 com HTML depois de ~30 s → validar `content-type: application/json` e usar timeout.
 - Evitar `/ultimos/N` (limite de 20, ordem inconsistente entre séries).
+- Para algumas URLs exatas o SGS devolve **HTTP 304 vazio**, mesmo sem cabeçalho condicional (visto na série 432 com
+  `dataInicial=01/01/2025`). O código pede a mesma janela com a data final 1, 2 ou 3 dias depois; a silver descarta datas futuras.
 
 ---
 
@@ -154,54 +157,68 @@ Convenções (detalhe em `agents.md`): `snake_case`, português sem acento, chav
 
 ### 3.1 Bronze — dado bruto
 
-```sql
-CREATE SCHEMA IF NOT EXISTS bronze;
+DDL implementado em `sql/bronze/` (rodar como `etl_radar` com `python -m src.transformacao.criar_estrutura`; idempotente):
 
--- Uma linha por chamada bem-sucedida à API. Somente INSERT.
--- Contrato único para os dois cenários de ingestão (seção 8).
+| Arquivo | Objeto | Para quê |
+|---|---|---|
+| `01_execucao.sql` | `bronze.execucao` | log de cada carga: uma linha por recurso processado numa rodada |
+| `02_api_resposta.sql` | `bronze.api_resposta` | o "cofre": uma linha por chamada bem-sucedida, JSON como veio; **só `INSERT`** (`UPDATE`, `DELETE` e `TRUNCATE` revogados até do dono) |
+| `03_trava_carga.sql` | `bronze.trava_carga` | linha única que impede duas cargas ao mesmo tempo (seção 8.3) |
+| `04_vw_ultimo_periodo.sql` | `bronze.vw_ultimo_periodo` | último período (IBGE) ou última data (BCB) salvos — base do incremental |
+
+```sql
+-- Uma linha por chamada bem-sucedida à API. Contrato único para os dois cenários (seção 8).
 CREATE TABLE bronze.api_resposta (
     resposta_id        bigserial    PRIMARY KEY,
-    origem_carga       text         NOT NULL CHECK (origem_carga IN ('python', 'n8n')),  -- processo que gravou
+    origem_carga       text         NOT NULL CHECK (origem_carga IN ('python', 'n8n')),
     fonte              text         NOT NULL CHECK (fonte IN ('IBGE', 'BCB')),
-    recurso            text         NOT NULL,          -- ex.: 'ibge_agregado_6579', 'ibge_municipios', 'bcb_sgs_432'
-    endpoint           text         NOT NULL,          -- caminho chamado, sem o host
-    parametros         jsonb        NOT NULL,          -- parâmetros usados (períodos, variáveis, localidades, datas)
-    url                text         NOT NULL,          -- URL completa, para reproduzir a chamada
-    lote               text,                           -- identificador do lote: ano, UF ou janela de datas
-    modificacao_fonte  date,                           -- IBGE: campo `modificacao` do período (carga incremental)
+    recurso            text         NOT NULL,      -- 'ibge_agregado_6579', 'ibge_municipios', 'bcb_sgs_432'...
+    endpoint           text         NOT NULL,      -- caminho chamado, sem o host
+    parametros         jsonb        NOT NULL,      -- períodos, variáveis, localidades, datas
+    url                text         NOT NULL,      -- URL completa, para reproduzir a chamada
+    lote               text         NOT NULL,      -- ano, ano-UF, janela de datas ou 'snapshot'
+    modificacao_fonte  date,                       -- IBGE: `modificacao` do período (base do incremental)
     http_status        smallint     NOT NULL,
-    payload            jsonb        NOT NULL,          -- resposta original, inteira
-    -- md5 calculado pelo próprio Postgres sobre o jsonb (forma canônica): o hash sai igual
-    -- nos dois cenários, mesmo que Python e n8n serializem o JSON de jeitos diferentes.
+    payload            jsonb        NOT NULL,      -- resposta original, inteira
+    -- md5 calculado pelo Postgres sobre o jsonb (forma canônica): igual nos dois cenários
     payload_hash       text         GENERATED ALWAYS AS (md5(payload::text)) STORED,
-    execucao_id        bigint,                         -- execução que gravou (bronze.execucao)
+    execucao_id        bigint       REFERENCES bronze.execucao (execucao_id),
     ingerido_em        timestamptz  NOT NULL DEFAULT now(),
-    -- evita gravar a mesma resposta duas vezes pelo mesmo processo; permite que A e B gravem a mesma resposta (comparação)
-    UNIQUE (origem_carga, recurso, lote, payload_hash)
+    CONSTRAINT uq_api_resposta UNIQUE (origem_carga, recurso, lote, payload_hash)
 );
 
--- Log de cada execução do pipeline (carga inicial ou incremental, em qualquer cenário).
+-- Log de cada carga: uma linha por recurso processado numa rodada.
 CREATE TABLE bronze.execucao (
-    execucao_id    bigserial    PRIMARY KEY,
-    origem_carga   text         NOT NULL CHECK (origem_carga IN ('python', 'n8n')),  -- quem chamou as APIs
-    disparado_por  text         NOT NULL,              -- 'manual' | 'agenda_n8n'
-    modo           text         NOT NULL,              -- 'inicial', 'incremental'
-    iniciado_em    timestamptz  NOT NULL DEFAULT now(),
-    finalizado_em  timestamptz,
-    status         text         NOT NULL DEFAULT 'em_andamento',  -- 'sucesso', 'erro', 'sem_novidade', 'ignorada_trava'
-    chamadas_ok    integer      DEFAULT 0,
-    chamadas_erro  integer      DEFAULT 0,
-    mensagem       text
+    execucao_id      bigserial    PRIMARY KEY,
+    rodada_id        uuid         NOT NULL,      -- agrupa os recursos de uma mesma carga
+    origem_carga     text         NOT NULL CHECK (origem_carga IN ('python', 'n8n')),
+    disparado_por    text         NOT NULL,      -- 'manual' | 'agenda_n8n'
+    modo             text         NOT NULL CHECK (modo IN ('inicial', 'incremental')),
+    recurso          text         NOT NULL,      -- 'rodada' = registro de rodada ignorada pela trava
+    iniciado_em      timestamptz  NOT NULL DEFAULT now(),
+    finalizado_em    timestamptz,
+    status           text         NOT NULL DEFAULT 'em_andamento',
+                     -- 'em_andamento' | 'sucesso' | 'sem_novidade' | 'erro' | 'ignorada_trava'
+    chamadas_ok      integer      NOT NULL DEFAULT 0,   -- inclui o 404 "nada novo" do BCB
+    chamadas_erro    integer      NOT NULL DEFAULT 0,   -- falharam depois de todas as tentativas
+    respostas_novas  integer      NOT NULL DEFAULT 0,   -- gravadas (repetidas não contam)
+    mensagem         text
 );
 
--- Último período salvo por processo e recurso: é o que a carga incremental compara com a API.
--- Cada cenário filtra a sua própria origem_carga, para um não "esconder" o período novo do outro.
+-- Último período salvo por processo, recurso e lote.
 CREATE VIEW bronze.vw_ultimo_periodo AS
 SELECT origem_carga, recurso, lote,
-       max(modificacao_fonte) AS modificacao_fonte, max(ingerido_em) AS ingerido_em
+       max(modificacao_fonte) AS modificacao_fonte,                 -- IBGE
+       max(CASE WHEN fonte = 'BCB' THEN (SELECT max(to_date(e ->> 'data', 'DD/MM/YYYY'))
+                                         FROM jsonb_array_elements(payload) e) END) AS ultima_data,  -- BCB
+       max(ingerido_em) AS ingerido_em, count(*) AS respostas
 FROM bronze.api_resposta
 GROUP BY origem_carga, recurso, lote;
 ```
+
+Regras de gravação: status da execução = `sucesso` se gravou ao menos uma resposta nova, `sem_novidade` se todas as respostas
+já existiam (mesmo hash) ou a fonte respondeu "nada novo", `erro` se alguma chamada falhou depois das tentativas.
+Cada cenário filtra a própria `origem_carga` na view, para um não "esconder" o período novo do outro.
 
 ### 3.2 Silver — modelo estrela
 
@@ -495,7 +512,7 @@ validar `content-type: application/json`, `User-Agent` próprio do projeto e `tr
 | Localidades | 1 chamada por recurso | recarga completa (barata); a silver atualiza por `UPSERT` |
 | Agregados anuais (6579, 5938, 9418, 9509) | 1 chamada por ano | `GET /{agregado}/periodos` → compara `id` e `modificacao` com `bronze.vw_ultimo_periodo` (filtrada pela própria `origem_carga`) → baixa só período **novo** ou **modificado** |
 | Censo (4714, 10295) | carga única | só se `/periodos` mostrar `modificacao` mais nova |
-| IPCA (7060) | todo o histórico numa chamada | `periodos/-3` (últimos 3 meses) + `UPSERT` |
+| IPCA (7060) | um lote por ano (meses AAAAMM agrupados) | mesma regra dos anuais: o lote do ano é baixado de novo quando um mês dele é novo ou modificado (maior `modificacao` dos meses) |
 | BCB diárias (432, 10813) | janelas de até 10 anos desde `DATA_INICIO` (CONFIG, proposta: 01/01/2015) | `dataInicial = última data salva − 30 dias`, sem `dataFinal`; HTTP 404 = nada novo |
 
 Depois de gravar na bronze, a execução roda `silver` → `gold` só se houve resposta nova; senão registra `status = 'sem_novidade'`.
@@ -523,8 +540,8 @@ Um disparador HTTP interno executa apenas **jobs fixos** — nenhum comando livr
 
 | Job | Executa |
 |---|---|
-| `ingerir_ibge` | `python -m src.ingestao.incremental --fonte ibge` |
-| `ingerir_bcb` | `python -m src.ingestao.incremental --fonte bcb` |
+| `ingerir_ibge` | `python -m src.ingestao.carga_incremental --fonte ibge --disparado-por agenda_n8n` |
+| `ingerir_bcb` | `python -m src.ingestao.carga_incremental --fonte bcb --disparado-por agenda_n8n` |
 | `transformar` | `python -m src.transformacao.executar` |
 
 O n8n chama cada job com um nó *HTTP Request* (`POST` interno, com um token secreto num header guardado como credencial do n8n).
@@ -579,21 +596,21 @@ flowchart LR
 CREATE TABLE bronze.trava_carga (
     trava_id      smallint PRIMARY KEY DEFAULT 1 CHECK (trava_id = 1),  -- uma única linha
     em_uso_por    text,                                                 -- 'python' | 'n8n' | nulo = livre
-    execucao_id   bigint,
+    rodada_id     uuid,
     desde         timestamptz
 );
 INSERT INTO bronze.trava_carga (trava_id) VALUES (1);
 
 -- Pegar a trava (devolve 1 linha se conseguiu; 0 se outro processo está rodando)
 UPDATE bronze.trava_carga
-SET em_uso_por = :origem_carga, execucao_id = :execucao_id, desde = now()
+SET em_uso_por = :origem_carga, rodada_id = :rodada_id, desde = now()
 WHERE trava_id = 1
   AND (em_uso_por IS NULL OR desde < now() - interval '2 hours')   -- expira trava esquecida
 RETURNING trava_id;
 
 -- Soltar a trava (no fim, inclusive no caminho de erro)
-UPDATE bronze.trava_carga SET em_uso_por = NULL, execucao_id = NULL, desde = NULL
-WHERE trava_id = 1 AND em_uso_por = :origem_carga;
+UPDATE bronze.trava_carga SET em_uso_por = NULL, rodada_id = NULL, desde = NULL
+WHERE trava_id = 1 AND rodada_id = :rodada_id;
 ```
 
 ### 8.4 Prós e contras
@@ -638,7 +655,7 @@ Workflows exportados (sempre **sem credenciais**): `n8n/radar-expansao-cenario-a
   **Município** (ficha com os indicadores e as notas) · **Momento econômico** (Selic, câmbio e IPCA no tempo + semáforo) ·
   **Como o ranking é calculado** (critérios, pesos e fontes).
 - **Fonte principal: API REST do Supabase**, lida com `requests`:
-  `GET {SUPABASE_URL}/rest/v1/{tabela}` com o header `Accept-Profile: gold` e a chave de leitura (token do papel `web_leitor`).
+  `GET {SUPABASE_URL}/rest/v1/{tabela}` com os headers `apikey: <chave anônima>` (o gateway exige uma chave de consumidor), `Authorization: Bearer <token do papel web_leitor>` e `Accept-Profile: gold`. Sem o token de leitura, a chave anônima sozinha recebe 401.
   - A API expõe **só o schema `gold`**, com papel somente leitura e RLS (seção 3.4).
   - A API fica atrás de um proxy de acesso: o app envia também `CF-Access-Client-Id` e `CF-Access-Client-Secret`; sem eles a requisição é barrada antes de chegar ao servidor.
   - Chaves e headers ficam em `st.secrets` e só existem no servidor do Streamlit; nunca chegam ao navegador do visitante.
@@ -683,6 +700,7 @@ Variáveis (modelo em `.env.example` e `.streamlit/secrets.toml.example`):
 | `DB_USER`, `DB_PASSWORD` | papel `etl_radar` e sua senha (só no `.env`, nunca no repositório) |
 | `DB_SSLMODE` | modo SSL do driver: `prefer` (padrão), `require` ou `disable` — **configurável, não fixo no código** |
 | `SUPABASE_URL` | endereço da API REST do Supabase |
+| `SUPABASE_ANON_KEY` | chave anônima do Supabase (exigida pelo gateway; sozinha não lê nada) |
 | `SUPABASE_CHAVE_LEITURA` | token do papel `web_leitor` (somente leitura na gold) |
 | `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` | credenciais de serviço do proxy de acesso da API |
 
