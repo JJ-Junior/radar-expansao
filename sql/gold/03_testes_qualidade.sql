@@ -95,10 +95,12 @@ testes (ordem, teste, esperado, obtido) AS (
            (SELECT count(DISTINCT posicao_brasil)::text FROM gold.ranking_expansao
              WHERE posicao_brasil BETWEEN 1 AND (SELECT count(*) FROM gold.ranking_expansao))
     UNION ALL
-    SELECT 8, 'unidades recomendadas (top 5)', '5',
+    SELECT 8, 'unidades recomendadas (top 5)',
+           (SELECT valor::int::text FROM gold.parametro_ranking WHERE parametro = 'unidades_recomendadas'),
            (SELECT count(*)::text FROM gold.ranking_expansao WHERE recomendado_top5)
     UNION ALL
-    SELECT 9, 'regioes imediatas diferentes entre as recomendadas', '5',
+    SELECT 9, 'regioes imediatas diferentes entre as recomendadas',
+           (SELECT count(*)::text FROM gold.ranking_expansao WHERE recomendado_top5),
            (SELECT count(DISTINCT regiao_imediata_id)::text FROM gold.ranking_expansao WHERE recomendado_top5)
     UNION ALL
     SELECT 10, 'cidades sem academia marcadas para verificar concorrencia',
@@ -119,6 +121,12 @@ testes (ordem, teste, esperado, obtido) AS (
                          AND coalesce(nullif(valor_bronze_json, '-'), '0')::numeric = valor_gold
                         THEN 'iguais' ELSE 'divergente' END
               FROM rastreio LIMIT 1)
+    UNION ALL
+    SELECT 14, 'recomendadas abaixo da trava de renda (nota de poder de compra)', '0',
+           (SELECT count(*)::text FROM gold.ranking_expansao AS r
+             WHERE r.recomendado_top5
+               AND NOT coalesce(r.nota_poder_compra >= (SELECT valor FROM gold.parametro_ranking
+                                                         WHERE parametro = 'nota_minima_poder_compra'), false))
 )
 SELECT ordem, teste, esperado, obtido, esperado IS NOT DISTINCT FROM obtido AS ok
   FROM testes

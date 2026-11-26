@@ -16,7 +16,7 @@ DECLARE
     c_janela_tendencia_anos  constant integer := 5;     -- janela da tendencia do PIB per capita
     c_percentil_inferior     constant numeric := 0.05;  -- limites do espaco competitivo
     c_percentil_superior     constant numeric := 0.95;
-    c_top_recomendadas       constant integer := 5;     -- unidades recomendadas (P8)
+    -- quantidade de recomendadas e trava de renda ficam em gold.parametro_ranking
     c_selic_pp               constant numeric := 0.5;   -- semaforo: variacao da Selic em 12 meses (p.p.)
     c_teto_ipca              constant numeric := 4.5;   -- semaforo: teto do IPCA em 12 meses (%)
     c_dolar_pct              constant numeric := 10;    -- semaforo: alta do dolar em 12 meses (%)
@@ -33,6 +33,8 @@ DECLARE
     v_versao       text;
     v_linhas       bigint;
     v_escolhidas   integer := 0;
+    v_qtd_recomendadas integer;
+    v_renda_minima     numeric;
     v_imediatas    integer[] := '{}';
     v_cand         record;
 BEGIN
@@ -202,9 +204,22 @@ BEGIN
            ) AS n ON n.municipio_id = u.municipio_id;
     GET DIAGNOSTICS v_linhas = ROW_COUNT;
 
-    -- 5 unidades recomendadas: no maximo uma por regiao imediata (evita canibalizacao)
-    FOR v_cand IN SELECT municipio_id, regiao_imediata_id FROM gold.ranking_expansao ORDER BY posicao_brasil LOOP
-        EXIT WHEN v_escolhidas >= c_top_recomendadas;
+    -- 5 unidades recomendadas (prd.md 4.2):
+    --   trava de renda: so e elegivel quem tem nota de poder de compra >= parametro;
+    --   no maximo uma por regiao imediata (evita canibalizacao). O ranking geral nao muda.
+    SELECT max(valor) FILTER (WHERE parametro = 'unidades_recomendadas'),
+           max(valor) FILTER (WHERE parametro = 'nota_minima_poder_compra')
+      INTO v_qtd_recomendadas, v_renda_minima
+      FROM gold.parametro_ranking;
+    v_qtd_recomendadas := coalesce(v_qtd_recomendadas, 5);
+    v_renda_minima := coalesce(v_renda_minima, 0);
+
+    UPDATE gold.ranking_expansao
+       SET elegivel_recomendacao = coalesce(nota_poder_compra >= v_renda_minima, false);
+
+    FOR v_cand IN SELECT municipio_id, regiao_imediata_id FROM gold.ranking_expansao
+                   WHERE elegivel_recomendacao ORDER BY posicao_brasil LOOP
+        EXIT WHEN v_escolhidas >= v_qtd_recomendadas;
         CONTINUE WHEN v_cand.regiao_imediata_id = ANY (v_imediatas);
         v_escolhidas := v_escolhidas + 1;
         v_imediatas := v_imediatas || v_cand.regiao_imediata_id;

@@ -70,6 +70,25 @@ ON CONFLICT (criterio) DO UPDATE SET
     grupo = EXCLUDED.grupo, descricao = EXCLUDED.descricao, fonte = EXCLUDED.fonte, peso = EXCLUDED.peso,
     sentido = EXCLUDED.sentido, ordem = EXCLUDED.ordem, versao_pesos = EXCLUDED.versao_pesos;
 
+-- P8: parametros da recomendacao das 5 unidades (lugar unico para ajusta-los) ---
+CREATE TABLE IF NOT EXISTS gold.parametro_ranking (
+    parametro     text          PRIMARY KEY,
+    valor         numeric       NOT NULL,
+    descricao     text          NOT NULL,
+    versao_pesos  text          NOT NULL
+);
+COMMENT ON TABLE gold.parametro_ranking IS
+    'P8: parametros da lista das 5 unidades recomendadas (quantidade e trava de renda minima); lidos por gold.atualizar().';
+
+INSERT INTO gold.parametro_ranking (parametro, valor, descricao, versao_pesos) VALUES
+    ('unidades_recomendadas', 5,
+     'Quantidade de cidades na lista de unidades recomendadas (no maximo uma por regiao imediata)', 'prd-v0.4'),
+    ('nota_minima_poder_compra', 50,
+     'Trava de renda: so entra na lista de recomendadas quem tem nota de poder de compra >= este valor (percentil 50 do universo)',
+     'prd-v0.4')
+ON CONFLICT (parametro) DO UPDATE SET
+    valor = EXCLUDED.valor, descricao = EXCLUDED.descricao, versao_pesos = EXCLUDED.versao_pesos;
+
 -- P2, P5, P8: ranking do cliente ----------------------------------------------
 CREATE TABLE IF NOT EXISTS gold.ranking_expansao (
     municipio_id              integer       PRIMARY KEY,
@@ -95,6 +114,7 @@ CREATE TABLE IF NOT EXISTS gold.ranking_expansao (
     criterios_ausentes        text[],
     peso_considerado          numeric(4,3)  NOT NULL,                -- soma dos pesos disponiveis (1.000 = completo)
     verificar_concorrencia    boolean       NOT NULL DEFAULT false,  -- zero academias registradas: checar no local
+    elegivel_recomendacao     boolean       NOT NULL DEFAULT false,  -- passa na trava de renda (parametro_ranking)
     recomendado_top5          boolean       NOT NULL DEFAULT false,  -- lista das 5 unidades recomendadas (P8)
     ordem_recomendacao        smallint,                              -- 1 a 5
     versao_pesos              text          NOT NULL,
@@ -102,6 +122,10 @@ CREATE TABLE IF NOT EXISTS gold.ranking_expansao (
 );
 COMMENT ON TABLE gold.ranking_expansao IS
     'P2, P5, P8: ranking dos municipios com 50 mil habitantes ou mais, notas por criterio, nota final e as 5 recomendadas.';
+
+-- coluna criada depois da primeira versao da tabela (bancos ja existentes)
+ALTER TABLE gold.ranking_expansao
+    ADD COLUMN IF NOT EXISTS elegivel_recomendacao boolean NOT NULL DEFAULT false;
 
 -- P6: evolucao mensal do cenario economico ------------------------------------
 CREATE TABLE IF NOT EXISTS gold.contexto_macro (
