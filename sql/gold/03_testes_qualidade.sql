@@ -110,8 +110,10 @@ testes (ordem, teste, esperado, obtido) AS (
     SELECT 11, 'contexto macro ate o ultimo mes com dado na silver',
            (SELECT mes FROM ultimo_mes_silver), (SELECT to_char(max(mes), 'YYYY-MM') FROM gold.contexto_macro)
     UNION ALL
-    SELECT 12, 'semaforo no ultimo mes com IPCA',
-           (SELECT mes FROM ultimo_mes_ipca), (SELECT to_char(max(mes), 'YYYY-MM') FROM gold.momento_expansao)
+    SELECT 12, 'semaforo historico ate o mes do ultimo fechamento do dolar',
+           (SELECT to_char(max(data), 'YYYY-MM') FROM silver.fato_indicador_macro
+             WHERE indicador_id = 'dolar_venda' AND valor IS NOT NULL),
+           (SELECT to_char(max(mes), 'YYYY-MM') FROM gold.momento_expansao)
     UNION ALL
     SELECT 13, 'rastreio gold -> silver -> bronze (academias do 1o colocado)',
            'iguais',
@@ -149,6 +151,34 @@ testes (ordem, teste, esperado, obtido) AS (
     SELECT 19, 'municipios do ranking com coordenada',
            (SELECT count(*)::text FROM gold.ranking_expansao),
            (SELECT count(*)::text FROM gold.ranking_expansao WHERE latitude IS NOT NULL AND longitude IS NOT NULL)
+    UNION ALL
+    SELECT 20, 'momento atual com exatamente uma linha', '1',
+           (SELECT count(*)::text FROM gold.momento_atual)
+    UNION ALL
+    SELECT 21, 'referencia do cambio = ultimo fechamento do dolar na silver',
+           (SELECT max(data)::text FROM silver.fato_indicador_macro WHERE indicador_id = 'dolar_venda' AND valor IS NOT NULL),
+           (SELECT ref_cambio::text FROM gold.momento_atual)
+    UNION ALL
+    SELECT 22, 'referencia dos juros = ultima meta da Selic na silver',
+           (SELECT max(data)::text FROM silver.fato_indicador_macro WHERE indicador_id = 'selic_meta' AND valor IS NOT NULL),
+           (SELECT ref_juros::text FROM gold.momento_atual)
+    UNION ALL
+    SELECT 23, 'referencia da inflacao = ultimo IPCA publicado',
+           (SELECT max(data)::text FROM silver.fato_indicador_macro WHERE indicador_id = 'ipca_12m' AND valor IS NOT NULL),
+           (SELECT ref_inflacao::text FROM gold.momento_atual)
+    UNION ALL
+    SELECT 24, 'cambio verde com alta de curto prazo acima do limiar', '0',
+           ((SELECT count(*) FROM gold.momento_atual
+              WHERE sinal_cambio = 'verde' AND alerta_cambio_curto_prazo)
+          + (SELECT count(*) FROM gold.momento_expansao AS m
+               JOIN gold.contexto_macro AS c ON c.mes = m.mes
+              WHERE NOT m.mes_parcial AND m.sinal_cambio = 'verde'
+                AND c.dolar_var_1m_pct > (SELECT valor FROM gold.parametro_ranking
+                                           WHERE parametro = 'semaforo_alerta_cambio_30d_pct')))::text
+    UNION ALL
+    SELECT 25, 'meses parciais no historico fora do mes corrente', '0',
+           (SELECT count(*)::text FROM gold.momento_expansao
+             WHERE mes_parcial AND mes <> date_trunc('month', current_date)::date)
 )
 SELECT ordem, teste, esperado, obtido, esperado IS NOT DISTINCT FROM obtido AS ok
   FROM testes
