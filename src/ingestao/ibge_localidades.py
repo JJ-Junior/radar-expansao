@@ -13,8 +13,10 @@
 # =============================================================================
 #
 # OBJETIVO: baixar regioes, estados e municipios da API de Localidades do IBGE
-#           e guardar cada resposta inteira na bronze (base das dimensoes).
+#           e os centroides (latitude/longitude) dos municipios da API de Malhas,
+#           guardando cada resposta inteira na bronze (base das dimensoes).
 # ENTRADA:  API IBGE /api/v1/localidades (regioes, estados, municipios nivelado)
+#           e /api/v4/malhas/paises/BR/metadados?intrarregiao=municipio
 # SAIDA:    bronze.api_resposta (acrescenta; resposta igual a ja salva nao entra)
 #
 # =============================================================================
@@ -30,6 +32,9 @@
 #                         aninhado), pronto para virar a dimensao de municipios
 #   2. lote 'snapshot' -> recarga completa toda vez; se nada mudou, o hash e
 #                         igual e a execucao fica como "sem_novidade"
+#   3. metadados da malha -> a API de Malhas devolve o centroide de cada
+#                         municipio sem baixar o desenho do mapa; a versao v4
+#                         ja inclui os municipios criados depois de 2022
 #
 # INSTALACAO: pip install -r requirements.txt
 # COMO RODAR: python -m src.ingestao.ibge_localidades
@@ -43,6 +48,8 @@ RECURSOS = [
     ("ibge_regioes", "/v1/localidades/regioes", {}),
     ("ibge_estados", "/v1/localidades/estados", {}),
     ("ibge_municipios", "/v1/localidades/municipios", {"view": "nivelado"}),
+    # centroides: 5.571 municipios numa chamada (~1,7 MB); a v3 nao traz municipios novos
+    ("ibge_malha_municipios", "/v4/malhas/paises/BR/metadados", {"intrarregiao": "municipio"}),
 ]
 LOTE = "snapshot"
 TIMEOUT_SEGUNDOS = 60
