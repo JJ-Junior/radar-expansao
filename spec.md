@@ -402,7 +402,7 @@ Relacionamentos lógicos: `gold.*.municipio_id` → `silver.dim_municipio`; `gol
 CREATE ROLE web_leitor NOLOGIN;
 GRANT USAGE ON SCHEMA gold TO web_leitor;
 GRANT SELECT ON ALL TABLES IN SCHEMA gold TO web_leitor;
-ALTER DEFAULT PRIVILEGES IN SCHEMA gold GRANT SELECT ON TABLES TO web_leitor;
+ALTER DEFAULT PRIVILEGES FOR ROLE etl_radar IN SCHEMA gold GRANT SELECT ON TABLES TO web_leitor;
 GRANT web_leitor TO authenticator;          -- papel que a API REST assume ao validar o token
 
 -- RLS como defesa extra (repetir para cada tabela da gold)
@@ -411,6 +411,7 @@ CREATE POLICY leitura_web ON gold.ranking_expansao FOR SELECT TO web_leitor USIN
 ```
 
 A API REST expõe **somente** o schema `gold`; `bronze`, `silver` e `public` não aparecem nela.
+Script completo e idempotente (schemas, papéis, permissões e RLS em todas as tabelas da gold): `infra/sql/00_schemas_roles.sql`.
 
 ---
 
@@ -687,9 +688,15 @@ Variáveis (modelo em `.env.example` e `.streamlit/secrets.toml.example`):
 
 Endereços, nomes e detalhes do servidor **não** entram no repositório.
 
+**Instalação e operação da infraestrutura:** guia em [`docs/instalacao.md`](docs/instalacao.md) e modelos em `infra/`
+(override do Supabase em perfil enxuto, compose do n8n, `infra/sql/00_schemas_roles.sql` com schemas, papéis e RLS, e
+`infra/backup/backup.sh` com dump diário das três camadas e retenção de 14 dias).
+
 Roteiro previsto (nomes dos scripts podem mudar; este arquivo será atualizado junto):
 
 ```powershell
+# 0. Infraestrutura no ar (docs/instalacao.md) e túnel SSH aberto: banco em localhost:5432
+
 # 1. Ambiente local
 git clone https://github.com/JJ-Junior/radar-expansao.git
 cd radar-expansao

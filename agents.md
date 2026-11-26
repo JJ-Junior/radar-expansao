@@ -23,6 +23,8 @@
 | `src/app/` | Dashboard Streamlit (lê só a gold) | Lógica de cálculo do ranking |
 | `n8n/` | Workflow exportado em `.json` **sem credenciais** | Exportação com credenciais |
 | `site/` | Site de apoio (documentação + vitrine de dados) | Build (`dist/`), `node_modules/` |
+| `infra/` | Modelos de configuração da infraestrutura (Supabase e n8n via Docker), SQL inicial de schemas/papéis e script de backup — só com marcadores `<...>` | `.env` real, senhas, tokens, IP, nome de máquina ou domínio |
+| `docs/` | Guias (`instalacao.md`), divisão de tarefas (`responsabilidades.md`) e prints em `docs/img/` | Detalhes do servidor do squad |
 | `docs/img/` | Prints do dashboard e da execução do n8n | — |
 | raiz | `README.md`, `requirements.txt`, `.env.example`, `.gitignore` | `.env`, `.venv/`, `__pycache__/`, dados locais |
 
@@ -130,6 +132,7 @@ load_dotenv()  # credenciais vêm do .env, nunca do código
 - Atualizar o `spec.md` **no mesmo commit** quando mudar tabela, coluna, endpoint ou regra.
 - Atualizar o `prd.md` quando mudar critério ou peso do ranking.
 - Registrar em `prompts/` os prompts que geraram entregas relevantes (modelo em `prompts/README.md`).
+- Atualizar o `README.md` **no mesmo commit/PR** de cada etapa concluída (o README é montado ao longo do projeto).
 - Mostrar o `git status` e a lista de arquivos antes de qualquer commit.
 - Escrever em português do Brasil (código, comentários, mensagens e documentação).
 

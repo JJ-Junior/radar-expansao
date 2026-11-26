@@ -44,14 +44,31 @@ flowchart LR
 
 Detalhes completos (endpoints, modelo das tabelas, regras de transformação, lotes, carga incremental e os dois cenários de ingestão) em [`spec.md`](spec.md).
 
-## 4. Dashboard
+## 4. Infraestrutura (Supabase e n8n autohospedados via Docker)
+
+O banco (Supabase) e a automação (n8n) rodam em containers Docker num servidor próprio, sem nenhuma porta exposta na internet:
+
+- **Supabase em perfil enxuto:** Postgres, API REST, gateway e Studio — só o necessário para o Lakehouse.
+- **API REST restrita:** expõe somente o schema `gold`, por um papel somente leitura com RLS; é por ela que o dashboard lê os dados.
+- **n8n** com versão fixa, fuso `America/Sao_Paulo` e limpeza automática do histórico de execuções.
+- **Acesso** pelos desenvolvedores via túnel SSH; backup diário das três camadas com teste de restauração.
+
+Guia passo a passo, com pré-requisitos, geração de segredos, SQL inicial, backup e problemas comuns:
+[`docs/instalacao.md`](docs/instalacao.md). Modelos de configuração (só com marcadores, sem segredos) em [`infra/`](infra/).
+
+## 5. Dashboard
 
 - **Link do app publicado:** em breve
 - **Prints:** _(a preencher — imagens em `docs/img/`)_
 
-## 5. Como rodar o projeto
+## 6. Como rodar o projeto
 
 _(roteiro completo em [`spec.md`](spec.md#10-stack-e-como-rodar); resumo abaixo)_
+
+**Passo 0 — subir a infraestrutura:** Supabase e n8n via Docker, papéis e schemas criados, conforme
+[`docs/instalacao.md`](docs/instalacao.md). Com o túnel SSH aberto, o banco fica acessível em `localhost:5432`.
+
+**Passo 1 — ambiente local:**
 
 ```powershell
 git clone https://github.com/JJ-Junior/radar-expansao.git
@@ -63,12 +80,11 @@ Copy-Item .env.example .env   # preencha com as credenciais do seu banco
 Copy-Item .streamlit\secrets.toml.example .streamlit\secrets.toml   # segredos do dashboard
 ```
 
-Supabase e n8n são autohospedados via Docker. Os campos estão explicados no [`.env.example`](.env.example)
-e no [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example).
+Os campos estão explicados no [`.env.example`](.env.example) e no [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example).
 
-Comandos de carga, transformação e do dashboard: _(a preencher quando os scripts existirem)_.
+**Passos seguintes** — carga, transformação e dashboard: _(a preencher quando os scripts existirem)_.
 
-## 6. Estrutura do repositório
+## 7. Estrutura do repositório
 
 | Pasta / arquivo | Conteúdo |
 |---|---|
@@ -82,21 +98,23 @@ Comandos de carga, transformação e do dashboard: _(a preencher quando os scrip
 | `src/app/` | Dashboard Streamlit |
 | `n8n/` | Workflow de automação exportado (sem credenciais) |
 | `site/` | Site de apoio (documentação + vitrine de dados) |
+| `infra/` | Modelos de configuração do Supabase e do n8n, SQL inicial de papéis e script de backup |
+| `docs/instalacao.md` | Guia de instalação da infraestrutura |
 | `docs/responsabilidades.md` | Frentes de trabalho, tarefas e prazos do squad |
 | `docs/img/` | Prints do dashboard e da execução do n8n |
 
-## 7. Fontes de dados
+## 8. Fontes de dados
 
 - **IBGE** — API de Localidades e API de Agregados v3 (`servicodados.ibge.gov.br`): população estimada, Censo 2022, PIB dos Municípios, IPCA, Cadastro Central de Empresas.
 - **Banco Central do Brasil** — Sistema Gerenciador de Séries Temporais (SGS, `api.bcb.gov.br`): meta da Selic e câmbio do dólar.
 
-## 8. Como eu usei IA neste projeto
+## 9. Como eu usei IA neste projeto
 
 _(a preencher ao longo do projeto)_ — o processo segue três documentos escritos antes do código
 (`prd.md`, `spec.md`, `agents.md`) e o registro dos prompts em [`prompts/`](prompts/README.md):
 o que foi pedido, o que o assistente de IA entregou e o que o squad precisou ajustar.
 
-## 9. Squad
+## 10. Squad
 
 **DROP Database — Squad #21001**
 
