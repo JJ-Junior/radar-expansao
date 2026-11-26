@@ -34,7 +34,7 @@ jobs:
 
       - name: Confere os arquivos de dados do site
         run: |
-          for arquivo in meta indicadores_municipio ranking_expansao ranking_criterio contexto_macro momento_expansao territorio; do
+          for arquivo in meta indicadores_municipio ranking_expansao ranking_criterio contexto_macro momento_expansao parametro_ranking territorio; do
             python3 -c "import json; json.load(open('site/dados/${arquivo}.json', encoding='utf-8'))"
             echo "ok: site/dados/${arquivo}.json"
           done

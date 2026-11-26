@@ -8,16 +8,11 @@ Cada arquivo de dados espelha **uma tabela da camada gold** do [`spec.md`](../..
 **mesmos nomes de colunas**. Assim, quem conhece a gold entende o site, e o site não tem regra de cálculo própria:
 percentis, médias por UF e "municípios parecidos" são só leituras dessas tabelas, feitas no navegador.
 
-## Dois modos de geração
+## De onde vem
 
-| `FONTE` no `CONFIG` | De onde vem | `meta.json → eh_previa` | Quando usar |
-|---|---|---|---|
-| `"gold"` | Tabelas `gold.*` do Supabase (conexão pelo `.env`) | `false` | Depois que a camada gold existir — é o modo oficial |
-| `"api"` | Chamadas diretas às APIs do IBGE e do BCB, com as regras do `spec.md` (5.1 a 5.3) refeitas em Python | `true` | Enquanto a gold não existe. O site mostra o aviso **"Prévia — ranking calculado após a camada gold"** |
-
-No modo `"api"` todos os números são **reais** (vêm das APIs oficiais), mas o ranking e o semáforo são uma prévia:
-a versão que vale é a calculada na gold. A camada bronze/silver não é usada nesse modo, por isso a contagem de linhas
-das camadas fica `null`.
+Tudo sai da **camada gold** do Supabase autohospedado (conexão pelo `.env`, nunca pelo site). O script também conta as
+linhas de cada tabela de `bronze`, `silver` e `gold` para a seção "Dados" do site. Não existe mais modo de prévia: a gold
+é a única fonte das notas, do ranking, da lista de recomendadas e do semáforo.
 
 ## Formato comum das tabelas
 
@@ -51,7 +46,8 @@ Para ler em JavaScript: `linhas.map(l => Object.fromEntries(colunas.map((c, j) =
 | `meta.json` | — (metadados da exportação) | 1 objeto | — |
 | `indicadores_municipio.json` | `gold.indicadores_municipio` | todos os municípios (~5.571) | P1, P3, P4 |
 | `ranking_expansao.json` | `gold.ranking_expansao` | universo do ranking (~687) | P2, P5, P8 |
-| `ranking_criterio.json` | `gold.ranking_criterio` | 6 critérios | P8 |
+| `ranking_criterio.json` | `gold.ranking_criterio` | 7 componentes | P8 |
+| `parametro_ranking.json` | `gold.parametro_ranking` | 2 parâmetros | P8 |
 | `contexto_macro.json` | `gold.contexto_macro` | 1 por mês | P6 |
 | `momento_expansao.json` | `gold.momento_expansao` | 1 por mês com os 3 sinais | P7 |
 | `territorio.json` | IBGE Localidades + Malhas (referência, não é tabela da gold) | todos os municípios (~5.571) | mapa por regiões |
@@ -65,12 +61,12 @@ Para ler em JavaScript: `linhas.map(l => Object.fromEntries(colunas.map((c, j) =
 | Campo | Tipo | Descrição |
 |---|---|---|
 | `gerado_em` | texto (data e hora) | Quando o script rodou |
-| `fonte` | `"gold"` \| `"api"` | Modo de geração (tabela acima) |
-| `eh_previa` | booleano | `true` no modo `"api"`: o site exibe o aviso de prévia |
-| `versao_pesos` | texto | Versão dos pesos usada no ranking (ex.: `"prd-v0.2"`) |
+| `fonte` | `"gold"` | De onde vieram os dados |
+| `eh_previa` | booleano | Sempre `false` (o site ainda sabe exibir um aviso de prévia se um dia vier `true`) |
+| `versao_pesos` | texto | Versão dos pesos usada no ranking (ex.: `"prd-v0.3"`) |
 | `populacao_minima_universo` | inteiro | Corte do universo do ranking (50.000) |
 | `periodos` | objeto | Último período de cada fonte: `populacao`, `censo`, `pib`, `academias`, `salario`, `macro_ate` (`"AAAA-MM"`) |
-| `camadas` | objeto | `{"bronze": [...], "silver": [...], "gold": [...]}` com `{"tabela": texto, "linhas": inteiro}`; cada camada é `null` quando não foi lida (modo `"api"`) |
+| `camadas` | objeto | `{"bronze": [...], "silver": [...], "gold": [...]}` com `{"tabela": texto, "linhas": inteiro}`; cada camada é `null` se não tiver tabelas |
 | `exportado` | objeto | Linhas gravadas em cada arquivo desta pasta (`{"ranking_expansao": 687, ...}`) |
 
 Exemplo:
@@ -78,14 +74,16 @@ Exemplo:
 ```json
 {
   "gerado_em": "2026-11-26T15:04:12-03:00",
-  "fonte": "api",
-  "eh_previa": true,
-  "versao_pesos": "prd-v0.2",
+  "fonte": "gold",
+  "eh_previa": false,
+  "versao_pesos": "prd-v0.3",
   "populacao_minima_universo": 50000,
   "periodos": {"populacao": 2026, "censo": 2022, "pib": 2023, "academias": 2024, "salario": 2024, "macro_ate": "2026-11"},
-  "camadas": {"bronze": null, "silver": null, "gold": null},
-  "exportado": {"indicadores_municipio": 5571, "ranking_expansao": 687, "ranking_criterio": 6,
-                "contexto_macro": 143, "momento_expansao": 70}
+  "camadas": {"bronze": [{"tabela": "bronze.api_resposta", "linhas": 71}, ...],
+              "silver": [{"tabela": "silver.dim_municipio", "linhas": 5571}, ...],
+              "gold": [{"tabela": "gold.ranking_expansao", "linhas": 687}, ...]},
+  "exportado": {"indicadores_municipio": 5571, "ranking_expansao": 687, "ranking_criterio": 7,
+                "parametro_ranking": 2, "contexto_macro": 143, "momento_expansao": 68}
 }
 ```
 
@@ -97,6 +95,7 @@ Exemplo:
 | `municipio_nome` | texto | Nome oficial |
 | `uf_sigla` | texto (2) | Sigla da UF |
 | `regiao_sigla` | texto (1–2) | `N`, `NE`, `SE`, `S`, `CO` |
+| `regiao_imediata_id`, `regiao_imediata_nome` | inteiro, texto | Região geográfica imediata do IBGE |
 | `populacao` | inteiro \| null | Estimativa mais recente (IBGE 6579) |
 | `populacao_ano` | inteiro \| null | Ano da estimativa |
 | `populacao_censo_2022` | inteiro \| null | Censo 2022 (IBGE 4714) |
@@ -104,37 +103,40 @@ Exemplo:
 | `pib_mil_reais` | número \| null | PIB do último ano, em mil R$ (IBGE 5938) |
 | `pib_ano` | inteiro \| null | Ano do PIB |
 | `pib_per_capita` | número \| null | R$ por habitante no ano do PIB |
-| `pib_per_capita_tendencia` | número \| null | Crescimento anual do PIB per capita nos 5 anos até `pib_ano`, em fração |
+| `pib_per_capita_tendencia` | número \| null | Crescimento anual do PIB per capita entre `tendencia_ano_inicial` e `pib_ano`, em fração |
+| `tendencia_ano_inicial` | inteiro \| null | 1º ano da janela de 5 anos do PIB |
 | `renda_dom_per_capita` | número \| null | R$/mês, Censo 2022 (IBGE 10295) |
+| `renda_ano` | inteiro \| null | Ano da renda (2022) |
 | `academias_qtd` | inteiro \| null | Empresas da CNAE 93.13-1 (IBGE 9418); `"-"` da fonte vira `0` |
 | `academias_ano` | inteiro \| null | Ano do cadastro |
 | `academias_por_10mil_hab` | número \| null | Academias ÷ população do mesmo ano × 10.000 |
 | `salario_medio` | número \| null | Salário médio mensal formal, R$ (IBGE 9509) |
+| `salario_ano` | inteiro \| null | Ano do salário médio |
 | `atualizado_em` | texto (data e hora) | Quando a linha foi calculada |
-
-Exemplo de uma linha (valores ilustrativos do formato):
-
-```json
-[3106200, "Belo Horizonte", "MG", "SE", 2416339, 2026, 2315560, 0.0107, 120000000, 2023, 51800.5, 0.021,
- 2600.10, 1008, 2024, 4.27, 4100.25, "2026-11-26T15:04:12-03:00"]
-```
 
 ### `ranking_expansao.json` — `gold.ranking_expansao`
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
 | `municipio_id`, `municipio_nome`, `uf_sigla`, `regiao_sigla` | | Como acima |
+| `regiao_imediata_id`, `regiao_imediata_nome` | inteiro, texto | Região imediata (a lista de recomendadas tem no máximo uma por região) |
 | `populacao` | inteiro | População usada para entrar no universo (≥ 50 mil) |
-| `nota_mercado` | número 0–100 | Percentil da população |
-| `nota_poder_compra` | número 0–100 | Percentil da renda domiciliar per capita |
-| `nota_espaco_competitivo` | número 0–100 | Percentil **invertido** de academias por 10 mil hab. (menos academias = nota maior) |
-| `nota_crescimento` | número 0–100 | Percentil do crescimento anual desde 2022 |
-| `nota_riqueza` | número 0–100 | Média dos percentis do PIB per capita (nível) e da tendência |
-| `nota_mercado_formal` | número 0–100 | Percentil do salário médio formal |
-| `nota_final` | número 0–100 | Soma ponderada das notas pelos pesos de `ranking_criterio` |
-| `posicao_brasil` | inteiro | 1 = melhor do Brasil |
-| `posicao_uf` | inteiro | 1 = melhor da UF |
-| `dados_incompletos` | booleano | Algum critério recebeu nota neutra 50 por falta de dado |
+| `nota_mercado` | número 0–100 \| null | Percentil da população |
+| `nota_poder_compra` | número 0–100 \| null | Percentil da renda domiciliar per capita |
+| `nota_espaco_competitivo` | número 0–100 \| null | Percentil **invertido** de academias por 10 mil hab., limitado aos percentis 5% e 95% |
+| `nota_crescimento` | número 0–100 \| null | Percentil do crescimento anual desde 2022 |
+| `nota_riqueza_nivel`, `nota_riqueza_tendencia` | número 0–100 \| null | Percentis do PIB per capita (nível) e da tendência |
+| `nota_riqueza` | número 0–100 \| null | Média ponderada de nível e tendência (o critério "riqueza local" do prd) |
+| `nota_mercado_formal` | número 0–100 \| null | Percentil do salário médio formal |
+| `nota_final` | número 0–100 | Média ponderada das notas disponíveis (peso de critério sem dado é redistribuído) |
+| `posicao_brasil`, `posicao_regiao`, `posicao_uf` | inteiro | 1 = melhor do Brasil / da região / da UF |
+| `dados_incompletos` | booleano | Algum critério sem dado |
+| `criterios_ausentes` | lista de texto \| null | Componentes sem dado (ex.: `["mercado_formal"]`) |
+| `peso_considerado` | número | Soma dos pesos com dado (`1.0` = completo) |
+| `verificar_concorrencia` | booleano | Nenhuma academia formal registrada: conferir no local |
+| `elegivel_recomendacao` | booleano | Passa na trava de renda (`nota_poder_compra` ≥ `nota_minima_poder_compra`) |
+| `recomendado_top5` | booleano | Está na lista das unidades recomendadas |
+| `ordem_recomendacao` | número \| null | 1 a 5, ordem na lista de recomendadas |
 | `versao_pesos` | texto | Versão dos pesos |
 | `calculado_em` | texto (data e hora) | Quando o ranking foi calculado |
 
@@ -142,18 +144,32 @@ Exemplo de uma linha (valores ilustrativos do formato):
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| `criterio` | texto | `mercado`, `poder_compra`, `espaco_competitivo`, `crescimento`, `riqueza`, `mercado_formal` (a nota fica em `nota_<criterio>`) |
-| `descricao` | texto | O que o critério mede |
+| `criterio` | texto | `mercado`, `poder_compra`, `espaco_competitivo`, `crescimento`, `riqueza_nivel`, `riqueza_tendencia`, `mercado_formal` (a nota fica em `nota_<criterio>`) |
+| `grupo` | texto | Critério do prd que o componente compõe (`riqueza` agrupa nível e tendência) |
+| `descricao` | texto | O que o componente mede (o site usa um texto próprio, com acentos, e cai neste se faltar) |
 | `fonte` | texto | Tabela do IBGE de origem |
-| `peso` | número | Fração; a soma dos 6 é `1.000` |
+| `peso` | número | Fração; a soma dos 7 é `1.000` |
 | `sentido` | texto | `maior_melhor` \| `menor_melhor` |
+| `ordem` | inteiro | Ordem de exibição |
 | `versao_pesos` | texto | Versão dos pesos |
+
+### `parametro_ranking.json` — `gold.parametro_ranking`
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `parametro` | texto | `unidades_recomendadas` (quantas cidades na lista) ou `nota_minima_poder_compra` (trava de renda) |
+| `valor` | número | Valor do parâmetro (hoje 5 e 50) |
+| `descricao` | texto | Explicação do parâmetro |
+| `versao_pesos` | texto | Versão |
+
+O site lê esses valores para explicar a lista de recomendadas; se o arquivo faltar, usa 5 e 50.
 
 ### `contexto_macro.json` — `gold.contexto_macro`
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
 | `mes` | texto `AAAA-MM-01` | Primeiro dia do mês |
+| `mes_parcial` | booleano | Mês corrente, ainda em andamento |
 | `selic_meta` | número \| null | % a.a., meta vigente no último dia do mês (BCB 432) |
 | `selic_var_12m_pp` | número \| null | Variação em pontos percentuais contra 12 meses antes |
 | `dolar_medio` | número \| null | R$, média dos dias úteis do mês (BCB 10813) |
@@ -211,7 +227,7 @@ As malhas mudam raramente: rode `baixar_territorio.py` só quando o IBGE publica
 ```powershell
 # na raiz do repositório, com o ambiente virtual ativo
 python src/exportacao/baixar_territorio.py # uma vez (malhas + territorio.json)
-python src/exportacao/exportar_site.py     # a cada atualização da gold (ou da prévia)
+python src/exportacao/exportar_site.py     # a cada atualização da gold
 ```
 
 Depois, faça commit da pasta `site/dados/`: o deploy do site publica o que estiver no repositório.

@@ -1,0 +1,4 @@
+{"tabela": "gold.parametro_ranking", "gerado_em": "2026-11-26T16:12:31-03:00", "colunas": ["parametro", "valor", "descricao", "versao_pesos"],"linhas":[
+["nota_minima_poder_compra",50.0,"Trava de renda: so entra na lista de recomendadas quem tem nota de poder de compra >= este valor (percentil 50 do universo)","prd-v0.4"],
+["unidades_recomendadas",5.0,"Quantidade de cidades na lista de unidades recomendadas (no maximo uma por regiao imediata)","prd-v0.4"]
+]}

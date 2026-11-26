@@ -13,12 +13,10 @@
 # =============================================================================
 #
 # OBJETIVO: gerar os arquivos JSON que o site de apoio le (contrato em
-#           site/dados/README.md), a partir da camada gold ou, enquanto ela nao
-#           existe, de uma previa calculada direto das APIs (previa_api.py).
-# ENTRADA:  FONTE = "gold": tabelas gold.* do Supabase autohospedado via Docker
-#           (conexao pelo .env, incluindo DB_SSLMODE) + contagem de linhas
-#           das camadas bronze, silver e gold
-#           FONTE = "api":  APIs do IBGE e do BCB
+#           site/dados/README.md) a partir das tabelas da camada gold.
+# ENTRADA:  tabelas gold.* do Supabase autohospedado via Docker (conexao pelo
+#           .env, incluindo DB_SSLMODE) + contagem de linhas das camadas
+#           bronze, silver e gold
 # SAIDA:    site/dados/*.json (substitui os arquivos inteiros a cada execucao)
 #
 # =============================================================================
@@ -34,9 +32,11 @@
 #                                 das colunas aparecem uma vez so; arquivo menor
 #   2. df.to_json(orient="split") -> o pandas ja entrega colunas + linhas e troca
 #                                 NaN por null (o JSON nao aceita NaN)
-#   3. information_schema      -> catalogo do Postgres para listar as tabelas de
+#   3. Decimal -> float        -> o Postgres devolve numeric como Decimal, que o
+#                                 JSON nao conhece; vira numero comum antes
+#   4. information_schema      -> catalogo do Postgres para listar as tabelas de
 #                                 cada camada e contar as linhas
-#   4. site estatico           -> o navegador le arquivos prontos; nenhuma
+#   5. site estatico           -> o navegador le arquivos prontos; nenhuma
 #                                 credencial do banco vai para o site
 #
 # INSTALACAO: pip install -r requirements.txt
@@ -45,24 +45,26 @@
 # =============================================================================
 
 # ============================== CONFIG ==============================
-FONTE = "api"                 # "gold" (oficial) | "api" (previa enquanto a gold nao existe)
 SCHEMA_GOLD = "gold"
 TABELAS = [                   # arquivo site/dados/<tabela>.json  <-  gold.<tabela>
     "indicadores_municipio",
     "ranking_expansao",
     "ranking_criterio",
+    "parametro_ranking",
     "contexto_macro",
     "momento_expansao",
 ]
 ORDEM = {                     # ordenacao das linhas em cada arquivo
     "indicadores_municipio": "municipio_id",
     "ranking_expansao": "posicao_brasil",
-    "ranking_criterio": "peso DESC, criterio",
+    "ranking_criterio": "ordem",
+    "parametro_ranking": "parametro",
     "contexto_macro": "mes",
     "momento_expansao": "mes",
 }
-CAMADAS = ["bronze", "silver", "gold"]   # contagem de linhas para a secao "Arquitetura"
+CAMADAS = ["bronze", "silver", "gold"]   # contagem de linhas para a secao "Dados"
 POPULACAO_MINIMA = 50_000                # so informativo no meta.json (o corte vale na gold)
+ANO_CENSO = 2022
 CASAS_DECIMAIS = 6
 # ====================================================================
 
@@ -70,6 +72,7 @@ import json
 import os
 import sys
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
@@ -114,22 +117,29 @@ def contar_camadas(engine) -> dict:
     return resultado
 
 
+def maior_ano(df: pd.DataFrame, coluna: str):
+    """Maior valor de uma coluna de ano, ou None se a coluna nao existe ou esta vazia."""
+    if coluna not in df or df[coluna].dropna().empty:
+        return None
+    return int(df[coluna].max())
+
+
 def ler_gold() -> dict:
-    """Le as tabelas gold.* e monta o mesmo dicionario que a previa devolve."""
+    """Le as tabelas gold.* e os metadados que o site mostra."""
     engine = conectar_banco()
     tabelas = {t: pd.read_sql(f"SELECT * FROM {SCHEMA_GOLD}.{t} ORDER BY {ORDEM[t]}", engine) for t in TABELAS}
-    ind, macro = tabelas["indicadores_municipio"], tabelas["contexto_macro"]
-    criterios = tabelas["ranking_criterio"]
-    ultimo_mes = pd.to_datetime(macro.dropna(subset=["selic_meta"])["mes"]).max()
+    ind, macro, criterios = tabelas["indicadores_municipio"], tabelas["contexto_macro"], tabelas["ranking_criterio"]
+    com_selic = macro.dropna(subset=["selic_meta"])
+    ultimo_mes = pd.to_datetime(com_selic["mes"]).max() if len(com_selic) else None
     return {
         "gerado_em": datetime.now().astimezone().isoformat(timespec="seconds"),
         "periodos": {
-            "populacao": int(ind["populacao_ano"].max()),
-            "censo": 2022,
-            "pib": int(ind["pib_ano"].max()),
-            "academias": int(ind["academias_ano"].max()),
-            "salario": None,  # a gold nao guarda o ano do salario medio
-            "macro_ate": f"{ultimo_mes:%Y-%m}" if pd.notna(ultimo_mes) else None,
+            "populacao": maior_ano(ind, "populacao_ano"),
+            "censo": ANO_CENSO,
+            "pib": maior_ano(ind, "pib_ano"),
+            "academias": maior_ano(ind, "academias_ano"),
+            "salario": maior_ano(ind, "salario_ano"),
+            "macro_ate": f"{ultimo_mes:%Y-%m}" if ultimo_mes is not None else None,
         },
         "versao_pesos": str(criterios["versao_pesos"].iloc[0]) if len(criterios) else None,
         "populacao_minima_universo": POPULACAO_MINIMA,
@@ -139,13 +149,15 @@ def ler_gold() -> dict:
 
 
 def preparar(df: pd.DataFrame) -> pd.DataFrame:
-    """Datas viram texto ISO; 'mes' vira AAAA-MM-DD (o contrato pede data sem hora)."""
+    """Decimal vira float; datas viram texto ISO; 'mes' vira AAAA-MM-DD (o contrato pede data sem hora)."""
     df = df.copy()
     for coluna in df.columns:
         if coluna == "mes":
             df[coluna] = pd.to_datetime(df[coluna]).dt.strftime("%Y-%m-%d")
         elif pd.api.types.is_datetime64_any_dtype(df[coluna]):
             df[coluna] = df[coluna].map(lambda v: v.isoformat() if pd.notna(v) else None)
+        elif df[coluna].dtype == object and df[coluna].map(lambda v: isinstance(v, Decimal)).any():
+            df[coluna] = df[coluna].map(lambda v: float(v) if isinstance(v, Decimal) else v)
     return df
 
 
@@ -153,13 +165,11 @@ def gravar_tabela(nome: str, df: pd.DataFrame, gerado_em: str) -> int:
     """Grava site/dados/<nome>.json no formato colunar do contrato; devolve o numero de linhas."""
     dividido = json.loads(preparar(df).to_json(orient="split", index=False, double_precision=CASAS_DECIMAIS,
                                                force_ascii=False))
-    conteudo = {"tabela": f"{SCHEMA_GOLD}.{nome}", "gerado_em": gerado_em,
-                "colunas": dividido["columns"], "linhas": dividido["data"]}
-    caminho = PASTA_SAIDA / f"{nome}.json"
+    conteudo = {"tabela": f"{SCHEMA_GOLD}.{nome}", "gerado_em": gerado_em, "colunas": dividido["columns"]}
     # uma linha por registro: arquivo compacto e diff do git legivel
-    corpo = ",\n".join(json.dumps(l, ensure_ascii=False, separators=(",", ":")) for l in conteudo["linhas"])
-    cabecalho = {k: v for k, v in conteudo.items() if k != "linhas"}
-    texto = json.dumps(cabecalho, ensure_ascii=False)[:-1] + ',"linhas":[\n' + corpo + "\n]}\n"
+    corpo = ",\n".join(json.dumps(l, ensure_ascii=False, separators=(",", ":")) for l in dividido["data"])
+    texto = json.dumps(conteudo, ensure_ascii=False)[:-1] + ',"linhas":[\n' + corpo + "\n]}\n"
+    caminho = PASTA_SAIDA / f"{nome}.json"
     caminho.write_text(texto, encoding="utf-8")
     print(f"  {caminho.relative_to(RAIZ)}: {len(df)} linhas ({caminho.stat().st_size / 1024:,.0f} KB)")
     return len(df)
@@ -169,22 +179,18 @@ def conferir(tabelas: dict) -> None:
     """Checagens do prd.md (secao 9) antes de publicar."""
     pesos = tabelas["ranking_criterio"]["peso"].astype(float).sum()
     assert abs(pesos - 1) < 1e-6, f"soma dos pesos = {pesos}"
-    notas = tabelas["ranking_expansao"].filter(like="nota_")
-    assert notas.notna().all().all(), "ha municipio do universo sem nota"
-    assert ((notas >= 0) & (notas <= 100)).all().all(), "ha nota fora de 0-100"
+    ranking = tabelas["ranking_expansao"]
+    assert ranking["nota_final"].notna().all(), "ha municipio do universo sem nota final"
+    notas = ranking.filter(like="nota_").astype(float)
+    assert ((notas.isna()) | ((notas >= 0) & (notas <= 100))).all().all(), "ha nota fora de 0-100"
+    quantidade = tabelas["parametro_ranking"].set_index("parametro")["valor"].astype(float).get("unidades_recomendadas")
+    recomendadas = int(ranking["recomendado_top5"].sum())
+    assert quantidade is None or recomendadas == int(quantidade), f"{recomendadas} recomendadas, esperado {quantidade}"
 
 
 def main() -> None:
-    if FONTE not in ("gold", "api"):
-        sys.exit('FONTE deve ser "gold" ou "api"')
-    print(f"Exportando dados do site (FONTE = {FONTE!r}) ...")
-    if FONTE == "gold":
-        dados = ler_gold()
-    else:
-        from previa_api import montar_previa
-        dados = montar_previa()
-        dados["camadas"] = {camada: None for camada in CAMADAS}
-
+    print("Exportando dados do site a partir da camada gold ...")
+    dados = ler_gold()
     conferir(dados["tabelas"])
     PASTA_SAIDA.mkdir(parents=True, exist_ok=True)
     print("Gravando:")
@@ -192,8 +198,8 @@ def main() -> None:
 
     meta = {
         "gerado_em": dados["gerado_em"],
-        "fonte": FONTE,
-        "eh_previa": FONTE != "gold",
+        "fonte": "gold",
+        "eh_previa": False,
         "versao_pesos": dados["versao_pesos"],
         "populacao_minima_universo": dados["populacao_minima_universo"],
         "periodos": dados["periodos"],

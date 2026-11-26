@@ -1,8 +1,8 @@
 {
-  "gerado_em": "2026-11-26T12:59:30-03:00",
-  "fonte": "api",
-  "eh_previa": true,
-  "versao_pesos": "prd-v0.2",
+  "gerado_em": "2026-11-26T16:12:31-03:00",
+  "fonte": "gold",
+  "eh_previa": false,
+  "versao_pesos": "prd-v0.3",
   "populacao_minima_universo": 50000,
   "periodos": {
     "populacao": 2026,
@@ -13,14 +13,82 @@
     "macro_ate": "2026-11"
   },
   "camadas": {
-    "bronze": null,
-    "silver": null,
-    "gold": null
+    "bronze": [
+      {
+        "tabela": "bronze.api_resposta",
+        "linhas": 71
+      },
+      {
+        "tabela": "bronze.execucao",
+        "linhas": 29
+      },
+      {
+        "tabela": "bronze.trava_carga",
+        "linhas": 1
+      }
+    ],
+    "silver": [
+      {
+        "tabela": "silver.dim_calendario",
+        "linhas": 11322
+      },
+      {
+        "tabela": "silver.dim_indicador",
+        "linhas": 19
+      },
+      {
+        "tabela": "silver.dim_municipio",
+        "linhas": 5571
+      },
+      {
+        "tabela": "silver.dim_regiao",
+        "linhas": 5
+      },
+      {
+        "tabela": "silver.dim_uf",
+        "linhas": 27
+      },
+      {
+        "tabela": "silver.fato_indicador_macro",
+        "linhas": 7639
+      },
+      {
+        "tabela": "silver.fato_indicador_municipal",
+        "linhas": 969202
+      }
+    ],
+    "gold": [
+      {
+        "tabela": "gold.contexto_macro",
+        "linhas": 143
+      },
+      {
+        "tabela": "gold.indicadores_municipio",
+        "linhas": 5571
+      },
+      {
+        "tabela": "gold.momento_expansao",
+        "linhas": 68
+      },
+      {
+        "tabela": "gold.parametro_ranking",
+        "linhas": 2
+      },
+      {
+        "tabela": "gold.ranking_criterio",
+        "linhas": 7
+      },
+      {
+        "tabela": "gold.ranking_expansao",
+        "linhas": 687
+      }
+    ]
   },
   "exportado": {
     "indicadores_municipio": 5571,
     "ranking_expansao": 687,
-    "ranking_criterio": 6,
+    "ranking_criterio": 7,
+    "parametro_ranking": 2,
     "contexto_macro": 143,
     "momento_expansao": 68
   }
