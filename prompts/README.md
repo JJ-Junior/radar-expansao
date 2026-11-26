@@ -71,4 +71,5 @@ O que muda no próximo pedido (e, se for regra, o que entrou no agents.md).
 | 5 | [03-simulador-de-regiao.md](etapa-5-gold/03-simulador-de-regiao.md) | Coordenadas e estimativas para o simulador de região (P9) |
 | 5 | [04-semaforo-janela-movel.md](etapa-5-gold/04-semaforo-janela-movel.md) | Semáforo com janela móvel e alerta de curto prazo no câmbio |
 | 7 | [01-dashboard.md](etapa-7-streamlit/01-dashboard.md) | Dashboard Streamlit lendo a camada gold, com cópia de contingência |
+| 7 | [02-simulador-e-dolar.md](etapa-7-streamlit/02-simulador-e-dolar.md) | Simulador de região, simulador de pesos, dólar do mês parcial e semáforo de hoje |
 | extra | [01-site-estatico.md](extra-site-de-apoio/01-site-estatico.md) | Site de apoio estático no GitHub Pages |

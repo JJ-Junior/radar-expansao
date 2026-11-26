@@ -1,6 +1,7 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
 > **RASCUNHO v0.13 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> v0.14: dashboard com 6 páginas (simulador de região, simulador de pesos, dólar parcial e último fechamento, semáforo de `momento_atual`) — seção 9.1.
 > v0.13: semáforo com janela móvel de 30 dias até o último fechamento (câmbio e juros), alerta de alta de curto prazo no câmbio,
 > `gold.momento_atual` com datas de referência, último fechamento em `contexto_macro`, limiares em `parametro_ranking` (seção 5.1).
 > v0.12: dashboard Streamlit implementado (seção 9.1): 5 páginas, camada de dados única com cache de 10 minutos e cópia de contingência.
@@ -710,13 +711,14 @@ arquivo `src/app/app.py`). O app **só lê e apresenta**: ranking, notas, lista 
 
 | Arquivo | Conteúdo |
 |---|---|
-| `app.py` | ponto de entrada: `st.set_page_config`, menu no topo (`st.navigation`) com as 5 páginas e o aviso de contingência |
+| `app.py` | ponto de entrada: `st.set_page_config` (aba "RADAR DE EXPANSÃO · SQUAD DROP DATABASE"), menu no topo (`st.navigation`) com as 6 páginas, cabeçalho da marca e o aviso de contingência |
 | `dados.py` | camada de dados única: lê as 6 tabelas da gold pela API (ou a cópia), acerta tipos e guarda em cache |
 | `formato.py` | rótulos dos critérios, cores do tema e números no padrão brasileiro |
 | `paginas/visao_geral.py` | semáforo + justificativa, 5 recomendadas em cards (nota, posição, população, 2 pontos fortes), motivo das cidades bem colocadas que ficaram fora, mapa do universo e números de contexto (P7, P8) |
-| `paginas/ranking.py` | filtros por região, UF, faixa de população, nome e elegibilidade; top 10 do recorte; tabela com notas por critério; CSV (`;` e vírgula decimal) (P2, P4, P5) |
+| `paginas/ranking.py` | filtros por região, UF, faixa de população, nome e elegibilidade; top 10 do recorte; tabela com notas por critério; CSV (`;` e vírgula decimal); **simulador de pesos** opcional: sliders dos 6 critérios refazem só a média ponderada das notas da gold (mesma regra de peso redistribuído), com aviso de simulação e "Voltar ao oficial" — não muda o ranking oficial nem as recomendadas (P2, P4, P5) |
+| `paginas/simulador.py` | **simulador de região (P9, seção 9.4):** cidade central (qualquer dos 5.571) e raio de 10 a 300 km (padrão 100); distância haversine no app; mapa com o círculo do raio e as divisas das UFs; ranking local (posição no raio e no Brasil, distância, notas, população projetada, lacuna) com opção de incluir cidades com menos de 50 mil habitantes (sem nota); resumo da região (população, população projetada, renda média ponderada, academias, densidade, soma das lacunas positivas); aviso das estimativas com as premissas de `parametro_ranking`; CSV |
 | `paginas/municipio.py` | nota, posições, nota e peso por componente, indicadores com percentil no universo e medianas do universo e da UF, alertas (P1, P3, P8) |
-| `paginas/contexto_macro.py` | Selic, IPCA mensal e 12 meses (teto de 4,5%) e dólar por período + faixa do semáforo mês a mês com a justificativa (P6, P7) |
+| `paginas/contexto_macro.py` | Selic, IPCA mensal e 12 meses (teto de `parametro_ranking`) e dólar por período; o dólar mostra a **média do mês** ("parcial, até dd/mm" no mês corrente) e o **último fechamento com a data** (`dolar_ultimo`/`dolar_ultimo_data`; na cópia antiga, `meta.json`); legenda das datas de referência do semáforo + faixa mês a mês com o mês parcial marcado (P6, P7) |
 | `paginas/metodologia.py` | critérios, pesos, sentido e fontes de `gold.ranking_criterio`, travas de `gold.parametro_ranking`, regras do semáforo e fluxo bronze → silver → gold com a contagem de linhas da última exportação (P8) |
 
 - **Fonte principal: API REST do Supabase**, lida com `requests`:
@@ -732,6 +734,9 @@ arquivo `src/app/app.py`). O app **só lê e apresenta**: ranking, notas, lista 
   o app lê **todas** as tabelas dos JSON da gold em `site/dados/` (os mesmos do site, formato colunar `{colunas, linhas}`,
   contrato em `site/dados/README.md`) e mostra no topo de toda página o aviso **"Dados de <data>"** (campo `gerado_em` de
   `site/dados/meta.json`) com o motivo. A mensagem nunca exibe o endereço da API.
+- **Semáforo exibido:** `gold.momento_atual` (uma linha, com as datas de referência e o alerta de câmbio). Se a tabela não
+  existir na fonte lida (cópia antiga), o app mostra o último mês fechado de `gold.momento_expansao` e diz isso na tela.
+  `momento_atual` é **opcional** na leitura: a falta dela não derruba a API nem a cópia.
 - **Mapa:** pontos nas coordenadas da gold (`latitude`/`longitude` de `gold.ranking_expansao`; na cópia antiga, `site/dados/territorio.json`)
   sobre as divisas das UFs desenhadas a partir da malha do IBGE (`site/dados/malha/ufs.topo.json`), sem servidor de mapas externo.
 - **Tema** em `.streamlit/config.toml`: fundo escuro, verde-limão (`#c4f03b`) só como cor de marca (botões, links, item ativo,

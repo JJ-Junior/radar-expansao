@@ -10,7 +10,7 @@
 > | 4 · Camada silver (modelo estrela) | ✅ concluída: 5 dimensões, 2 fatos, 12 testes de qualidade passando |
 > | 5 · Camada gold (ranking, contexto macro, semáforo) | ✅ concluída: tabelas de consumo + parâmetros do ranking + coordenadas e estimativas do simulador de região (P9) + semáforo com janela móvel até o último fechamento, 25 testes de qualidade passando |
 > | 6 · n8n | ⏳ próxima etapa |
-> | 7 · Dashboard Streamlit | ✅ app com 5 páginas lendo a gold pela API REST, com cópia de contingência; publicação no Streamlit Cloud em andamento |
+> | 7 · Dashboard Streamlit | ✅ app com 6 páginas (inclui o simulador de região) lendo a gold pela API REST, com cópia de contingência; publicação no Streamlit Cloud em andamento |
 > | Extra · Site de apoio | ✅ publicado em https://radar-expansao.lovelearning.com.br |
 
 Sistema que cruza dados oficiais do **IBGE** e do **Banco Central** para responder a uma pergunta de negócio:
@@ -81,13 +81,15 @@ escala azul como cor de dado, igual ao site de apoio).
 | Página | O que mostra | Perguntas do `prd.md` |
 |---|---|---|
 | **Visão geral** | semáforo do momento econômico com a justificativa, as 5 unidades recomendadas (nota, posição, população e 2 pontos fortes), por que cidades bem colocadas ficaram fora, mapa das 687 cidades (tamanho = população, cor = nota) e números de contexto | P7, P8 |
-| **Ranking** | tabela filtrável por região, UF, faixa de população e nome, com as notas de cada critério, gráfico do top 10 do recorte e download em CSV | P2, P4, P5 |
+| **Ranking** | tabela filtrável por região, UF, faixa de população e nome, com as notas de cada critério, gráfico do top 10 do recorte, download em CSV e um simulador de pesos (só para comparar; o ranking oficial não muda) | P2, P4, P5 |
 | **Município** | nota final, posições (Brasil, região, UF), nota e peso de cada critério, indicadores com percentil no universo e medianas, alertas de dados incompletos e de verificar concorrência | P1, P3, P8 |
-| **Momento econômico** | Selic, IPCA (mês e 12 meses) e dólar no tempo + linha do tempo do semáforo mês a mês | P6, P7 |
+| **Simulador de região** | cidade central (qualquer município) + raio de 10 a 300 km: mapa com o círculo do raio, ranking local (posição no raio e no Brasil, distância, notas, população projetada e lacuna de academias), resumo da região e o aviso das estimativas | P9 |
+| **Momento econômico** | Selic, IPCA (mês e 12 meses) e dólar no tempo (média do mês, marcada como parcial no mês corrente, e último fechamento com a data) + linha do tempo do semáforo mês a mês | P6, P7 |
 | **Como o ranking é calculado** | critérios, pesos, sentido e fontes (lidos da gold), regras do cálculo e da lista recomendada, regras do semáforo e o caminho bronze → silver → gold | P8 |
 
 **De onde vêm os dados.** O app só lê e apresenta: o ranking, as notas, a lista recomendada e o semáforo vêm prontos da
-camada gold. A leitura é pela API REST do Supabase, com papel somente leitura, guardada em cache por 10 minutos
+camada gold; a distância do simulador de região é calculada no app (haversine) a partir das coordenadas da gold, e o
+semáforo exibido é o de `gold.momento_atual` (janela até o último fechamento). A leitura é pela API REST do Supabase, com papel somente leitura, guardada em cache por 10 minutos
 ([`src/app/dados.py`](src/app/dados.py)). Se faltar segredo ou a API não responder, o app usa a cópia da gold em
 `site/dados/*.json` (a mesma do site de apoio) e mostra no topo o aviso **"Dados de <data>"**.
 
