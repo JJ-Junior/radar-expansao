@@ -259,6 +259,11 @@ ssh -N \
 Com o túnel aberto: Postgres em `localhost:5432` (o `.env` do projeto já aponta para lá), Studio e API em
 `http://localhost:8000`, n8n em `http://localhost:5678`.
 
+> **Já existe um PostgreSQL instalado no seu computador?** Ele ocupa a porta 5432 e o túnel não consegue abri-la
+> (o `ssh` só avisa e segue sem o encaminhamento). Use outra porta local para o banco, por exemplo
+> `-L 54322:127.0.0.1:5432`, e troque no `.env` a linha `DB_PORT=54322`. Para conferir quem usa a porta:
+> `Get-NetTCPConnection -LocalPort 5432 -State Listen` (Windows) ou `sudo ss -ltnp | grep 5432` (Linux).
+
 ### 5.2 Túnel com controle de acesso (opcional, para o Streamlit Cloud)
 
 O Streamlit Cloud precisa alcançar a API REST sem um túnel SSH. Uma forma sem abrir portas no roteador é um túnel de saída
@@ -312,6 +317,7 @@ Restauração de verdade: recrie os papéis com `infra/sql/00_schemas_roles.sql`
 
 | Sintoma | Causa provável | O que fazer |
 |---|---|---|
+| Scripts locais conectam num banco errado ou recebem "autenticação falhou" para `etl_radar` | há um PostgreSQL local no computador usando a porta 5432, e o túnel não abriu o encaminhamento | abra o túnel com outra porta local (`-L 54322:127.0.0.1:5432`) e mude `DB_PORT=54322` no `.env` (seção 5.1) |
 | `port is already allocated` / `address already in use` | outra aplicação já usa 5432, 8000 ou 5678 | `sudo ss -ltnp \| grep -E ':(5432\|8000\|5678)'`; pare o serviço ou mude a porta **do lado esquerdo** no override (`127.0.0.1:5433:5432`) |
 | Container reiniciando, `OOMKilled` em `docker inspect` | memória insuficiente | `docker stats`; desligue o Studio fora de uso (`docker compose stop studio`); aumente swap ou a memória da máquina; ajuste `mem_limit` |
 | `Illegal instruction` ao iniciar um container ou importar uma biblioteca | CPU virtual sem AVX/AVX2 (comum em máquinas virtuais com CPU genérica) | na virtualização, use o tipo de CPU `host`; em Python, prefira bibliotecas sem exigência de AVX2 (ex.: `polars-lts-cpu` no lugar de `polars`) |
