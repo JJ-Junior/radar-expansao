@@ -1,6 +1,12 @@
-{"tabela": "gold.parametro_ranking", "gerado_em": "2026-11-26T17:15:52-03:00", "colunas": ["parametro", "valor", "descricao", "versao_pesos"],"linhas":[
+{"tabela": "gold.parametro_ranking", "gerado_em": "2026-11-26T17:31:04-03:00", "colunas": ["parametro", "valor", "descricao", "versao_pesos"],"linhas":[
 ["ano_projecao_populacao",2028.0,"Estimativa: ano da populacao projetada (populacao atual x (1 + crescimento anual) ^ anos ate la)","prd-v0.5"],
 ["faixas_renda_referencia",5.0,"Estimativa: faixas de renda (quintis do universo) usadas na densidade de referencia de academias","prd-v0.5"],
 ["nota_minima_poder_compra",50.0,"Trava de renda: so entra na lista de recomendadas quem tem nota de poder de compra >= este valor (percentil 50 do universo)","prd-v0.4"],
+["semaforo_alerta_cambio_30d_pct",5.0,"Semaforo: alta da media do dolar nos ultimos 30 dias contra os 30 dias anteriores que impede o sinal verde (%)","prd-v0.6"],
+["semaforo_janela_dias",30.0,"Semaforo: janela movel (dias corridos) para cambio e juros, ate o ultimo fechamento do BCB","prd-v0.6"],
+["semaforo_limiar_dolar_12m_pct",10.0,"Semaforo: alta da media do dolar em 12 meses acima da qual o sinal de cambio e vermelho (%)","prd-v0.6"],
+["semaforo_limiar_selic_pp",0.5,"Semaforo: variacao da meta da Selic em 12 meses que muda o sinal de juros (pontos percentuais)","prd-v0.6"],
+["semaforo_meses_tendencia_ipca",3.0,"Semaforo: IPCA 12m comparado com o de N meses antes para dizer se esta desacelerando","prd-v0.6"],
+["semaforo_teto_ipca_pct",4.5,"Semaforo: teto do IPCA acumulado em 12 meses (%)","prd-v0.6"],
 ["unidades_recomendadas",5.0,"Quantidade de cidades na lista de unidades recomendadas (no maximo uma por regiao imediata)","prd-v0.4"]
 ]}

@@ -15,7 +15,8 @@
 # OBJETIVO: gerar a imagem que aparece quando o link do site e compartilhado
 #           (WhatsApp, redes sociais): 1200 x 630, com os dados reais do site
 #           (momento economico e as unidades recomendadas).
-# ENTRADA:  site/dados/meta.json, ranking_expansao.json, momento_expansao.json
+# ENTRADA:  site/dados/meta.json, ranking_expansao.json, momento_atual.json
+#           (semaforo de hoje; na falta dele, o ultimo mes de momento_expansao.json)
 #           e contexto_macro.json (exportados da gold)
 # SAIDA:    site/img/previa.jpg (substitui o arquivo a cada execucao)
 #
@@ -91,13 +92,19 @@ def montar_html() -> str:
     """Pagina 1200 x 630 com os dados reais (escrita do zero, so CSS e SVG nossos)."""
     meta = json.loads((PASTA_DADOS / "meta.json").read_text(encoding="utf-8"))
     ranking = ler_tabela("ranking_expansao")
-    momento = ler_tabela("momento_expansao")
+    # semaforo de hoje (janela movel ate o ultimo fechamento); sem ele, o ultimo mes do historico
+    caminho_atual = PASTA_DADOS / "momento_atual.json"
+    momento = ler_tabela("momento_atual") if caminho_atual.exists() else ler_tabela("momento_expansao")
     recomendadas = sorted((r for r in ranking if r.get("recomendado_top5")), key=lambda r: r["ordem_recomendacao"])
     if not recomendadas:  # sem lista na gold: mostra as 5 primeiras do ranking
         recomendadas = sorted(ranking, key=lambda r: r["posicao_brasil"])[:5]
     atual = momento[-1]
-    ano, mes = atual["mes"][:4], int(atual["mes"][5:7])
-    referencia = f"{MESES[mes - 1]}/{ano}"
+    if atual.get("ref_cambio"):  # "dados até 26/11/2026"
+        a, m, d = atual["ref_cambio"][:10].split("-")
+        referencia = f"dados até {d}/{m}/{a}"
+    else:
+        ano, mes = atual["mes"][:4], int(atual["mes"][5:7])
+        referencia = f"{MESES[mes - 1]}/{ano}"
     sinais = [atual["sinal_juros"], atual["sinal_inflacao"], atual["sinal_cambio"]]
     favoraveis = sinais.count("verde")
 

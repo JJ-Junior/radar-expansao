@@ -10,8 +10,8 @@ percentis, médias por UF e "municípios parecidos" são só leituras dessas tab
 
 ## De onde vem
 
-Tudo sai da **camada gold** do Supabase autohospedado (conexão pelo `.env`, nunca pelo site). A única exceção é o
-último fechamento diário do dólar e da Selic (`meta.json → ultimos_fechamentos`), lido da silver só para explicar o mês corrente. O script também conta as
+Tudo sai da **camada gold** do Supabase autohospedado (conexão pelo `.env`, nunca pelo site), inclusive o último
+fechamento diário do dólar e as datas de referência do semáforo (prd v0.6). O script também conta as
 linhas de cada tabela de `bronze`, `silver` e `gold` para a seção "Dados" do site. Não existe mais modo de prévia: a gold
 é a única fonte das notas, do ranking, da lista de recomendadas e do semáforo.
 
@@ -48,9 +48,10 @@ Para ler em JavaScript: `linhas.map(l => Object.fromEntries(colunas.map((c, j) =
 | `indicadores_municipio.json` | `gold.indicadores_municipio` | todos os municípios (~5.571) | P1, P3, P4, P9 |
 | `ranking_expansao.json` | `gold.ranking_expansao` | universo do ranking (~687) | P2, P5, P8 |
 | `ranking_criterio.json` | `gold.ranking_criterio` | 7 componentes | P8 |
-| `parametro_ranking.json` | `gold.parametro_ranking` | 4 parâmetros | P8, P9 |
+| `parametro_ranking.json` | `gold.parametro_ranking` | 10 parâmetros | P7, P8, P9 |
 | `contexto_macro.json` | `gold.contexto_macro` | 1 por mês | P6 |
-| `momento_expansao.json` | `gold.momento_expansao` | 1 por mês com os 3 sinais | P7 |
+| `momento_expansao.json` | `gold.momento_expansao` | 1 por mês com os 3 sinais (+ o mês corrente, parcial) | P7 |
+| `momento_atual.json` | `gold.momento_atual` | 1 linha: o semáforo de hoje | P7 |
 | `territorio.json` | IBGE Localidades + Malhas (referência, não é tabela da gold) | todos os municípios (~5.571) | mapa por regiões |
 | `malha/regioes.topo.json` | API de Malhas v3 do IBGE | 5 polígonos | mapa |
 | `malha/ufs.topo.json` | idem | 27 polígonos | mapa e radar do topo |
@@ -69,7 +70,6 @@ Para ler em JavaScript: `linhas.map(l => Object.fromEntries(colunas.map((c, j) =
 | `periodos` | objeto | Último período de cada fonte: `populacao`, `censo`, `pib`, `academias`, `salario`, `macro_ate` (`"AAAA-MM"`) |
 | `camadas` | objeto | `{"bronze": [...], "silver": [...], "gold": [...]}` com `{"tabela": texto, "linhas": inteiro}`; cada camada é `null` se não tiver tabelas |
 | `exportado` | objeto | Linhas gravadas em cada arquivo desta pasta (`{"ranking_expansao": 687, ...}`) |
-| `ultimos_fechamentos` | objeto | Último valor diário até hoje de `dolar_venda` e `selic_meta` (`{"data": "AAAA-MM-DD", "valor": número}` ou `null`), de `silver.fato_indicador_macro`. Explica o mês parcial: a média de novembro não é o fechamento de hoje |
 | `aviso_estimativa` | texto \| null | O texto da coluna `estimativa` da gold, guardado uma vez só (em `indicadores_municipio.json` a coluna vira verdadeiro/falso) |
 
 Exemplo:
@@ -86,7 +86,7 @@ Exemplo:
               "silver": [{"tabela": "silver.dim_municipio", "linhas": 5571}, ...],
               "gold": [{"tabela": "gold.ranking_expansao", "linhas": 687}, ...]},
   "exportado": {"indicadores_municipio": 5571, "ranking_expansao": 687, "ranking_criterio": 7,
-                "parametro_ranking": 2, "contexto_macro": 143, "momento_expansao": 68}
+                "parametro_ranking": 10, "contexto_macro": 143, "momento_expansao": 69, "momento_atual": 1}
 }
 ```
 
@@ -167,8 +167,8 @@ Exemplo:
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| `parametro` | texto | `unidades_recomendadas`, `nota_minima_poder_compra` (trava de renda), `ano_projecao_populacao` e `faixas_renda_referencia` (premissas do simulador) |
-| `valor` | número | Valor do parâmetro (hoje 5, 50, 2028 e 5) |
+| `parametro` | texto | `unidades_recomendadas`, `nota_minima_poder_compra` (trava de renda), `ano_projecao_populacao` e `faixas_renda_referencia` (premissas do simulador); do semáforo: `semaforo_janela_dias`, `semaforo_alerta_cambio_30d_pct`, `semaforo_limiar_selic_pp`, `semaforo_teto_ipca_pct`, `semaforo_limiar_dolar_12m_pct` e `semaforo_meses_tendencia_ipca` |
+| `valor` | número | Valor do parâmetro (hoje 5, 50, 2028, 5, 30, 5, 0,5, 4,5, 10 e 3) |
 | `descricao` | texto | Explicação do parâmetro |
 | `versao_pesos` | texto | Versão |
 
@@ -180,10 +180,13 @@ O site lê esses valores para explicar a lista de recomendadas; se o arquivo fal
 |---|---|---|
 | `mes` | texto `AAAA-MM-01` | Primeiro dia do mês |
 | `mes_parcial` | booleano | Mês corrente, ainda em andamento |
-| `selic_meta` | número \| null | % a.a., meta vigente no último dia do mês (BCB 432) |
+| `selic_meta` | número \| null | % a.a., meta vigente no último dia com dado no mês (BCB 432) |
+| `selic_ultima_data` | texto `AAAA-MM-DD` \| null | Dia da meta usada |
 | `selic_var_12m_pp` | número \| null | Variação em pontos percentuais contra 12 meses antes |
-| `dolar_medio` | número \| null | R$, média dos dias úteis do mês (BCB 10813) |
+| `dolar_medio` | número \| null | R$, média dos dias úteis do mês (BCB 10813); parcial no mês corrente |
 | `dolar_var_12m_pct` | número \| null | Variação % contra 12 meses antes |
+| `dolar_ultimo`, `dolar_ultimo_data` | número, texto `AAAA-MM-DD` \| null | Último fechamento do dólar no mês e o dia |
+| `dolar_var_1m_pct` | número \| null | Média do mês contra a do mês anterior (%) |
 | `ipca_mensal` | número \| null | % no mês (IBGE 7060/63) |
 | `ipca_12m` | número \| null | % acumulado em 12 meses (IBGE 7060/2265) |
 | `atualizado_em` | texto (data e hora) | |
@@ -194,14 +197,35 @@ O mês corrente pode aparecer com Selic e dólar parciais e IPCA `null` (o IPCA 
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| `mes` | texto `AAAA-MM-01` | Mês avaliado (só meses com os 3 sinais) |
+| `mes` | texto `AAAA-MM-01` | Mês avaliado (meses com os 3 sinais + o mês corrente) |
+| `mes_parcial` | booleano | Mês corrente: sinais iguais aos de `momento_atual` |
+| `ref_juros`, `ref_cambio`, `ref_inflacao` | texto `AAAA-MM-DD` | Dia da meta da Selic, último fechamento do dólar e mês do IPCA usados |
 | `sinal_juros`, `sinal_inflacao`, `sinal_cambio` | `"verde"` \| `"amarelo"` \| `"vermelho"` | Regras do `spec.md` 5.1 |
 | `pontuacao` | inteiro −3 a +3 | verde = +1, amarelo = 0, vermelho = −1 |
 | `recomendacao` | texto | `Expandir agora` (≥ +2) \| `Expandir com cautela` (0 a +1) \| `Esperar` (≤ −1) |
 | `justificativa` | texto | Frase pronta para exibir |
 | `atualizado_em` | texto (data e hora) | |
 
-O site usa a **última linha** como semáforo atual e as anteriores como histórico.
+O site usa estas linhas no histórico mês a mês. O semáforo exibido vem de `momento_atual.json` (se ele faltar, da última linha).
+
+### `momento_atual.json` — `gold.momento_atual`
+
+Uma linha: o semáforo de hoje. Câmbio e juros pela janela móvel até o último fechamento; inflação pelo último IPCA publicado.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `mes` | texto `AAAA-MM-01` | Mês do último fechamento do dólar |
+| `janela_dias` | inteiro | Tamanho da janela móvel (30) |
+| `ref_juros`, `ref_cambio`, `ref_inflacao` | texto `AAAA-MM-DD` | Data de referência de cada sinal (o site mostra "dólar até 26/11", "IPCA até out/26") |
+| `selic_meta`, `selic_meta_12m_antes`, `selic_var_12m_pp` | número | Meta da Selic em `ref_juros`, 12 meses antes e a diferença (p.p.) |
+| `dolar_ultimo` | número | Último fechamento (R$) |
+| `dolar_media_janela`, `dolar_media_janela_12m_antes`, `dolar_var_12m_pct` | número | Média dos 30 dias até `ref_cambio`, a mesma janela 12 meses antes e a variação (%) |
+| `dolar_media_janela_anterior`, `dolar_var_janela_pct` | número | Média dos 30 dias anteriores e a variação de curto prazo (%) |
+| `alerta_cambio_curto_prazo` | booleano | Alta de curto prazo acima do limite: o câmbio não pode ser verde |
+| `ipca_12m`, `ipca_12m_meses_antes`, `ipca_desacelerando` | número, número, booleano | IPCA de 12 meses em `ref_inflacao`, o de 3 meses antes e se está caindo |
+| `sinal_juros`, `sinal_inflacao`, `sinal_cambio` | `"verde"` \| `"amarelo"` \| `"vermelho"` | Regras do `spec.md` 5.1 |
+| `pontuacao`, `recomendacao`, `justificativa` | inteiro, texto, texto | Como em `momento_expansao`; a justificativa traz as datas |
+| `atualizado_em` | texto (data e hora) | |
 
 ### `territorio.json` — hierarquia do IBGE e ponto de cada município
 

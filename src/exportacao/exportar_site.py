@@ -16,8 +16,7 @@
 #           site/dados/README.md) a partir das tabelas da camada gold.
 # ENTRADA:  tabelas gold.* do Supabase autohospedado via Docker (conexao pelo
 #           .env, incluindo DB_SSLMODE) + contagem de linhas das camadas
-#           bronze, silver e gold; ultimo fechamento diario do dolar e da
-#           Selic (silver.fato_indicador_macro), so para explicar o mes parcial
+#           bronze, silver e gold
 # SAIDA:    site/dados/*.json e site/img/previa.jpg (substitui os arquivos a cada execucao)
 #
 # =============================================================================
@@ -54,6 +53,7 @@ TABELAS = [                   # arquivo site/dados/<tabela>.json  <-  gold.<tabe
     "parametro_ranking",
     "contexto_macro",
     "momento_expansao",
+    "momento_atual",          # semaforo de hoje (janela movel ate o ultimo fechamento)
 ]
 ORDEM = {                     # ordenacao das linhas em cada arquivo
     "indicadores_municipio": "municipio_id",
@@ -62,9 +62,9 @@ ORDEM = {                     # ordenacao das linhas em cada arquivo
     "parametro_ranking": "parametro",
     "contexto_macro": "mes",
     "momento_expansao": "mes",
+    "momento_atual": "momento_id",
 }
 CAMADAS = ["bronze", "silver", "gold"]   # contagem de linhas para a secao "Dados"
-SERIES_DIARIAS = ["dolar_venda", "selic_meta"]   # ultimo fechamento diario (silver), para explicar o mes parcial
 POPULACAO_MINIMA = 50_000                # so informativo no meta.json (o corte vale na gold)
 ANO_CENSO = 2022
 CASAS_DECIMAIS = 6
@@ -73,7 +73,7 @@ CASAS_DECIMAIS = 6
 import json
 import os
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -126,25 +126,6 @@ def maior_ano(df: pd.DataFrame, coluna: str):
     return int(df[coluna].max())
 
 
-def ler_ultimos_fechamentos(engine) -> dict:
-    """Ultimo valor diario de cada serie do BCB (silver.fato_indicador_macro), ate hoje.
-
-    A gold guarda medias mensais; o site usa este valor so para explicar o mes corrente (parcial),
-    por exemplo "ultimo fechamento 26/11: R$ 5,74".
-    """
-    from sqlalchemy import text
-
-    resultado = {}
-    with engine.connect() as conexao:
-        for serie in SERIES_DIARIAS:
-            linha = conexao.execute(text(
-                "SELECT data, valor FROM silver.fato_indicador_macro "
-                "WHERE indicador_id = :serie AND valor IS NOT NULL AND data <= current_date "
-                "ORDER BY data DESC LIMIT 1"), {"serie": serie}).first()
-            resultado[serie] = {"data": linha[0].isoformat(), "valor": float(linha[1])} if linha else None
-    return resultado
-
-
 def ler_gold() -> dict:
     """Le as tabelas gold.* e os metadados que o site mostra."""
     engine = conectar_banco()
@@ -165,7 +146,6 @@ def ler_gold() -> dict:
         "versao_pesos": str(criterios["versao_pesos"].iloc[0]) if len(criterios) else None,
         "populacao_minima_universo": POPULACAO_MINIMA,
         "camadas": contar_camadas(engine),
-        "ultimos_fechamentos": ler_ultimos_fechamentos(engine),
         "tabelas": tabelas,
     }
 
@@ -192,6 +172,9 @@ def preparar(df: pd.DataFrame) -> pd.DataFrame:
             df[coluna] = pd.to_datetime(df[coluna]).dt.strftime("%Y-%m-%d")
         elif pd.api.types.is_datetime64_any_dtype(df[coluna]):
             df[coluna] = df[coluna].map(lambda v: v.isoformat() if pd.notna(v) else None)
+        elif df[coluna].dtype == object and df[coluna].map(lambda v: isinstance(v, date)).any():
+            # colunas date do Postgres (ref_cambio, dolar_ultimo_data...) chegam como datetime.date
+            df[coluna] = df[coluna].map(lambda v: v.isoformat() if isinstance(v, date) else None)
         elif df[coluna].dtype == object and df[coluna].map(lambda v: isinstance(v, Decimal)).any():
             df[coluna] = df[coluna].map(lambda v: float(v) if isinstance(v, Decimal) else v)
         elif df[coluna].dtype == object or pd.api.types.is_string_dtype(df[coluna]):
@@ -225,6 +208,7 @@ def conferir(tabelas: dict) -> None:
     quantidade = tabelas["parametro_ranking"].set_index("parametro")["valor"].astype(float).get("unidades_recomendadas")
     recomendadas = int(ranking["recomendado_top5"].sum())
     assert quantidade is None or recomendadas == int(quantidade), f"{recomendadas} recomendadas, esperado {quantidade}"
+    assert len(tabelas["momento_atual"]) == 1, "gold.momento_atual deve ter exatamente uma linha"
 
 
 def main() -> None:
@@ -244,7 +228,6 @@ def main() -> None:
         "populacao_minima_universo": dados["populacao_minima_universo"],
         "periodos": dados["periodos"],
         "camadas": dados["camadas"],
-        "ultimos_fechamentos": dados["ultimos_fechamentos"],
         "aviso_estimativa": aviso_estimativa,
         "exportado": exportado,
     }
