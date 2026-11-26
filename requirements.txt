@@ -1,0 +1,14 @@
+# Ingestão (bronze)
+requests>=2.32
+python-dotenv>=1.0
+
+# Banco (Supabase / Postgres)
+psycopg2-binary>=2.9
+SQLAlchemy>=2.0
+
+# Transformação e análise
+pandas>=2.2
+
+# Dashboard
+streamlit>=1.40
+plotly>=5.24

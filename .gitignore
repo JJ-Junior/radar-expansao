@@ -1,0 +1,59 @@
+# ============================================================
+# Radar de Expansão — arquivos que NUNCA vão para o repositório
+# ============================================================
+
+# --- Credenciais e segredos -----------------------------------
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+*.pem
+*.key
+
+# --- Python ---------------------------------------------------
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- Jupyter --------------------------------------------------
+.ipynb_checkpoints/
+
+# --- Dados locais (o dado oficial mora no banco, não no Git) ---
+/dados/
+/data/
+*.parquet
+*.sqlite
+*.sqlite3
+*.db
+*.duckdb
+logs/
+*.log
+
+# --- Site de apoio (artefatos de build) ------------------------
+node_modules/
+site/dist/
+site/.astro/
+site/.cache/
+
+# --- n8n: exportações com credenciais nunca sobem --------------
+n8n/*credenciais*.json
+n8n/*credentials*.json
+
+# --- Configurações locais de editores e ferramentas ------------
+.vscode/
+.idea/
+.cursor/
+
+# --- Sistema operacional / Office ------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*
