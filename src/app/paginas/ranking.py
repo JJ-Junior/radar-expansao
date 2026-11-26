@@ -31,6 +31,8 @@
 #   3. on_select="rerun"    -> clicar numa linha devolve a linha escolhida
 #   4. st.download_button   -> baixa o recorte filtrado em CSV (padrao Excel BR:
 #                              separador ";" e virgula decimal)
+#   5. simulador de pesos    -> sliders mudam so a media ponderada das notas da
+#                              gold, para comparar; o ranking oficial nao muda
 #
 # INSTALACAO: pip install -r requirements.txt
 # COMO RODAR: streamlit run src/app/app.py  (menu "Ranking")
@@ -47,6 +49,7 @@ FAIXAS_POPULACAO = {
 TOP_GRAFICO = 10
 # ====================================================================
 
+import numpy as np
 import plotly.express as px
 import streamlit as st
 
@@ -60,6 +63,50 @@ st.caption(
     f"{len(ranking)} cidades com 50 mil habitantes ou mais, em ordem de nota final (0 a 100). "
     "Use os filtros para ver o top de cada região ou estado."
 )
+
+# --- Simulador de pesos (opcional) ---------------------------------------------
+criterios = dados.tabela("ranking_criterio")
+PESOS_OFICIAIS = {g: round(float(p) * 100) for g, p in criterios.groupby("grupo")["peso"].sum().items()}
+
+
+def voltar_ao_oficial() -> None:
+    """Devolve os sliders aos pesos oficiais da gold."""
+    for chave, peso in PESOS_OFICIAIS.items():
+        st.session_state[f"peso_{chave}"] = peso
+
+
+simular = st.toggle("Simular outros pesos", key="simular_pesos",
+                    help="Recalcula só a média ponderada das notas da gold, para comparar. O ranking oficial "
+                         "e a lista recomendada não mudam.")
+if simular:
+    with st.container(border=True):
+        st.warning("Simulação: as notas por critério são as oficiais da gold; só os pesos mudam. Nada aqui "
+                   "altera o ranking oficial nem as 5 recomendadas.", icon=":material/science:")
+        for chave, peso in PESOS_OFICIAIS.items():
+            st.session_state.setdefault(f"peso_{chave}", peso)
+        colunas_peso = st.columns(len(fmt.CRITERIOS))
+        pesos = {}
+        for coluna, (chave, rotulo) in zip(colunas_peso, fmt.CRITERIOS.items()):
+            with coluna:
+                pesos[chave] = st.slider(f"{rotulo} (%)", 0, 50, step=5, key=f"peso_{chave}",
+                                         help=f"Oficial: {PESOS_OFICIAIS.get(chave, 0)}%")
+        soma = sum(pesos.values())
+        with st.container(horizontal=True, vertical_alignment="center"):
+            st.caption(f"Soma dos pesos: {soma}% (o cálculo divide pela soma, então não precisa dar 100%).")
+            st.button("Voltar ao oficial", icon=":material/restart_alt:", on_click=voltar_ao_oficial,
+                      key="voltar_pesos")
+    if soma == 0:
+        st.error("Dê peso a pelo menos um critério.", icon=":material/error:")
+        st.stop()
+    # Mesma regra da gold para dado faltante: divide pela soma dos pesos dos criterios disponiveis.
+    notas = ranking[[f"nota_{c}" for c in pesos]].to_numpy(dtype=float)
+    vetor = np.array(list(pesos.values()), dtype=float)
+    disponivel = ~np.isnan(notas)
+    ranking["nota_simulada"] = (np.nansum(notas * vetor, axis=1)
+                                / np.where(disponivel, vetor, 0).sum(axis=1))
+    ranking = ranking.sort_values(["nota_simulada", "populacao"], ascending=[False, False])
+    ranking["posicao_simulada"] = range(1, len(ranking) + 1)
+    ranking["variacao_posicao"] = ranking["posicao_brasil"] - ranking["posicao_simulada"]
 
 # --- Filtros -----------------------------------------------------------------
 with st.container(border=True):
@@ -160,6 +207,16 @@ COLUNAS = {
     },
     "alertas": st.column_config.TextColumn("Alertas"),
 }
+if simular:
+    COLUNAS = {
+        "posicao_simulada": st.column_config.NumberColumn("Simulada", format="%dº", width="small",
+                                                          help="Posição com os pesos simulados"),
+        "variacao_posicao": st.column_config.NumberColumn("Variação", format="%+d", width="small",
+                                                          help="Posições ganhas (+) ou perdidas (−)"),
+        "nota_simulada": st.column_config.ProgressColumn("Nota simulada", min_value=0, max_value=100,
+                                                         format="%.1f", color=fmt.COR_DESTAQUE),
+        **COLUNAS,
+    }
 selecao = st.dataframe(
     filtrado[list(COLUNAS)], column_config=COLUNAS, hide_index=True,
     on_select="rerun", selection_mode="single-row", key="tabela_ranking",
