@@ -68,6 +68,7 @@ st.caption(
 
 # --- Semaforo do momento (P7) -------------------------------------------------
 NOME_SINAL = {"sinal_juros": "Juros", "sinal_inflacao": "Inflação", "sinal_cambio": "Câmbio"}
+DATA_DO_SINAL = {"sinal_juros": "ref_juros", "sinal_inflacao": "ref_inflacao", "sinal_cambio": "ref_cambio"}
 COR_RECOMENDACAO = {"Expandir agora": "green", "Expandir com cautela": "orange", "Esperar": "red"}
 ICONE_RECOMENDACAO = {
     "Expandir agora": ":material/check_circle:",
@@ -112,9 +113,13 @@ with st.container(border=True):
         for coluna, nome in NOME_SINAL.items():
             sinal = atual[coluna]
             texto = frases.get(nome, "")
+            data_ref = atual.get(DATA_DO_SINAL[coluna])
+            quando = "" if fmt.ausente(data_ref) else (
+                fmt.mes_curto(data_ref) if coluna == "sinal_inflacao" else fmt.data_curta(data_ref)[:5])
             with st.container(horizontal=True, vertical_alignment="center", gap="small"):
-                st.badge(f"{nome} · {sinal}", color=fmt.COR_SINAL_STREAMLIT.get(sinal, "gray"),
-                         width=150)
+                st.badge(f"{nome} · {sinal}" + (f" · {quando}" if quando else ""),
+                         color=fmt.COR_SINAL_STREAMLIT.get(sinal, "gray"), width=190,
+                         help="Data do dado usado no sinal" if quando else None)
                 st.markdown(texto or fmt.TRACO)
         st.page_link("paginas/contexto_macro.py", label="Ver Selic, IPCA e dólar no tempo",
                      icon=":material/arrow_forward:")

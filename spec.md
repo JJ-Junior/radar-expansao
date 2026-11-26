@@ -736,7 +736,10 @@ arquivo `src/app/app.py`). O app **só lê e apresenta**: ranking, notas, lista 
   `site/dados/meta.json`) com o motivo. A mensagem nunca exibe o endereço da API.
 - **Semáforo exibido:** `gold.momento_atual` (uma linha, com as datas de referência e o alerta de câmbio). Se a tabela não
   existir na fonte lida (cópia antiga), o app mostra o último mês fechado de `gold.momento_expansao` e diz isso na tela.
-  `momento_atual` é **opcional** na leitura: a falta dela não derruba a API nem a cópia.
+  `momento_atual` é **opcional** na leitura: a falta dela não derruba a API nem a cópia. Cada selo de sinal mostra a data do
+  dado usado (`ref_juros`, `ref_cambio`, `ref_inflacao`); na linha do tempo, a data vai no texto de cada célula e o mês em
+  andamento aparece como parcial. O cartão da Selic do mês corrente traz `selic_ultima_data`. Colunas novas ausentes na cópia
+  antiga são só omitidas da tela.
 - **Mapa:** pontos nas coordenadas da gold (`latitude`/`longitude` de `gold.ranking_expansao`; na cópia antiga, `site/dados/territorio.json`)
   sobre as divisas das UFs desenhadas a partir da malha do IBGE (`site/dados/malha/ufs.topo.json`), sem servidor de mapas externo.
 - **Tema** em `.streamlit/config.toml`: fundo escuro, verde-limão (`#c4f03b`) só como cor de marca (botões, links, item ativo,

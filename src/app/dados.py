@@ -157,6 +157,9 @@ def preparar(tabelas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         ranking[coluna] = ranking[coluna].fillna(False).astype(bool)
     for nome in ("contexto_macro", "momento_expansao"):
         tabelas[nome]["mes"] = pd.to_datetime(tabelas[nome]["mes"])
+        for coluna in ("ref_juros", "ref_cambio", "ref_inflacao", "selic_ultima_data", "dolar_ultimo_data"):
+            if coluna in tabelas[nome].columns:
+                tabelas[nome][coluna] = pd.to_datetime(tabelas[nome][coluna], errors="coerce")
         if "mes_parcial" in tabelas[nome].columns:
             tabelas[nome]["mes_parcial"] = tabelas[nome]["mes_parcial"].fillna(False).astype(bool)
     atual = tabelas.get("momento_atual")

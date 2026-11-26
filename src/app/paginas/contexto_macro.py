@@ -91,7 +91,10 @@ def rotulo_mes(linha, prefixo: str) -> str:
 
 with st.container(horizontal=True):
     st.metric(
-        f"Selic (meta) · {fmt.mes_curto(ultimo_selic['mes'])}",
+        f"Selic (meta) · {fmt.mes_curto(ultimo_selic['mes'])}"
+        + (f" (em {fmt.data_curta(ultimo_selic['selic_ultima_data'])})"
+           if not fmt.ausente(ultimo_selic.get("selic_ultima_data")) and bool(ultimo_selic.get("mes_parcial"))
+           else ""),
         f"{fmt.numero(ultimo_selic['selic_meta'], 2)}% a.a.",
         delta=None if fmt.ausente(ultimo_selic["selic_var_12m_pp"])
         else f"{fmt.pontos(ultimo_selic['selic_var_12m_pp'])} em 12 meses",
@@ -216,14 +219,24 @@ else:
         "Câmbio": recorte_momento["sinal_cambio"].map(valor_sinal),
         "Recomendação": recorte_momento["recomendacao"].map(valor_recomendacao),
     }
+    def datas(coluna_ref: str, mensal: bool = False) -> list[str]:
+        """' (dado de 26/11/2026)' por mes, quando a gold traz a data de referencia do sinal."""
+        if coluna_ref not in recorte_momento.columns:
+            return [""] * len(recorte_momento)
+        return ["" if fmt.ausente(d) else
+                f" (dado de {fmt.mes_curto(d) if mensal else fmt.data_curta(d)})"
+                for d in recorte_momento[coluna_ref]]
+
+    sufixos = [datas("ref_juros"), datas("ref_inflacao", mensal=True), datas("ref_cambio"),
+               [""] * len(recorte_momento)]
     textos = [
-        [f"{rotulo_parcial(m)}: {t}" for m, t in zip(recorte_momento["mes"], coluna)]
-        for coluna in (
+        [f"{rotulo_parcial(m)}: {t}{sufixo}" for m, t, sufixo in zip(recorte_momento["mes"], coluna, sufixos_sinal)]
+        for coluna, sufixos_sinal in zip((
             recorte_momento["sinal_juros"], recorte_momento["sinal_inflacao"],
             recorte_momento["sinal_cambio"],
             recorte_momento["recomendacao"] + " (pontuação "
             + recorte_momento["pontuacao"].astype(int).map("{:+d}".format) + ")",
-        )
+        ), sufixos)
     ]
     escala = [
         [0.0, fmt.COR_SINAL["vermelho"]], [0.333, fmt.COR_SINAL["vermelho"]],
