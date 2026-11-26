@@ -1,4 +1,4 @@
-{"tabela": "gold.ranking_criterio", "gerado_em": "2026-11-26T16:24:29-03:00", "colunas": ["criterio", "grupo", "descricao", "fonte", "peso", "sentido", "ordem", "versao_pesos"],"linhas":[
+{"tabela": "gold.ranking_criterio", "gerado_em": "2026-11-26T17:02:24-03:00", "colunas": ["criterio", "grupo", "descricao", "fonte", "peso", "sentido", "ordem", "versao_pesos"],"linhas":[
 ["mercado","mercado","Tamanho de mercado: populacao estimada mais recente","IBGE 6579",0.25,"maior_melhor",1,"prd-v0.4"],
 ["poder_compra","poder_compra","Poder de compra: renda domiciliar per capita media (Censo 2022)","IBGE 10295",0.25,"maior_melhor",2,"prd-v0.4"],
 ["espaco_competitivo","espaco_competitivo","Espaco competitivo: academias (CNAE 93.13-1) por 10 mil habitantes, limitado aos percentis 5% e 95%","IBGE 9418 / 6579",0.2,"menor_melhor",3,"prd-v0.4"],

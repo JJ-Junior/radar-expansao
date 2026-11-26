@@ -149,7 +149,7 @@ def ler_gold() -> dict:
 
 
 def preparar(df: pd.DataFrame) -> pd.DataFrame:
-    """Decimal vira float; datas viram texto ISO; 'mes' vira AAAA-MM-DD (o contrato pede data sem hora)."""
+    """Decimal vira float; texto sem espaco no fim; datas em ISO; 'mes' vira AAAA-MM-DD (o contrato pede data sem hora)."""
     df = df.copy()
     for coluna in df.columns:
         if coluna == "mes":
@@ -158,6 +158,9 @@ def preparar(df: pd.DataFrame) -> pd.DataFrame:
             df[coluna] = df[coluna].map(lambda v: v.isoformat() if pd.notna(v) else None)
         elif df[coluna].dtype == object and df[coluna].map(lambda v: isinstance(v, Decimal)).any():
             df[coluna] = df[coluna].map(lambda v: float(v) if isinstance(v, Decimal) else v)
+        elif df[coluna].dtype == object or pd.api.types.is_string_dtype(df[coluna]):
+            # colunas char(2) do Postgres vem com espaco no fim ("N "); o site compara siglas exatas
+            df[coluna] = df[coluna].map(lambda v: v.rstrip() if isinstance(v, str) else v)
     return df
 
 

@@ -1,4 +1,4 @@
-{"tabela": "gold.contexto_macro", "gerado_em": "2026-11-26T16:24:29-03:00", "colunas": ["mes", "mes_parcial", "selic_meta", "selic_var_12m_pp", "dolar_medio", "dolar_var_12m_pct", "ipca_mensal", "ipca_12m", "atualizado_em"],"linhas":[
+{"tabela": "gold.contexto_macro", "gerado_em": "2026-11-26T17:02:24-03:00", "colunas": ["mes", "mes_parcial", "selic_meta", "selic_var_12m_pp", "dolar_medio", "dolar_var_12m_pct", "ipca_mensal", "ipca_12m", "atualizado_em"],"linhas":[
 ["2015-01-01",false,12.25,null,2.6336,null,null,null,"2026-11-26T19:24:12.256197+00:00"],
 ["2015-02-01",false,12.25,null,2.8158,null,null,null,"2026-11-26T19:24:12.256197+00:00"],
 ["2015-03-01",false,12.75,null,3.1389,null,null,null,"2026-11-26T19:24:12.256197+00:00"],

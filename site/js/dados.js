@@ -12,7 +12,9 @@ async function buscarJson(caminho) {
 /** Formato colunar {colunas, linhas} -> lista de objetos. */
 export function paraObjetos(tabela) {
   const { colunas, linhas } = tabela;
-  return linhas.map((linha) => Object.fromEntries(colunas.map((c, j) => [c, linha[j]])));
+  // texto sem espaço nas pontas (siglas char(2) do banco podem vir como "N ")
+  const limpo = (v) => (typeof v === "string" ? v.trim() : v);
+  return linhas.map((linha) => Object.fromEntries(colunas.map((c, j) => [c, limpo(linha[j])])));
 }
 
 /** Tabelas da gold + território do IBGE. */
