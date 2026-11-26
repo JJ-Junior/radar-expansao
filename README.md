@@ -8,7 +8,8 @@
 > | 2 · Exploração das APIs | ✅ concluída (achados em `spec.md`, seção 2) |
 > | 3 · Camada bronze (ingestão em Python) | ✅ concluída: 13 recursos carregados no banco do projeto; incremental sem duplicar |
 > | 4 · Camada silver (modelo estrela) | ✅ concluída: 5 dimensões, 2 fatos, 12 testes de qualidade passando |
-> | 5 · Gold · 6 · n8n · 7 · Streamlit | ⏳ próximas etapas |
+> | 5 · Camada gold (ranking, contexto macro, semáforo) | ✅ concluída: 5 tabelas de consumo, 13 testes de qualidade passando |
+> | 6 · n8n · 7 · Streamlit | ⏳ próximas etapas |
 > | Extra · Site de apoio | ✅ publicado com prévia dos dados |
 
 Sistema que cruza dados oficiais do **IBGE** e do **Banco Central** para responder a uma pergunta de negócio:
@@ -119,7 +120,19 @@ A transformação é a função SQL `silver.atualizar()`: "achata" o JSON do IBG
 troca os símbolos da fonte (`-`, `...`, `X`, `..`) por nulo com uma flag explicando o motivo e grava sem duplicar.
 Ao final, o terminal mostra os 12 testes de qualidade (esperado × obtido); se algum falhar, o comando termina com erro.
 
-**Passos seguintes** — gold e dashboard: _(a preencher quando as etapas forem concluídas)_.
+**Passo 5 — camada gold** (ranking, indicadores por município, contexto macro e semáforo):
+
+```powershell
+python -m src.transformacao.criar_estrutura --camadas gold
+python -m src.transformacao.executar            # silver + gold, com os testes de cada camada
+```
+
+A gold é recalculada inteira pela função SQL `gold.atualizar()` seguindo as regras do [`prd.md`](prd.md) (seção 4):
+notas de 0 a 100 por percentil, peso redistribuído quando falta dado, espaço competitivo limitado aos percentis 5% e 95%,
+e as **5 unidades recomendadas com no máximo uma cidade por região imediata**. Ao final, o terminal mostra os testes,
+as 5 recomendadas, o top 10 e o semáforo do momento econômico.
+
+**Passos seguintes** — automação no n8n e dashboard: _(a preencher quando as etapas forem concluídas)_.
 
 ## 7. Estrutura do repositório
 

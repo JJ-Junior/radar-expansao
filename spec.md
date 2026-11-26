@@ -1,6 +1,7 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
-> **RASCUNHO v0.6 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> **RASCUNHO v0.7 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> v0.7: gold implementada (seção 3.3 reflete `sql/gold/`; posição na região; nota de riqueza agregada; `mes_parcial`).
 > v0.6: regras da gold alinhadas ao prd v0.3 (redistribuição de peso, uma cidade por região imediata no top 5, limites P5/P95 no espaço competitivo, CAGR da tendência).
 > v0.5: silver implementada (seções 3.2 e 4); `dim_indicador` com agregado/variável/série; `dim_municipio` com regiões imediata e intermediária.
 > v0.4: bronze implementada (seção 3.1 reflete o DDL de `sql/bronze/`); lote do IPCA por ano; app envia a chave anônima + token de leitura.
@@ -332,98 +333,52 @@ Indicadores em `dim_indicador`:
 
 ### 3.3 Gold — tabelas de consumo
 
-Cada tabela responde a perguntas do `prd.md` (coluna "Pergunta").
+Implementada em `sql/gold/` (rodar como `etl_radar` com `python -m src.transformacao.criar_estrutura`; idempotente).
+Cada tabela responde a perguntas do `prd.md`, anotadas no comentário da tabela no banco.
+
+| Arquivo | Conteúdo |
+|---|---|
+| `01_tabelas.sql` | as cinco tabelas abaixo + os pesos de `ranking_criterio` (versão `prd-v0.3`) |
+| `02_atualizar_gold.sql` | `gold.atualizar(populacao_minima)`: recalcula a gold inteira a partir da silver (seção 5) |
+| `03_testes_qualidade.sql` | `gold.vw_testes_qualidade` (13 testes) e `gold.vw_rastreio_exemplo` (um número da gold até a bronze) |
+| `04_permissoes.sql` | `web_leitor` só com `SELECT` nas cinco tabelas, RLS, views e função fora da API, recarga do schema da API |
+
+| Tabela | Pergunta | Grão | Colunas principais |
+|---|---|---|---|
+| `gold.indicadores_municipio` | P1, P3, P4 | 1 linha por município (5.571) | `populacao`/`populacao_ano`, `populacao_censo_2022`, `crescimento_pop_aa`, `pib_mil_reais`/`pib_ano`, `pib_per_capita`, `pib_per_capita_tendencia`/`tendencia_ano_inicial`, `renda_dom_per_capita`/`renda_ano`, `academias_qtd`/`academias_ano`, `academias_por_10mil_hab`, `salario_medio`/`salario_ano`, `regiao_imediata_id`/`_nome` |
+| `gold.ranking_expansao` | P2, P5, P8 | 1 linha por município do universo (≥ 50 mil hab.; 687) | `nota_mercado`, `nota_poder_compra`, `nota_espaco_competitivo`, `nota_crescimento`, `nota_riqueza_nivel`, `nota_riqueza_tendencia`, `nota_riqueza` (média ponderada das duas), `nota_mercado_formal`, `nota_final`, `posicao_brasil`, `posicao_regiao`, `posicao_uf`, `dados_incompletos`, `criterios_ausentes`, `peso_considerado`, `verificar_concorrencia`, `recomendado_top5`, `ordem_recomendacao`, `regiao_imediata_id`/`_nome`, `versao_pesos` |
+| `gold.ranking_criterio` | P8 | 1 linha por componente (7) | `criterio` (a nota fica em `nota_<criterio>`), `grupo` (critério do prd: `riqueza` agrupa nível e tendência), `descricao`, `fonte`, `peso`, `sentido`, `ordem`, `versao_pesos` |
+| `gold.contexto_macro` | P6 | 1 linha por mês | `mes`, `mes_parcial`, `selic_meta`, `selic_var_12m_pp`, `dolar_medio`, `dolar_var_12m_pct`, `ipca_mensal`, `ipca_12m` |
+| `gold.momento_expansao` | P7 | 1 linha por mês com os três sinais | `sinal_juros`, `sinal_inflacao`, `sinal_cambio` (`verde`/`amarelo`/`vermelho`), `pontuacao`, `recomendacao`, `justificativa` |
 
 ```sql
-CREATE SCHEMA IF NOT EXISTS gold;
-
--- P1, P3, P4: uma linha por município com os indicadores do "fator onde".
-CREATE TABLE gold.indicadores_municipio (
-    municipio_id              integer  PRIMARY KEY,
-    municipio_nome            text     NOT NULL,
-    uf_sigla                  char(2)  NOT NULL,
-    regiao_sigla              char(2)  NOT NULL,
-    populacao                 integer,           -- estimativa mais recente
-    populacao_ano             smallint,
-    populacao_censo_2022      integer,
-    crescimento_pop_aa        numeric(7,4),      -- CAGR Censo 2022 → último ano (fração: 0.0123 = 1,23% a.a.)
-    pib_mil_reais             numeric,           -- PIB do último ano disponível
-    pib_ano                   smallint,
-    pib_per_capita            numeric(12,2),     -- R$ por habitante, mesmo ano do PIB
-    pib_per_capita_tendencia  numeric(7,4),      -- CAGR do PIB per capita: 1º → último ano da janela de 5 anos (2019 → 2023)
-    renda_dom_per_capita      numeric(10,2),     -- R$/mês, Censo 2022
-    academias_qtd             integer,           -- empresas CNAE 93.13-1, último ano
-    academias_ano             smallint,
-    academias_por_10mil_hab   numeric(8,3),
-    salario_medio             numeric(10,2),     -- R$/mês, Cadastro Central de Empresas
-    atualizado_em             timestamptz NOT NULL DEFAULT now()
-);
-
--- P2, P5, P8: ranking do cliente com a nota de cada critério (0–100) e a nota final.
+-- Trecho do DDL (completo em sql/gold/01_tabelas.sql)
 CREATE TABLE gold.ranking_expansao (
-    municipio_id              integer  PRIMARY KEY,
-    municipio_nome            text     NOT NULL,
-    uf_sigla                  char(2)  NOT NULL,
-    regiao_sigla              char(2)  NOT NULL,
-    populacao                 integer  NOT NULL,
-    nota_mercado              numeric(5,2),
-    nota_poder_compra         numeric(5,2),
-    nota_espaco_competitivo   numeric(5,2),
-    nota_crescimento          numeric(5,2),
-    nota_riqueza_nivel        numeric(5,2),      -- PIB per capita do último ano
-    nota_riqueza_tendencia    numeric(5,2),      -- CAGR do PIB per capita na janela de 5 anos
-    nota_mercado_formal       numeric(5,2),
-    nota_final                numeric(5,2) NOT NULL,
-    posicao_brasil            integer  NOT NULL,
-    posicao_uf                integer  NOT NULL,
-    dados_incompletos         boolean  NOT NULL DEFAULT false,  -- faltou algum critério (peso redistribuído)
-    criterios_ausentes        text[],                           -- quais critérios faltaram
-    peso_considerado          numeric(4,3) NOT NULL,            -- soma dos pesos disponíveis (1.000 = completo)
-    verificar_concorrencia    boolean  NOT NULL DEFAULT false,  -- zero academias registradas: checar no local
-    regiao_imediata_id        integer  NOT NULL,
-    regiao_imediata_nome      text     NOT NULL,
-    recomendado_top5          boolean  NOT NULL DEFAULT false,  -- está na lista das 5 unidades recomendadas (P8)
-    ordem_recomendacao        smallint,                         -- 1 a 5 na lista recomendada
-    versao_pesos              text     NOT NULL,
-    calculado_em              timestamptz NOT NULL DEFAULT now()
-);
-
--- P8: critérios e pesos usados (alimenta a explicação do ranking no dashboard).
-CREATE TABLE gold.ranking_criterio (
-    criterio      text     PRIMARY KEY,   -- 'mercado', 'poder_compra', ...
-    descricao     text     NOT NULL,
-    fonte         text     NOT NULL,
-    peso          numeric(4,3) NOT NULL,  -- soma = 1.000
-    sentido       text     NOT NULL,      -- 'maior_melhor' | 'menor_melhor'
-    versao_pesos  text     NOT NULL
-);
-
--- P6, P7: evolução mensal do cenário econômico.
-CREATE TABLE gold.contexto_macro (
-    mes                  date PRIMARY KEY,     -- primeiro dia do mês
-    selic_meta           numeric(6,2),         -- % a.a., valor vigente no último dia do mês
-    selic_var_12m_pp     numeric(6,2),         -- variação em pontos percentuais contra 12 meses antes
-    dolar_medio          numeric(8,4),         -- R$, média dos dias úteis do mês
-    dolar_var_12m_pct    numeric(7,2),
-    ipca_mensal          numeric(6,2),         -- %
-    ipca_12m             numeric(6,2),         -- %
-    atualizado_em        timestamptz NOT NULL DEFAULT now()
-);
-
--- P7: "fator quando" — expandir agora, com cautela ou esperar (uma linha por mês).
-CREATE TABLE gold.momento_expansao (
-    mes              date PRIMARY KEY,
-    sinal_juros      text NOT NULL,   -- 'verde' | 'amarelo' | 'vermelho'
-    sinal_inflacao   text NOT NULL,
-    sinal_cambio     text NOT NULL,
-    pontuacao        smallint NOT NULL,   -- verde = +1, amarelo = 0, vermelho = -1
-    recomendacao     text NOT NULL,   -- 'Expandir agora' | 'Expandir com cautela' | 'Esperar'
-    justificativa    text NOT NULL,   -- frase pronta para o dashboard
-    atualizado_em    timestamptz NOT NULL DEFAULT now()
+    municipio_id              integer       PRIMARY KEY,
+    municipio_nome            text          NOT NULL,
+    uf_sigla                  char(2)       NOT NULL,
+    regiao_sigla              char(2)       NOT NULL,
+    regiao_imediata_id        integer       NOT NULL,
+    regiao_imediata_nome      text          NOT NULL,
+    populacao                 integer       NOT NULL,
+    nota_mercado              numeric(5,2),  -- ... uma coluna por componente (0 a 100)
+    nota_final                numeric(5,2)  NOT NULL,
+    posicao_brasil            integer       NOT NULL,
+    posicao_regiao            integer       NOT NULL,
+    posicao_uf                integer       NOT NULL,
+    dados_incompletos         boolean       NOT NULL DEFAULT false,  -- faltou critério: peso redistribuído
+    criterios_ausentes        text[],
+    peso_considerado          numeric(4,3)  NOT NULL,                -- 1.000 = completo
+    verificar_concorrencia    boolean       NOT NULL DEFAULT false,  -- zero academias registradas
+    recomendado_top5          boolean       NOT NULL DEFAULT false,  -- lista das 5 unidades (P8)
+    ordem_recomendacao        smallint,
+    versao_pesos              text          NOT NULL,
+    calculado_em              timestamptz   NOT NULL DEFAULT now()
 );
 ```
 
 Relacionamentos lógicos: `gold.*.municipio_id` → `silver.dim_municipio`; `gold.contexto_macro.mes` → `silver.dim_calendario`.
+A função `gold.atualizar()` e as views de teste e de rastreio ficam **fora da API REST** (sem permissão para `web_leitor`).
 
 ### 3.4 Papéis e permissões
 
@@ -486,7 +441,7 @@ toda linha rastreável até a bronze · nenhuma data futura nos fatos macro · I
 ### 5.1 `gold.contexto_macro` e `gold.momento_expansao`
 - Selic do mês = meta vigente no último dia do mês; dólar do mês = média dos dias úteis; IPCA = variáveis 63 e 2265 do IBGE.
 - Variações de 12 meses: Selic em pontos percentuais; dólar em %.
-- Semáforo (limiares no `CONFIG` do script, valores iniciais a validar com o squad ⏳):
+- Semáforo (limiares no bloco `CONFIG` da função `gold.atualizar()`, valores iniciais a validar com o squad ⏳):
 
 | Sinal | Verde (+1) | Amarelo (0) | Vermelho (−1) |
 |---|---|---|---|
@@ -495,6 +450,8 @@ toda linha rastreável até a bronze · nenhuma data futura nos fatos macro · I
 | Câmbio | dólar ≤ 12 meses antes | alta de até 10% | alta > 10% |
 
   Pontuação = soma dos três sinais: **≥ +2 → "Expandir agora"**, **0 a +1 → "Expandir com cautela"**, **≤ −1 → "Esperar"**.
+- "Desacelerando" = IPCA 12m menor que o de 3 meses antes. O semáforo só é calculado em meses com os três sinais
+  (o IPCA sai com atraso de cerca de um mês); o mês corrente aparece em `contexto_macro` com `mes_parcial = true`.
 
 ### 5.2 `gold.indicadores_municipio`
 - **População:** estimativa mais recente do 6579. População de 2022 = Censo (4714). População de 2023 (inexistente na fonte) = interpolação geométrica `√(pop2022 × pop2024)`, usada só para o PIB per capita de 2023.
@@ -527,7 +484,9 @@ toda linha rastreável até a bronze · nenhuma data futura nos fatos macro · I
   O ranking completo não é filtrado.
 - **Testes da gold:** soma dos pesos = 1; `peso_considerado` entre 0 e 1; notas entre 0 e 100; todos os municípios do universo
   com nota; exatamente 5 recomendados, em 5 regiões imediatas diferentes.
-- A gold é **recalculada inteira** a cada execução (são poucos milhares de linhas).
+- A gold é **recalculada inteira** a cada execução (são poucos milhares de linhas; leva cerca de 2 s).
+- **Execução:** `python -m src.transformacao.executar` roda silver e gold em sequência, cada uma com seus testes;
+  `--camadas gold` roda só a gold. No cenário B, o n8n aciona o mesmo job (ou `SELECT * FROM gold.atualizar()`).
 
 ---
 
