@@ -1,0 +1,47 @@
+# ============================================================
+# Radar de Expansão — tema do dashboard (Streamlit)
+# Alinhado ao site de apoio: fundo escuro, verde-limão como cor de MARCA
+# (botões, links, item ativo) e escala azul como cor de DADO nos gráficos.
+# Estado (semáforo) usa verde, amarelo e vermelho próprios.
+# ============================================================
+
+[server]
+runOnSave = false
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "viewer"
+
+[theme]
+base = "dark"
+primaryColor = "#c4f03b"
+linkColor = "#c4f03b"
+backgroundColor = "#0b0d0f"
+secondaryBackgroundColor = "#151a1f"
+textColor = "#f2f1ec"
+borderColor = "#262d35"
+showWidgetBorder = true
+baseRadius = "8px"
+buttonRadius = "8px"
+font = "Archivo:https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&display=swap"
+headingFont = "'Big Shoulders Display':https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&display=swap"
+headingFontWeights = [800, 800, 700, 700, 700, 700]
+linkUnderline = false
+
+# Estado (semáforo e badges)
+greenColor = "#0ca30c"
+orangeColor = "#fab219"
+yellowColor = "#fab219"
+redColor = "#d03b3b"
+blueColor = "#6ea6e8"
+grayColor = "#8a929b"
+
+# Dado (gráficos): escala azul do site + laranja de destaque
+chartCategoricalColors = ["#6ea6e8", "#ff5a1f", "#a9cbf3", "#3a7fd0", "#fab219", "#8a929b", "#1f5ba3"]
+chartSequentialColors = ["#0e2240", "#102c52", "#174377", "#1f5ba3", "#2c6dbb", "#3a7fd0", "#5493dc", "#6ea6e8", "#8cb9ee", "#a9cbf3"]
+
+dataframeHeaderBackgroundColor = "#1d2329"
+dataframeBorderColor = "#262d35"
