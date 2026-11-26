@@ -8,7 +8,7 @@
 > | 2 · Exploração das APIs | ✅ concluída (achados em `spec.md`, seção 2) |
 > | 3 · Camada bronze (ingestão em Python) | ✅ concluída: 13 recursos carregados no banco do projeto; incremental sem duplicar |
 > | 4 · Camada silver (modelo estrela) | ✅ concluída: 5 dimensões, 2 fatos, 12 testes de qualidade passando |
-> | 5 · Camada gold (ranking, contexto macro, semáforo) | ✅ concluída: tabelas de consumo + parâmetros do ranking + coordenadas e estimativas do simulador de região (P9), 19 testes de qualidade passando |
+> | 5 · Camada gold (ranking, contexto macro, semáforo) | ✅ concluída: tabelas de consumo + parâmetros do ranking + coordenadas e estimativas do simulador de região (P9) + semáforo com janela móvel até o último fechamento, 25 testes de qualidade passando |
 > | 6 · n8n | ⏳ próxima etapa |
 > | 7 · Dashboard Streamlit | ✅ app com 5 páginas lendo a gold pela API REST, com cópia de contingência; publicação no Streamlit Cloud em andamento |
 > | Extra · Site de apoio | ✅ publicado em https://radar-expansao.lovelearning.com.br |

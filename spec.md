@@ -1,6 +1,8 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
-> **RASCUNHO v0.12 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> **RASCUNHO v0.13 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> v0.13: semáforo com janela móvel de 30 dias até o último fechamento (câmbio e juros), alerta de alta de curto prazo no câmbio,
+> `gold.momento_atual` com datas de referência, último fechamento em `contexto_macro`, limiares em `parametro_ranking` (seção 5.1).
 > v0.12: dashboard Streamlit implementado (seção 9.1): 5 páginas, camada de dados única com cache de 10 minutos e cópia de contingência.
 > v0.11: simulador de região (P9): centroides dos municípios (API de Malhas v4), coordenadas na silver e na gold, estimativas de
 > população projetada e lacuna de academias (seções 2.1, 3.2, 3.3, 5.4 e 9.4).
@@ -361,9 +363,10 @@ Cada tabela responde a perguntas do `prd.md`, anotadas no comentário da tabela 
 | `gold.indicadores_municipio` | P1, P3, P4, P9 | 1 linha por município (5.571) | `latitude`, `longitude`, `faixa_renda`, `populacao_projetada`/`ano_projecao`, `densidade_referencia`, `lacuna_academias`, `estimativa` (aviso), `populacao`/`populacao_ano`, `populacao_censo_2022`, `crescimento_pop_aa`, `pib_mil_reais`/`pib_ano`, `pib_per_capita`, `pib_per_capita_tendencia`/`tendencia_ano_inicial`, `renda_dom_per_capita`/`renda_ano`, `academias_qtd`/`academias_ano`, `academias_por_10mil_hab`, `salario_medio`/`salario_ano`, `regiao_imediata_id`/`_nome` |
 | `gold.ranking_expansao` | P2, P5, P8 | 1 linha por município do universo (≥ 50 mil hab.; 687) | `nota_mercado`, `nota_poder_compra`, `nota_espaco_competitivo`, `nota_crescimento`, `nota_riqueza_nivel`, `nota_riqueza_tendencia`, `nota_riqueza` (média ponderada das duas), `nota_mercado_formal`, `nota_final`, `posicao_brasil`, `posicao_regiao`, `posicao_uf`, `dados_incompletos`, `criterios_ausentes`, `peso_considerado`, `verificar_concorrencia`, `elegivel_recomendacao`, `recomendado_top5`, `ordem_recomendacao`, `regiao_imediata_id`/`_nome`, `latitude`, `longitude`, `versao_pesos` |
 | `gold.ranking_criterio` | P8 | 1 linha por componente (7) | `criterio` (a nota fica em `nota_<criterio>`), `grupo` (critério do prd: `riqueza` agrupa nível e tendência), `descricao`, `fonte`, `peso`, `sentido`, `ordem`, `versao_pesos` |
-| `gold.parametro_ranking` | P8, P9 | 1 linha por parâmetro | `unidades_recomendadas` (5), `nota_minima_poder_compra` (50), `ano_projecao_populacao` (2028) e `faixas_renda_referencia` (5): lugar único das premissas |
-| `gold.contexto_macro` | P6 | 1 linha por mês | `mes`, `mes_parcial`, `selic_meta`, `selic_var_12m_pp`, `dolar_medio`, `dolar_var_12m_pct`, `ipca_mensal`, `ipca_12m` |
-| `gold.momento_expansao` | P7 | 1 linha por mês com os três sinais | `sinal_juros`, `sinal_inflacao`, `sinal_cambio` (`verde`/`amarelo`/`vermelho`), `pontuacao`, `recomendacao`, `justificativa` |
+| `gold.parametro_ranking` | P7, P8, P9 | 1 linha por parâmetro | `unidades_recomendadas` (5), `nota_minima_poder_compra` (50), `ano_projecao_populacao` (2028), `faixas_renda_referencia` (5) e os do semáforo: `semaforo_janela_dias` (30), `semaforo_alerta_cambio_30d_pct` (5), `semaforo_limiar_selic_pp` (0,5), `semaforo_teto_ipca_pct` (4,5), `semaforo_limiar_dolar_12m_pct` (10), `semaforo_meses_tendencia_ipca` (3) |
+| `gold.contexto_macro` | P6 | 1 linha por mês | `mes`, `mes_parcial`, `selic_meta`/`selic_ultima_data`, `selic_var_12m_pp`, `dolar_medio` (média do mês, parcial no mês corrente), `dolar_ultimo`/`dolar_ultimo_data` (último fechamento do mês), `dolar_var_12m_pct`, `dolar_var_1m_pct`, `ipca_mensal`, `ipca_12m` |
+| `gold.momento_expansao` | P7 | 1 linha por mês fechado com os três sinais + o mês corrente (parcial) | `sinal_juros`, `sinal_inflacao`, `sinal_cambio` (`verde`/`amarelo`/`vermelho`), `pontuacao`, `recomendacao`, `justificativa`, `mes_parcial`, `ref_juros`, `ref_cambio`, `ref_inflacao` |
+| `gold.momento_atual` | P7 | 1 linha | `ref_juros`, `ref_cambio`, `ref_inflacao`, `janela_dias`, `selic_meta`/`_12m_antes`/`selic_var_12m_pp`, `dolar_ultimo`, `dolar_media_janela`/`_12m_antes`/`dolar_var_12m_pct`, `dolar_media_janela_anterior`/`dolar_var_janela_pct`, `alerta_cambio_curto_prazo`, `ipca_12m`/`ipca_12m_meses_antes`/`ipca_desacelerando`, sinais, `pontuacao`, `recomendacao`, `justificativa` (com as datas) |
 
 ```sql
 -- Trecho do DDL (completo em sql/gold/01_tabelas.sql)
@@ -452,10 +455,11 @@ toda linha rastreável até a bronze · nenhuma data futura nos fatos macro · I
 
 ## 5. Regras silver → gold
 
-### 5.1 `gold.contexto_macro` e `gold.momento_expansao`
-- Selic do mês = meta vigente no último dia do mês; dólar do mês = média dos dias úteis; IPCA = variáveis 63 e 2265 do IBGE.
-- Variações de 12 meses: Selic em pontos percentuais; dólar em %.
-- Semáforo (limiares no bloco `CONFIG` da função `gold.atualizar()`, valores iniciais a validar com o squad ⏳):
+### 5.1 `gold.contexto_macro`, `gold.momento_expansao` e `gold.momento_atual`
+- Selic do mês = meta vigente no último dia com dado no mês (`selic_ultima_data`); dólar do mês = média dos dias úteis
+  (parcial no mês corrente) e último fechamento do mês (`dolar_ultimo`, `dolar_ultimo_data`); IPCA = variáveis 63 e 2265 do IBGE.
+- Variações de 12 meses: Selic em pontos percentuais; dólar em %. `dolar_var_1m_pct` = média do mês contra a do mês anterior.
+- Semáforo (limiares e janela em `gold.parametro_ranking`; regras em funções pequenas `gold.sinal_juros/_inflacao/_cambio`):
 
 | Sinal | Verde (+1) | Amarelo (0) | Vermelho (−1) |
 |---|---|---|---|
@@ -464,8 +468,20 @@ toda linha rastreável até a bronze · nenhuma data futura nos fatos macro · I
 | Câmbio | dólar ≤ 12 meses antes | alta de até 10% | alta > 10% |
 
   Pontuação = soma dos três sinais: **≥ +2 → "Expandir agora"**, **0 a +1 → "Expandir com cautela"**, **≤ −1 → "Esperar"**.
-- "Desacelerando" = IPCA 12m menor que o de 3 meses antes. O semáforo só é calculado em meses com os três sinais
-  (o IPCA sai com atraso de cerca de um mês); o mês corrente aparece em `contexto_macro` com `mes_parcial = true`.
+- "Desacelerando" = IPCA 12m menor que o de 3 meses antes.
+- **Alerta de alta de curto prazo no câmbio:** média do dólar nos últimos 30 dias > 5% acima da média dos 30 dias anteriores.
+  Com alerta, o câmbio não pode ser verde: amarelo, ou vermelho se a variação em 12 meses for de alta. Escolhemos **média contra
+  média** (e não fechamento contra fechamento de 30 dias antes) porque um único dia atípico não dispara o alerta.
+- **`gold.momento_atual` (o semáforo exibido):** câmbio = média dos 30 dias corridos até o último fechamento (`ref_cambio`)
+  contra a mesma janela 12 meses antes e contra os 30 dias anteriores; juros = meta da Selic no último dia disponível
+  (`ref_juros`) contra a vigente 12 meses antes; inflação = último IPCA publicado (`ref_inflacao`). A justificativa traz as datas.
+- **`gold.momento_expansao` (histórico):** meses fechados com IPCA, pela média/meta do mês; o alerta usa `dolar_var_1m_pct`.
+  O mês do momento atual entra no histórico como **parcial** (`mes_parcial = true`), com os mesmos sinais.
+- **Exemplo (26/11/2026):** dólar médio de R$ 5,63 nos 30 dias até 26/11 (último fechamento R$ 5,744), +5,4% em 12 meses e
+  +10,4% sobre os 30 dias anteriores → alerta → câmbio vermelho; Selic 13,75% (−1,25 p.p.) → verde; IPCA 4,63% até 10/2026,
+  acima do teto e sem desacelerar → vermelho. Pontuação −1 → **"Esperar"**. (A regra anterior, só com outubro fechado, dava câmbio verde.)
+- Testes da gold 20 a 25: uma linha no momento atual; datas de referência iguais ao último fechamento do dólar, à última meta da
+  Selic e ao último IPCA da silver; nenhum câmbio verde com alerta de curto prazo; nenhum mês parcial fora do mês corrente.
 
 ### 5.2 `gold.indicadores_municipio`
 - **População:** estimativa mais recente do 6579. População de 2022 = Censo (4714). População de 2023 (inexistente na fonte) = interpolação geométrica `√(pop2022 × pop2024)`, usada só para o PIB per capita de 2023.

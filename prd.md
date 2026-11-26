@@ -1,7 +1,8 @@
 # prd.md — Radar de Expansão · Rede de academias
 
 > ⚠️ **RASCUNHO**
-> Versão 0.5 (26/11/2026). Cliente confirmado pelo squad: rede de academias. Critérios e pesos ainda em revisão; qualquer mudança é registrada aqui antes de ir para o código.
+> Versão 0.6 (26/11/2026). Cliente confirmado pelo squad: rede de academias. Critérios e pesos ainda em revisão; qualquer mudança é registrada aqui antes de ir para o código.
+> v0.6: "fator quando" com janela móvel de 30 dias até o último fechamento (câmbio e juros) e alerta de alta de curto prazo no câmbio.
 > v0.5: simulador de região (P9) com coordenadas dos municípios e estimativas de população e de espaço para novas academias.
 > v0.4: trava de renda mínima na lista das 5 unidades recomendadas (nota de poder de compra ≥ 50).
 > v0.3: dado faltante com redistribuição de peso; recomendação com no máximo uma cidade por região imediata; espaço competitivo
@@ -37,7 +38,7 @@ esteiras em boa parte importados, unidades de médio porte. Quer abrir **5 novas
 | P4 | Quais cidades médias (100 a 500 mil habitantes) têm renda e PIB per capita acima da média do seu estado? | `gold.indicadores_municipio` |
 | P5 | Onde há **poucas academias por habitante** em cidades com bom poder de compra (espaço para entrar)? | `gold.ranking_expansao` · nota de espaço competitivo |
 | P6 | A Selic subiu ou caiu nos últimos 12 meses? A inflação (IPCA) está acelerando? O dólar subiu? | `gold.contexto_macro` |
-| P7 | **Fator quando:** o momento econômico favorece **expandir agora, com cautela ou esperar**? | `gold.momento_expansao` · semáforo no topo do dashboard |
+| P7 | **Fator quando:** o momento econômico favorece **expandir agora, com cautela ou esperar**? | `gold.momento_atual` (hoje) + `gold.momento_expansao` (mês a mês) · semáforo no topo do dashboard |
 | P8 | Se a rede abrir 5 unidades no próximo ano, quais municípios são os melhores candidatos (renda acima da mediana do universo e no máximo um por região imediata) — e por quê? | `gold.ranking_expansao` + `gold.ranking_criterio` · página "Como o ranking é calculado" |
 | P9 | Num raio de X km de uma cidade, quais são as melhores candidatas e quanto espaço há para novas academias? | `gold.ranking_expansao` + `gold.indicadores_municipio` (coordenadas e estimativas) · simulador de região |
 
@@ -137,6 +138,29 @@ Fica **fora da nota do município** (vale igual para todas as cidades) e aparece
 Cada sinal fica verde, amarelo ou vermelho; a soma gera a recomendação **"Expandir agora"**, **"Expandir com cautela"** ou **"Esperar"**
 (regras e limiares no `spec.md`, seção 5.1). **"Esperar" é uma resposta válida:** o Radar pode indicar a cidade certa e, ao mesmo tempo,
 recomendar segurar o caixa até o cenário melhorar.
+
+### 5.1 Qual período cada sinal olha (regra da v0.6)
+
+| Sinal | Período | Comparação |
+|---|---|---|
+| **Câmbio** | média do dólar nos **últimos 30 dias até o último fechamento** do Banco Central | variação % contra a mesma janela de 30 dias 12 meses antes |
+| **Juros** | meta da Selic no **último dia disponível** | diferença em pontos percentuais contra a meta de 12 meses antes |
+| **Inflação** | **último IPCA publicado** (mensal, sai com cerca de um mês de atraso) | IPCA de 12 meses contra o teto e contra o de 3 meses antes |
+
+**Alerta de alta de curto prazo no câmbio:** se a média do dólar nos últimos 30 dias estiver **mais de 5% acima da média dos
+30 dias anteriores**, o sinal de câmbio **não pode ser verde**: fica amarelo, ou vermelho se a variação em 12 meses também for
+de alta. Comparar médias (e não dois fechamentos isolados) evita que um único dia fora da curva acenda o alerta.
+
+**Por que mudou.** A versão anterior olhava só o último mês fechado. Em 26/11/2026 ela mostrava o câmbio verde com o dólar
+médio de outubro (R$ 5,13, queda de 4,8% em 12 meses), enquanto em novembro os fechamentos foram de R$ 5,46 a R$ 5,97
+(último, em 26/11: R$ 5,74). Decidir com um mês de atraso engana o diretor. Com a regra nova, em 26/11/2026:
+dólar médio de R$ 5,63 nos 30 dias até 26/11, alta de 5,4% em 12 meses e de 10,4% sobre os 30 dias anteriores →
+**câmbio vermelho**; juros verde (Selic 13,75%, queda de 1,25 p.p.); inflação vermelha (IPCA 4,63% em 12 meses até outubro,
+acima do teto e sem desacelerar) → recomendação **"Esperar"**.
+
+Cada sinal mostra a **data de referência** usada (dia do último fechamento, dia da meta da Selic e mês do IPCA). O histórico
+mês a mês continua mensal; o mês corrente aparece marcado como **parcial**. A janela (30 dias) e todos os limiares ficam na
+tabela de parâmetros do ranking.
 
 ## 6. Perguntas de teste do modelo
 
