@@ -1,6 +1,9 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
-> **RASCUNHO v0.1 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> **RASCUNHO v0.3 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> v0.2: Supabase e n8n autohospedados via Docker; ingestão descrita em dois cenários (Python e n8n) com o mesmo contrato da bronze.
+> v0.3: container de ETL disparado pelo n8n (cenário A); trava contra execução simultânea; fuso America/Sao_Paulo;
+> dashboard lendo a gold pela API REST do Supabase com fallback em snapshot; conexão com `DB_SSLMODE` configurável; stack do site definida.
 > Fonte da verdade técnica do projeto: toda mudança de modelo, endpoint ou regra é registrada aqui **antes** de ir para o código.
 
 ---
@@ -9,6 +12,16 @@
 
 O Radar de Expansão é um Lakehouse em três camadas (bronze → silver → gold) num único banco Postgres (Supabase),
 alimentado pelas APIs públicas do IBGE e do Banco Central, atualizado semanalmente pelo n8n e consumido por um dashboard Streamlit.
+**Supabase e n8n são autohospedados via Docker** (Supabase num perfil enxuto: Postgres, API REST e Studio).
+Todos os horários seguem o fuso **America/Sao_Paulo**.
+
+A ingestão está especificada em **dois cenários**, construídos e comparados antes de o squad escolher um (seção 8):
+**A — Python** (um container de ETL com os scripts do repositório chama as APIs; o n8n agenda e dispara por HTTP interno) e
+**B — n8n** (o próprio workflow chama as APIs e grava o JSON bruto pelo nó Postgres).
+Os dois gravam no **mesmo contrato da bronze**, marcando a origem em `origem_carga`; a transformação silver/gold é **um único caminho de código**.
+
+O dashboard lê a gold pela **API REST do Supabase** (só o schema `gold`, papel somente leitura, RLS ligado) e, se a API não responder,
+usa um **snapshot da gold versionado no repositório** (seção 9).
 
 ```mermaid
 flowchart LR
@@ -18,37 +31,41 @@ flowchart LR
         S["BCB SGS<br/>bcdata.sgs.codigo"]
     end
 
-    subgraph Ingestao["src/ingestao (Python + requests)"]
-        CI[carga inicial<br/>em lotes]
-        INC[carga incremental<br/>/periodos + janelas]
+    subgraph Ingestao["Ingestão (dois cenários)"]
+        PY["Cenário A · container de ETL<br/>src/ingestao (Python + requests)"]
+        WF["Cenário B · n8n<br/>HTTP Request + Postgres"]
     end
 
-    subgraph Supabase["Supabase · Postgres"]
-        B[(bronze<br/>api_resposta · jsonb<br/>como veio)]
-        SV[(silver<br/>dimensões + fatos<br/>modelo estrela)]
-        G[(gold<br/>indicadores_municipio<br/>ranking_expansao<br/>contexto_macro<br/>momento_expansao)]
+    subgraph Docker["Supabase autohospedado (Docker) · Postgres"]
+        B[("bronze<br/>api_resposta · jsonb<br/>como veio + origem_carga")]
+        SV[("silver<br/>dimensões + fatos<br/>modelo estrela")]
+        G[("gold<br/>indicadores_municipio<br/>ranking_expansao<br/>contexto_macro<br/>momento_expansao")]
+        API["API REST<br/>só schema gold · leitura"]
     end
 
-    N8N[n8n<br/>toda segunda 06:00] -.->|dispara| INC
-    L --> CI
-    A --> CI
-    S --> CI
-    L --> INC
-    A --> INC
-    S --> INC
-    CI --> B
-    INC --> B
-    B -->|sql/silver| SV
+    N8N["n8n autohospedado (Docker)<br/>agenda semanal · America/Sao_Paulo"] -.->|"A: HTTP interno"| PY
+    N8N -.->|"B: executa"| WF
+    Fontes --> PY
+    Fontes --> WF
+    PY -->|"origem_carga = 'python'"| B
+    WF -->|"origem_carga = 'n8n'"| B
+    B -->|"transformação única<br/>sql/silver"| SV
     SV -->|sql/gold| G
-    G --> APP[Streamlit Cloud<br/>src/app]
-    G --> SITE[Site de apoio<br/>site/]
+    G --> API
+    API --> APP["Streamlit Cloud<br/>src/app"]
+    G -.->|"snapshot JSON<br/>src/exportacao"| SNAP["site/dados/"]
+    SNAP -.->|fallback| APP
+    SNAP --> SITE["Site de apoio<br/>GitHub Pages"]
 ```
 
 **Princípios**
-1. **A bronze é o cofre:** guarda o JSON exatamente como a API devolveu. Nenhuma transformação na ingestão. Só recebe `INSERT`.
+1. **A bronze é o cofre:** guarda o JSON exatamente como a API devolveu. Nenhuma transformação na ingestão.
+   As respostas (`bronze.api_resposta`) só recebem `INSERT`; apenas as tabelas de controle (`bronze.execucao`, `bronze.trava_carga`) são atualizadas.
 2. **Rastreabilidade:** toda linha da silver guarda `bronze_id`; toda tabela da gold é recalculada a partir da silver. Dá para ir de um número do dashboard até a resposta original da API.
 3. **Idempotência:** rodar a mesma carga duas vezes não duplica dado (hash na bronze, `UPSERT` na silver, recálculo completo na gold).
 4. **Parâmetros no topo:** todo script tem um bloco `CONFIG` no início; credenciais só no `.env`.
+5. **Fuso único:** colunas de controle em `timestamptz`; containers, banco e agenda do n8n em `America/Sao_Paulo`
+   (datas das fontes, como `modificacao` do IBGE e `data` do BCB, já vêm no horário de Brasília).
 
 ---
 
@@ -141,8 +158,10 @@ Convenções (detalhe em `agents.md`): `snake_case`, português sem acento, chav
 CREATE SCHEMA IF NOT EXISTS bronze;
 
 -- Uma linha por chamada bem-sucedida à API. Somente INSERT.
+-- Contrato único para os dois cenários de ingestão (seção 8).
 CREATE TABLE bronze.api_resposta (
     resposta_id        bigserial    PRIMARY KEY,
+    origem_carga       text         NOT NULL CHECK (origem_carga IN ('python', 'n8n')),  -- processo que gravou
     fonte              text         NOT NULL CHECK (fonte IN ('IBGE', 'BCB')),
     recurso            text         NOT NULL,          -- ex.: 'ibge_agregado_6579', 'ibge_municipios', 'bcb_sgs_432'
     endpoint           text         NOT NULL,          -- caminho chamado, sem o host
@@ -152,30 +171,36 @@ CREATE TABLE bronze.api_resposta (
     modificacao_fonte  date,                           -- IBGE: campo `modificacao` do período (carga incremental)
     http_status        smallint     NOT NULL,
     payload            jsonb        NOT NULL,          -- resposta original, inteira
-    payload_hash       text         NOT NULL,          -- md5 do payload: evita gravar a mesma resposta duas vezes
+    -- md5 calculado pelo próprio Postgres sobre o jsonb (forma canônica): o hash sai igual
+    -- nos dois cenários, mesmo que Python e n8n serializem o JSON de jeitos diferentes.
+    payload_hash       text         GENERATED ALWAYS AS (md5(payload::text)) STORED,
     execucao_id        bigint,                         -- execução que gravou (bronze.execucao)
     ingerido_em        timestamptz  NOT NULL DEFAULT now(),
-    UNIQUE (recurso, lote, payload_hash)
+    -- evita gravar a mesma resposta duas vezes pelo mesmo processo; permite que A e B gravem a mesma resposta (comparação)
+    UNIQUE (origem_carga, recurso, lote, payload_hash)
 );
 
--- Log de cada execução do pipeline (carga inicial, incremental, n8n).
+-- Log de cada execução do pipeline (carga inicial ou incremental, em qualquer cenário).
 CREATE TABLE bronze.execucao (
     execucao_id    bigserial    PRIMARY KEY,
-    origem         text         NOT NULL,              -- 'manual', 'n8n'
+    origem_carga   text         NOT NULL CHECK (origem_carga IN ('python', 'n8n')),  -- quem chamou as APIs
+    disparado_por  text         NOT NULL,              -- 'manual' | 'agenda_n8n'
     modo           text         NOT NULL,              -- 'inicial', 'incremental'
     iniciado_em    timestamptz  NOT NULL DEFAULT now(),
     finalizado_em  timestamptz,
-    status         text         NOT NULL DEFAULT 'em_andamento',  -- 'sucesso', 'erro', 'sem_novidade'
+    status         text         NOT NULL DEFAULT 'em_andamento',  -- 'sucesso', 'erro', 'sem_novidade', 'ignorada_trava'
     chamadas_ok    integer      DEFAULT 0,
     chamadas_erro  integer      DEFAULT 0,
     mensagem       text
 );
 
--- Último período salvo por recurso: é o que o n8n compara com a API.
+-- Último período salvo por processo e recurso: é o que a carga incremental compara com a API.
+-- Cada cenário filtra a sua própria origem_carga, para um não "esconder" o período novo do outro.
 CREATE VIEW bronze.vw_ultimo_periodo AS
-SELECT recurso, lote, max(modificacao_fonte) AS modificacao_fonte, max(ingerido_em) AS ingerido_em
+SELECT origem_carga, recurso, lote,
+       max(modificacao_fonte) AS modificacao_fonte, max(ingerido_em) AS ingerido_em
 FROM bronze.api_resposta
-GROUP BY recurso, lote;
+GROUP BY origem_carga, recurso, lote;
 ```
 
 ### 3.2 Silver — modelo estrela
@@ -365,11 +390,35 @@ CREATE TABLE gold.momento_expansao (
 
 Relacionamentos lógicos: `gold.*.municipio_id` → `silver.dim_municipio`; `gold.contexto_macro.mes` → `silver.dim_calendario`.
 
+### 3.4 Papéis e permissões
+
+| Papel | Uso | Permissões |
+|---|---|---|
+| `etl_radar` | scripts de ingestão/transformação e credencial Postgres do n8n | `LOGIN`; leitura e escrita em `bronze`, `silver` e `gold`; sem superusuário. Na bronze, só `INSERT` e `SELECT` |
+| `web_leitor` | API REST lida pelo dashboard | `NOLOGIN`; `USAGE` no schema `gold` e `SELECT` nas tabelas da gold; nada em `bronze` e `silver` |
+| `anon` | acesso anônimo da API | nenhum acesso à gold |
+
+```sql
+CREATE ROLE web_leitor NOLOGIN;
+GRANT USAGE ON SCHEMA gold TO web_leitor;
+GRANT SELECT ON ALL TABLES IN SCHEMA gold TO web_leitor;
+ALTER DEFAULT PRIVILEGES IN SCHEMA gold GRANT SELECT ON TABLES TO web_leitor;
+GRANT web_leitor TO authenticator;          -- papel que a API REST assume ao validar o token
+
+-- RLS como defesa extra (repetir para cada tabela da gold)
+ALTER TABLE gold.ranking_expansao ENABLE ROW LEVEL SECURITY;
+CREATE POLICY leitura_web ON gold.ranking_expansao FOR SELECT TO web_leitor USING (true);
+```
+
+A API REST expõe **somente** o schema `gold`; `bronze`, `silver` e `public` não aparecem nela.
+
 ---
 
 ## 4. Regras bronze → silver
 
 1. **Fonte única por lote:** para cada `(recurso, lote)` usa-se só a resposta mais recente da bronze (`DISTINCT ON ... ORDER BY ingerido_em DESC`).
+   O parâmetro `ORIGEM_CARGA_SILVER` (`'python'`, `'n8n'` ou `'qualquer'`, padrão `'qualquer'`) restringe a leitura a um cenário,
+   para comparar as duas ingestões; silver e gold não mudam de estrutura conforme o cenário.
 2. **Achatar o JSON do IBGE:** `payload[] → resultados[] → classificacoes / series[] → serie{periodo: valor}`. Cada linha da silver = localidade + período + variável (+ categoria) + valor.
 3. **Períodos:** `"2024"` → `ano = 2024`; `"202610"` → `data = 2026-10-01`. BCB: `"dd/MM/aaaa"` → `date`.
 4. **Tipos:** texto → `numeric` (o IBGE e o BCB usam ponto decimal). Códigos de localidade → `integer`.
@@ -423,6 +472,8 @@ Regra do código (`CONFIG: LIMITE_VALORES_POR_CHAMADA = 50_000`, metade do limit
 1. Estimar o tamanho da chamada antes de fazer.
 2. Se passar do limite: dividir **por ano**; se um ano ainda passar, dividir **por UF** (`N6[N3[uf]]`).
 3. Cada lote é uma linha na bronze (`lote = '2024'` ou `lote = '2024-MG'`).
+4. **No cenário B (n8n)** os agregados municipais são pedidos **sempre por ano × UF** (`N6[N3[uf]]`, 27 chamadas por ano):
+   respostas menores evitam estourar a memória do n8n, que segura os itens em RAM. O JSON é gravado inteiro, sem ser "explodido" em itens.
 
 | Agregado | Lote padrão | Valores por chamada |
 |---|---|---|
@@ -441,81 +492,217 @@ validar `content-type: application/json`, `User-Agent` próprio do projeto e `tr
 | Fonte | Carga inicial | Carga incremental (semanal) |
 |---|---|---|
 | Localidades | 1 chamada por recurso | recarga completa (barata); a silver atualiza por `UPSERT` |
-| Agregados anuais (6579, 5938, 9418, 9509) | 1 chamada por ano | `GET /{agregado}/periodos` → compara `id` e `modificacao` com `bronze.vw_ultimo_periodo` → baixa só período **novo** ou **modificado** |
+| Agregados anuais (6579, 5938, 9418, 9509) | 1 chamada por ano | `GET /{agregado}/periodos` → compara `id` e `modificacao` com `bronze.vw_ultimo_periodo` (filtrada pela própria `origem_carga`) → baixa só período **novo** ou **modificado** |
 | Censo (4714, 10295) | carga única | só se `/periodos` mostrar `modificacao` mais nova |
 | IPCA (7060) | todo o histórico numa chamada | `periodos/-3` (últimos 3 meses) + `UPSERT` |
 | BCB diárias (432, 10813) | janelas de até 10 anos desde `DATA_INICIO` (CONFIG, proposta: 01/01/2015) | `dataInicial = última data salva − 30 dias`, sem `dataFinal`; HTTP 404 = nada novo |
 
 Depois de gravar na bronze, a execução roda `silver` → `gold` só se houve resposta nova; senão registra `status = 'sem_novidade'`.
+As regras desta seção e da seção 6 (lotes, limites, janelas, retry) valem **igualmente para os dois cenários** da seção 8.
 
-## 8. Automação (n8n)
+## 8. Ingestão e automação: dois cenários
 
-Workflow `n8n/radar-expansao.json` (exportado **sem credenciais**):
+O n8n roda **autohospedado via Docker** e agenda a atualização semanal no fuso **America/Sao_Paulo**.
+A diferença entre os cenários é **quem chama as APIs e grava na bronze**. Os dois são construídos na trilha de desenvolvimento e
+comparados; o squad escolhe um para a entrega (⏳).
+
+**O que é comum aos dois**
+- Mesmo contrato da bronze: `bronze.api_resposta` + `bronze.execucao`, com `origem_carga = 'python'` ou `'n8n'` (seção 3.1).
+- Mesmas regras de lote, limite do IBGE, janelas do BCB, retry e carga incremental (seções 6 e 7).
+- **Transformação num único caminho de código:** as regras da silver e da gold ficam em SQL versionado (`sql/silver/`, `sql/gold/`)
+  e são executadas sempre pelo mesmo programa, `src/transformacao/executar.py`. Nos dois cenários o n8n o aciona pelo job
+  `transformar` do container de ETL (seção 8.1). Não existe uma segunda versão das regras dentro do n8n.
+- **Trava contra execução simultânea** (seção 8.3) e agendas em horários diferentes.
+
+### 8.1 Cenário A — container de ETL em Python (o n8n agenda e dispara)
+
+Um container de ETL (imagem Python fixa, com o `requirements.txt` instalado e o código deste repositório montado só para leitura)
+fica na mesma rede Docker interna do n8n e do banco. Ele **não publica porta** nem fica exposto fora do servidor.
+Um disparador HTTP interno executa apenas **jobs fixos** — nenhum comando livre vem da requisição:
+
+| Job | Executa |
+|---|---|
+| `ingerir_ibge` | `python -m src.ingestao.incremental --fonte ibge` |
+| `ingerir_bcb` | `python -m src.ingestao.incremental --fonte bcb` |
+| `transformar` | `python -m src.transformacao.executar` |
+
+O n8n chama cada job com um nó *HTTP Request* (`POST` interno, com um token secreto num header guardado como credencial do n8n).
+A resposta é síncrona e traz o código de retorno do script, então o n8n marca erro se o script falhar.
 
 ```mermaid
 flowchart LR
-    T[Schedule Trigger<br/>segunda 06:00] --> E[Abre execução<br/>bronze.execucao]
-    E --> P[IBGE /periodos<br/>de cada agregado]
-    P --> C{Período novo ou<br/>modificado?}
-    C -- sim --> I[Busca o período<br/>grava na bronze]
-    C -- não --> BCB
-    I --> BCB[BCB: última data salva<br/>→ busca janela nova]
-    BCB --> TR[Roda transformações<br/>silver → gold]
-    TR --> F[Fecha execução<br/>status + contagens]
+    T["n8n · Schedule Trigger<br/>segunda 06:00"] --> I1["HTTP interno<br/>job ingerir_ibge"]
+    I1 --> I2["HTTP interno<br/>job ingerir_bcb"]
+    I2 --> TR["HTTP interno<br/>job transformar"]
+    I1 -.-> B[("bronze<br/>origem_carga = 'python'")]
+    I2 -.-> B
+    TR -.-> SG[("silver → gold")]
 ```
 
-⏳ **Onde o n8n roda e como chama o código** (decisão do squad):
-- **Opção A (recomendada):** o n8n faz as chamadas HTTP e grava na bronze pelo nó Postgres; as transformações silver/gold ficam como
-  funções SQL versionadas em `sql/` e são chamadas pelo próprio n8n. Funciona em qualquer n8n (nuvem ou local) e o código Python reaproveita as mesmas funções.
-- **Opção B:** n8n local (Docker) com o nó *Execute Command* chamando os scripts Python. Um único caminho de código, mas exige Python dentro do container do n8n.
+- `src/ingestao/` faz as chamadas com `requests` (timeout, 3 tentativas, validação de `content-type`) e grava na bronze.
+- Carga inicial (milhares de municípios, chamadas de até 22 s): roda à mão no container, fora do disparo síncrono do n8n.
+  A incremental semanal cabe no disparo (timeout do nó HTTP de ~15 min).
+- No servidor o container usa `TZ=America/Sao_Paulo` e o papel `etl_radar`.
+
+### 8.2 Cenário B — ingestão no próprio n8n
+
+```mermaid
+flowchart LR
+    T["n8n · Schedule Trigger<br/>segunda 07:00"] --> K["Postgres: pega a trava<br/>abre execução 'n8n'"]
+    K --> P["HTTP Request: IBGE /periodos<br/>Postgres: vw_ultimo_periodo"]
+    P --> C{"Período novo<br/>ou modificado?"}
+    C -- sim --> L["Loop ano × UF<br/>HTTP Request com retry"]
+    C -- não --> BCB
+    L --> G["Postgres: INSERT do<br/>JSON bruto ($1::jsonb)"]
+    G --> BCB["BCB: última data salva<br/>→ janela nova (404 = nada novo)"]
+    BCB --> TR["HTTP interno<br/>job transformar"]
+    TR --> F["Postgres: fecha execução<br/>e solta a trava"]
+```
+
+- Nós *HTTP Request* (com *Retry On Fail*, timeout e espera entre tentativas), *Loop Over Items* para os lotes **ano × UF**
+  (seção 6, item 4), nó *Code* só para montar URLs e parâmetros, nó *Postgres* para ler o último período e gravar o JSON
+  inteiro em `jsonb` **sem transformar** — uma linha por chamada.
+- Memória do n8n: não "explodir" o JSON em milhares de itens; histórico de execuções com limpeza automática (7 dias),
+  sem guardar o conteúdo das execuções bem-sucedidas que carregam JSON grande.
+- Carga inicial: o mesmo workflow com gatilho manual e `modo = 'inicial'`, rodando por agregado.
+- Credencial Postgres do n8n com o papel `etl_radar` (ou um papel ainda mais restrito: só `INSERT`/`SELECT` na bronze).
+
+### 8.3 Convivência dos cenários: trava e agenda
+
+- **Agendas diferentes:** cenário A na segunda às 06:00; cenário B na segunda às 07:00 (ou só manual, para demonstração).
+- **Trava de carga:** toda execução, nos dois cenários, começa tentando pegar a trava e só segue se conseguir. Se não conseguir,
+  registra `status = 'ignorada_trava'` em `bronze.execucao` e termina sem chamar as APIs. A trava vale entre processos e
+  conexões diferentes (Python e nó Postgres do n8n) e expira sozinha se um processo morrer no meio.
+
+```sql
+CREATE TABLE bronze.trava_carga (
+    trava_id      smallint PRIMARY KEY DEFAULT 1 CHECK (trava_id = 1),  -- uma única linha
+    em_uso_por    text,                                                 -- 'python' | 'n8n' | nulo = livre
+    execucao_id   bigint,
+    desde         timestamptz
+);
+INSERT INTO bronze.trava_carga (trava_id) VALUES (1);
+
+-- Pegar a trava (devolve 1 linha se conseguiu; 0 se outro processo está rodando)
+UPDATE bronze.trava_carga
+SET em_uso_por = :origem_carga, execucao_id = :execucao_id, desde = now()
+WHERE trava_id = 1
+  AND (em_uso_por IS NULL OR desde < now() - interval '2 hours')   -- expira trava esquecida
+RETURNING trava_id;
+
+-- Soltar a trava (no fim, inclusive no caminho de erro)
+UPDATE bronze.trava_carga SET em_uso_por = NULL, execucao_id = NULL, desde = NULL
+WHERE trava_id = 1 AND em_uso_por = :origem_carga;
+```
+
+### 8.4 Prós e contras
+
+| | Cenário A — container de ETL em Python | Cenário B — n8n |
+|---|---|---|
+| **Onde fica a lógica** | Código Python versionado em `src/ingestao/`, com bloco `CONFIG` | Nós do workflow, exportados em `n8n/*.json` |
+| **Prós** | Fácil de revisar em PR e de testar localmente · reaproveita o que o curso ensinou (`requests`, `pandas`) · carga inicial pesada sem limite de memória do n8n · uma só implementação para carga inicial e incremental · imagem oficial do n8n intacta | Automação inteira visível num só fluxo (bom para demonstrar e para o print da execução) · retry e agendamento nativos · qualquer membro acompanha a execução pela interface · um container a menos na ingestão |
+| **Contras** | Um container a mais para manter (build quando mudar o `requirements.txt`) · logs em dois lugares (n8n e script) · o n8n vira só agendador | Lógica de lotes e URLs espalhada em nós e JavaScript · revisão de PR difícil (JSON exportado) · lotes por UF multiplicam as chamadas (27 por ano) · memória do n8n exige cuidado · atenção redobrada para não exportar credenciais |
+| **Risco principal** | Dependências do Python no servidor | Workflow grande e frágil de manter |
+
+### 8.5 Como comparar os dois
+
+Os lotes não são iguais (A pede por ano; B, por ano × UF), então a comparação é feita **depois da silver**, que é igual para os dois:
+
+1. Rodar os dois cenários sobre os mesmos recursos e períodos.
+2. Gerar a silver com `ORIGEM_CARGA_SILVER = 'python'` e guardar um resumo de controle por indicador e ano
+   (quantidade de linhas, soma de `valor`, quantidade de cada `flag_valor`).
+3. Repetir com `ORIGEM_CARGA_SILVER = 'n8n'` e comparar os resumos — devem ser idênticos, e o ranking da gold também.
+4. **Operação:** comparar em `bronze.execucao` a duração (`finalizado_em − iniciado_em`), chamadas com erro e execuções `sem_novidade`.
+
+```sql
+-- Resumo de controle da silver (rodar após cada geração e comparar os resultados)
+SELECT indicador_id, ano, count(*) AS linhas, sum(valor) AS soma_valor,
+       count(*) FILTER (WHERE flag_valor <> 'ok') AS valores_especiais
+FROM silver.fato_indicador_municipal
+GROUP BY indicador_id, ano
+ORDER BY indicador_id, ano;
+```
+
+Onde os lotes coincidem (localidades, IPCA, séries do BCB), também dá para comparar direto os `payload_hash` da bronze,
+calculados pelo Postgres (diferenças de serialização entre Python e n8n não interferem).
+
+Workflows exportados (sempre **sem credenciais**): `n8n/radar-expansao-cenario-a.json` (agenda + disparo dos jobs) e
+`n8n/radar-expansao-cenario-b.json` (ingestão completa no n8n).
 
 ## 9. Dashboard (Streamlit) e site de apoio
 
-- `src/app/app.py` lê **só a gold** (conexão via `st.secrets` no Streamlit Cloud, `.env` local).
-- Páginas: **Ranking** (filtros por região e UF, top N) · **Município** (ficha com os indicadores e as notas) ·
-  **Momento econômico** (Selic, câmbio e IPCA no tempo + semáforo) · **Como o ranking é calculado** (critérios, pesos e fontes).
-- Site de apoio em `site/`: documentação + vitrine de dados, lendo arquivos exportados da gold. ⏳ Stack a definir pelo squad.
+### 9.1 Dashboard
+
+- `src/app/app.py`, publicado no Streamlit Cloud. Páginas: **Ranking** (filtros por região e UF, top N) ·
+  **Município** (ficha com os indicadores e as notas) · **Momento econômico** (Selic, câmbio e IPCA no tempo + semáforo) ·
+  **Como o ranking é calculado** (critérios, pesos e fontes).
+- **Fonte principal: API REST do Supabase**, lida com `requests`:
+  `GET {SUPABASE_URL}/rest/v1/{tabela}` com o header `Accept-Profile: gold` e a chave de leitura (token do papel `web_leitor`).
+  - A API expõe **só o schema `gold`**, com papel somente leitura e RLS (seção 3.4).
+  - A API fica atrás de um proxy de acesso: o app envia também `CF-Access-Client-Id` e `CF-Access-Client-Secret`; sem eles a requisição é barrada antes de chegar ao servidor.
+  - Chaves e headers ficam em `st.secrets` e só existem no servidor do Streamlit; nunca chegam ao navegador do visitante.
+  - Consultas com `st.cache_data` (validade de 1 hora) e paginação se a tabela passar do limite de linhas da API.
+- **Fallback: snapshot da gold no repositório.** Se a API não responder (timeout de 10 s ou erro), o app lê os JSON da gold
+  em `site/dados/` (os mesmos usados pelo site, formato colunar `{colunas, linhas}`, contrato em `site/dados/README.md`) e
+  mostra o aviso **"dados de <data do snapshot>"** (campo `gerado_em` de `site/dados/meta.json`).
+
+### 9.2 Site de apoio
+
+- **Stack:** HTML, CSS e JavaScript estáticos (ES modules), **sem etapa de build**; bibliotecas de mapa e gráficos por CDN
+  com versão fixa; malha municipal do IBGE.
+- **Publicação:** GitHub Pages, por GitHub Actions (`.github/workflows/site.yml`).
+- **Dados:** JSON exportados da gold por `src/exportacao/exportar_site.py`, um arquivo por tabela, com os mesmos nomes de colunas.
+- Para abrir localmente: `python -m http.server 8000 --directory site`.
 
 ## 10. Stack e como rodar
 
 | Camada | Ferramenta |
 |---|---|
-| Linguagem | Python 3.11+ (`requests`, `pandas`, `SQLAlchemy`, `psycopg2-binary`, `python-dotenv`) |
-| Banco | Supabase (Postgres) com schemas `bronze`, `silver`, `gold` |
-| Automação | n8n |
-| Dashboard | Streamlit + Plotly, publicado no Streamlit Cloud |
+| Linguagem | Python 3.11+ localmente; Python 3.12 (versão fixa) no container de ETL — `requests`, `pandas`, `SQLAlchemy`, `psycopg2-binary`, `python-dotenv` |
+| Banco | Supabase (Postgres + API REST + Studio) **autohospedado via Docker**, com schemas `bronze`, `silver`, `gold` |
+| Automação | n8n **autohospedado via Docker** |
+| Ingestão | Cenário A: container de ETL em Python · Cenário B: nós do n8n |
+| Dashboard | Streamlit + Plotly, publicado no Streamlit Cloud, lendo a gold pela API REST |
+| Site de apoio | HTML/CSS/JS estático no GitHub Pages |
 | Versionamento | Git + GitHub (repositório público) |
 
-**Conexão com o Supabase — Session pooler**
+**Conexões**
 
-A conexão direta do Supabase (`db.<project-ref>.supabase.co`) é **só IPv6** e falha em várias redes domésticas e no Streamlit Cloud.
-Por isso todos os componentes (scripts Python, n8n e Streamlit) usam o **Session pooler**, que aceita IPv4:
-
-| Variável (`.env`) | Valor | Observação |
+| Quem | Como chega aos dados | Configuração |
 |---|---|---|
-| `DB_HOST` | `aws-0-<regiao>.pooler.supabase.com` | região do projeto no Supabase |
-| `DB_PORT` | `5432` | porta do Session pooler (o Transaction pooler, 6543, não é usado) |
-| `DB_NAME` | `postgres` | |
-| `DB_USER` | `postgres.<project-ref>` | o usuário leva o ref do projeto depois do ponto |
-| `DB_PASSWORD` | senha do banco | só no `.env` local; no Streamlit Cloud vai em *Secrets*; no n8n, numa credencial Postgres |
+| Scripts no computador do desenvolvedor | Postgres por um túnel autenticado que expõe o banco em `localhost:5432`; o banco **não** é publicado na internet | `.env` (bloco do banco) |
+| Container de ETL e n8n no servidor | Rede Docker interna, sem sair do servidor; SSL desligado (`DB_SSLMODE=disable`) | `.env` do servidor e credencial do n8n |
+| Dashboard (Streamlit Cloud) | Só a API REST da gold; **não** conecta direto no Postgres | `st.secrets` (bloco do app) |
 
-A conexão usa SSL (`sslmode=require`), definido no código de conexão.
+Variáveis (modelo em `.env.example` e `.streamlit/secrets.toml.example`):
+
+| Variável | Conteúdo |
+|---|---|
+| `DB_HOST`, `DB_PORT`, `DB_NAME` | endereço, porta e banco do Postgres (no computador do dev: `localhost`, `5432`, `postgres`) |
+| `DB_USER`, `DB_PASSWORD` | papel `etl_radar` e sua senha (só no `.env`, nunca no repositório) |
+| `DB_SSLMODE` | modo SSL do driver: `prefer` (padrão), `require` ou `disable` — **configurável, não fixo no código** |
+| `SUPABASE_URL` | endereço da API REST do Supabase |
+| `SUPABASE_CHAVE_LEITURA` | token do papel `web_leitor` (somente leitura na gold) |
+| `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET` | credenciais de serviço do proxy de acesso da API |
+
+Endereços, nomes e detalhes do servidor **não** entram no repositório.
 
 Roteiro previsto (nomes dos scripts podem mudar; este arquivo será atualizado junto):
 
 ```powershell
-# 1. Ambiente
+# 1. Ambiente local
 git clone https://github.com/JJ-Junior/radar-expansao.git
 cd radar-expansao
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
-Copy-Item .env.example .env          # preencher com as credenciais do Supabase
+Copy-Item .env.example .env                                      # bloco do banco
+Copy-Item .streamlit\secrets.toml.example .streamlit\secrets.toml  # bloco do app
 
-# 2. Criar schemas e tabelas (ou colar os arquivos no SQL Editor do Supabase)
+# 2. Criar schemas, tabelas e papéis (ou colar os arquivos no SQL Editor do Supabase Studio)
 python -m src.transformacao.criar_estrutura
 
-# 3. Carga inicial na bronze (em lotes)
+# 3. Carga inicial na bronze (em lotes) — cenário A; no cenário B, rodar o workflow do n8n com gatilho manual
 python -m src.ingestao.carga_inicial
 
 # 4. Bronze → silver → gold
@@ -527,8 +714,10 @@ streamlit run src/app/app.py
 
 ## 11. Pendências deste rascunho
 
-- ⏳ Onde o n8n roda (seção 8).
-- ✅ Supabase: conexão pelo Session pooler (seção 10); conta em criação.
+- ✅ Supabase e n8n autohospedados via Docker (seções 1 e 10).
+- ✅ Conexões e variáveis de ambiente (seção 10) e leitura da gold pela API REST com fallback (seção 9.1).
+- ✅ Disparo do Python pelo n8n: container de ETL com jobs fixos por HTTP interno (seção 8.1).
+- ✅ Stack do site de apoio (seção 9.2).
+- ⏳ Cenário de ingestão da entrega: A (Python) ou B (n8n), após a comparação (seção 8.5).
 - ⏳ Limiares do semáforo macro (seção 5.1).
-- ⏳ Stack do site de apoio (seção 9).
 - ⏳ Data de início do histórico do BCB (proposta: 01/01/2015).
