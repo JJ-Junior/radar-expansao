@@ -1,5 +1,5 @@
 {
-  "gerado_em": "2026-11-26T17:02:24-03:00",
+  "gerado_em": "2026-11-26T17:15:52-03:00",
   "fonte": "gold",
   "eh_previa": false,
   "versao_pesos": "prd-v0.4",
@@ -16,11 +16,11 @@
     "bronze": [
       {
         "tabela": "bronze.api_resposta",
-        "linhas": 71
+        "linhas": 72
       },
       {
         "tabela": "bronze.execucao",
-        "linhas": 29
+        "linhas": 33
       },
       {
         "tabela": "bronze.trava_carga",
@@ -72,7 +72,7 @@
       },
       {
         "tabela": "gold.parametro_ranking",
-        "linhas": 2
+        "linhas": 4
       },
       {
         "tabela": "gold.ranking_criterio",
@@ -84,11 +84,22 @@
       }
     ]
   },
+  "ultimos_fechamentos": {
+    "dolar_venda": {
+      "data": "2026-11-26",
+      "valor": 5.744
+    },
+    "selic_meta": {
+      "data": "2026-11-26",
+      "valor": 13.75
+    }
+  },
+  "aviso_estimativa": "Estimativa simples, nao e previsao garantida: populacao projetada pela taxa anual desde o Censo 2022; lacuna = (densidade de referencia da faixa de renda - densidade atual) x populacao / 10 mil.",
   "exportado": {
     "indicadores_municipio": 5571,
     "ranking_expansao": 687,
     "ranking_criterio": 7,
-    "parametro_ranking": 2,
+    "parametro_ranking": 4,
     "contexto_macro": 143,
     "momento_expansao": 68
   }

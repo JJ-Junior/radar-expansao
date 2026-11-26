@@ -49,6 +49,18 @@ export function criarMacro({ estado }) {
   const linhaAtual = atual ? macro[indiceMacro.get(atual.mes)] : null;
   const tresAntes = (l) => macro[(indiceMacro.get(l.mes) ?? 0) - 3] ?? null;
 
+  // mês corrente (parcial): a média é só até o último dia com dado; o semáforo usa o último mês fechado
+  const fechamentos = estado.meta.ultimos_fechamentos ?? {};
+  const diaMes = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+  const ultimoDia = fechamentos.dolar_venda?.data ?? fechamentos.selic_meta?.data ?? null;
+  const textoFechamento = {
+    selic_meta: fechamentos.selic_meta ? `último valor ${diaMes(fechamentos.selic_meta.data)}: ${decimal(fechamentos.selic_meta.valor, 2)}% a.a.` : "",
+    dolar_medio: fechamentos.dolar_venda ? `último fechamento ${diaMes(fechamentos.dolar_venda.data)}: ${reaisCentavos(fechamentos.dolar_venda.valor, 2)}` : "",
+  };
+  const mesAno = (d) => `${mesCurto(d).slice(0, 3)}/${d.getFullYear()}`;          // "out/2026"
+  const referenciaSemaforo = atual ? `semáforo: referência ${mesAno(atual.data)}` : "";
+  const rotuloParcial = (l) => `${mesPorExtenso(l.data)} (parcial${ultimoDia ? `, até ${diaMes(ultimoDia)}` : ""})`;
+
   /** Linhas do tooltip de um mês: Juros · Inflação · Câmbio → valor, variação, estado. */
   function conteudoDoMes(linha) {
     const m = momentoPorMes.get(linha.mes);
@@ -59,11 +71,15 @@ export function criarMacro({ estado }) {
         estado: est, estadoTexto: est ? ROTULO_SINAL[est] : "",
       };
     });
+    const parcial = linha.mes_parcial
+      ? `Média do mês até ${ultimoDia ? diaMes(ultimoDia) : "hoje"}. ${[textoFechamento.dolar_medio, textoFechamento.selic_meta].filter(Boolean).join(" · ")}. ` +
+        `O semáforo usa o último mês fechado (${atual ? mesAno(atual.data) : "—"}).`
+      : "Variação: juros e câmbio em 12 meses; inflação contra 3 meses antes.";
     return conteudoDica({
-      titulo: mesPorExtenso(linha.data) + (linha.mes_parcial ? " (parcial)" : ""),
+      titulo: linha.mes_parcial ? rotuloParcial(linha) : mesPorExtenso(linha.data),
       chip: m ? { texto: m.recomendacao, estado: STATUS_RECOMENDACAO[m.recomendacao] } : null,
       linhas,
-      nota: "Variação: juros e câmbio em 12 meses; inflação contra 3 meses antes.",
+      nota: parcial,
     });
   }
 
@@ -97,10 +113,16 @@ export function criarMacro({ estado }) {
         <p class="sinal__variacao"></p>`;
       li.querySelector(".sinal__rotulo").textContent = s.nome;
       li.querySelector(".sinal__estado span").textContent = ROTULO_SINAL[est];
-      li.querySelector(".sinal__indicador").textContent = s.indicador;
+      li.querySelector(".sinal__indicador").textContent = `${s.indicador} · ${mesCurto(atual.data)}`;
       li.querySelector(".sinal__valor").textContent = s.valor(linhaAtual);
       const v = s.variacao(linhaAtual, tresAntes(linhaAtual));
       li.querySelector(".sinal__variacao").textContent = v ? `${v} ${s.periodo}` : "";
+      if (s.coluna === "dolar_medio" && textoFechamento.dolar_medio) {
+        const extra = document.createElement("p");
+        extra.className = "sinal__fechamento";
+        extra.textContent = textoFechamento.dolar_medio;
+        li.querySelector(".sinal__variacao").after(extra);
+      }
       li.append(sparkline(macro.slice(Math.max(0, fim - MESES_SPARKLINE + 1), fim + 1), s));
       lista.append(li);
     }
@@ -200,7 +222,10 @@ export function criarMacro({ estado }) {
     cartao.querySelector("h4").textContent = serie.titulo;
     cartao.querySelector(".grafico__atual").textContent = serie.formato(ultimo[serie.coluna]);
     const v = serie.sinal.variacao(ultimo, tresAntes(ultimo));
-    cartao.querySelector(".grafico__var").textContent = `${mesCurto(ultimo.data)}${ultimo.mes_parcial ? " (parcial)" : ""}${v ? ` · ${v} ${serie.sinal.periodo}` : ""}`;
+    cartao.querySelector(".grafico__var").textContent = ultimo.mes_parcial
+      ? [`média de ${mesAno(ultimo.data)} (parcial${ultimoDia ? `, até ${diaMes(ultimoDia)}` : ""})`,
+        textoFechamento[serie.coluna], referenciaSemaforo].filter(Boolean).join(" · ")
+      : `${mesCurto(ultimo.data)}${v ? ` · ${v} ${serie.sinal.periodo}` : ""}`;
     area.appendChild(cartao);
 
     const svg = d3.select(cartao).append("svg").attr("viewBox", `0 0 ${L} ${A}`).attr("tabindex", "0")

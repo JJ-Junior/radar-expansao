@@ -10,7 +10,8 @@ percentis, médias por UF e "municípios parecidos" são só leituras dessas tab
 
 ## De onde vem
 
-Tudo sai da **camada gold** do Supabase autohospedado (conexão pelo `.env`, nunca pelo site). O script também conta as
+Tudo sai da **camada gold** do Supabase autohospedado (conexão pelo `.env`, nunca pelo site). A única exceção é o
+último fechamento diário do dólar e da Selic (`meta.json → ultimos_fechamentos`), lido da silver só para explicar o mês corrente. O script também conta as
 linhas de cada tabela de `bronze`, `silver` e `gold` para a seção "Dados" do site. Não existe mais modo de prévia: a gold
 é a única fonte das notas, do ranking, da lista de recomendadas e do semáforo.
 
@@ -44,10 +45,10 @@ Para ler em JavaScript: `linhas.map(l => Object.fromEntries(colunas.map((c, j) =
 | Arquivo | Tabela de origem | Linhas | Responde (prd.md) |
 |---|---|---|---|
 | `meta.json` | — (metadados da exportação) | 1 objeto | — |
-| `indicadores_municipio.json` | `gold.indicadores_municipio` | todos os municípios (~5.571) | P1, P3, P4 |
+| `indicadores_municipio.json` | `gold.indicadores_municipio` | todos os municípios (~5.571) | P1, P3, P4, P9 |
 | `ranking_expansao.json` | `gold.ranking_expansao` | universo do ranking (~687) | P2, P5, P8 |
 | `ranking_criterio.json` | `gold.ranking_criterio` | 7 componentes | P8 |
-| `parametro_ranking.json` | `gold.parametro_ranking` | 2 parâmetros | P8 |
+| `parametro_ranking.json` | `gold.parametro_ranking` | 4 parâmetros | P8, P9 |
 | `contexto_macro.json` | `gold.contexto_macro` | 1 por mês | P6 |
 | `momento_expansao.json` | `gold.momento_expansao` | 1 por mês com os 3 sinais | P7 |
 | `territorio.json` | IBGE Localidades + Malhas (referência, não é tabela da gold) | todos os municípios (~5.571) | mapa por regiões |
@@ -68,6 +69,8 @@ Para ler em JavaScript: `linhas.map(l => Object.fromEntries(colunas.map((c, j) =
 | `periodos` | objeto | Último período de cada fonte: `populacao`, `censo`, `pib`, `academias`, `salario`, `macro_ate` (`"AAAA-MM"`) |
 | `camadas` | objeto | `{"bronze": [...], "silver": [...], "gold": [...]}` com `{"tabela": texto, "linhas": inteiro}`; cada camada é `null` se não tiver tabelas |
 | `exportado` | objeto | Linhas gravadas em cada arquivo desta pasta (`{"ranking_expansao": 687, ...}`) |
+| `ultimos_fechamentos` | objeto | Último valor diário até hoje de `dolar_venda` e `selic_meta` (`{"data": "AAAA-MM-DD", "valor": número}` ou `null`), de `silver.fato_indicador_macro`. Explica o mês parcial: a média de novembro não é o fechamento de hoje |
+| `aviso_estimativa` | texto \| null | O texto da coluna `estimativa` da gold, guardado uma vez só (em `indicadores_municipio.json` a coluna vira verdadeiro/falso) |
 
 Exemplo:
 
@@ -112,6 +115,12 @@ Exemplo:
 | `academias_por_10mil_hab` | número \| null | Academias ÷ população do mesmo ano × 10.000 |
 | `salario_medio` | número \| null | Salário médio mensal formal, R$ (IBGE 9509) |
 | `salario_ano` | inteiro \| null | Ano do salário médio |
+| `latitude`, `longitude` | número | Centroide oficial do município (IBGE, API de Malhas v4), usado no simulador de região |
+| `faixa_renda` | inteiro 1–5 \| null | Quintil da renda domiciliar per capita do universo |
+| `populacao_projetada`, `ano_projecao` | inteiro \| null | Estimativa: população × (1 + crescimento anual) ^ (ano − ano da população) |
+| `densidade_referencia` | número \| null | Estimativa: mediana de academias por 10 mil hab. do universo na mesma faixa de renda (limitada a P5–P95) |
+| `lacuna_academias` | inteiro \| null | Estimativa: (densidade de referência − densidade atual) × população ÷ 10 mil. Positiva = espaço; negativa = saturada |
+| `estimativa` | booleano | A linha tem estimativa (o texto do aviso está em `meta.json → aviso_estimativa`) |
 | `atualizado_em` | texto (data e hora) | Quando a linha foi calculada |
 
 ### `ranking_expansao.json` — `gold.ranking_expansao`
@@ -137,6 +146,7 @@ Exemplo:
 | `elegivel_recomendacao` | booleano | Passa na trava de renda (`nota_poder_compra` ≥ `nota_minima_poder_compra`) |
 | `recomendado_top5` | booleano | Está na lista das unidades recomendadas |
 | `ordem_recomendacao` | número \| null | 1 a 5, ordem na lista de recomendadas |
+| `latitude`, `longitude` | número | Centroide do município (o mesmo de `indicadores_municipio`) |
 | `versao_pesos` | texto | Versão dos pesos |
 | `calculado_em` | texto (data e hora) | Quando o ranking foi calculado |
 
@@ -157,8 +167,8 @@ Exemplo:
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| `parametro` | texto | `unidades_recomendadas` (quantas cidades na lista) ou `nota_minima_poder_compra` (trava de renda) |
-| `valor` | número | Valor do parâmetro (hoje 5 e 50) |
+| `parametro` | texto | `unidades_recomendadas`, `nota_minima_poder_compra` (trava de renda), `ano_projecao_populacao` e `faixas_renda_referencia` (premissas do simulador) |
+| `valor` | número | Valor do parâmetro (hoje 5, 50, 2028 e 5) |
 | `descricao` | texto | Explicação do parâmetro |
 | `versao_pesos` | texto | Versão |
 

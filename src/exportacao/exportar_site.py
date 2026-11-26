@@ -16,7 +16,8 @@
 #           site/dados/README.md) a partir das tabelas da camada gold.
 # ENTRADA:  tabelas gold.* do Supabase autohospedado via Docker (conexao pelo
 #           .env, incluindo DB_SSLMODE) + contagem de linhas das camadas
-#           bronze, silver e gold
+#           bronze, silver e gold; ultimo fechamento diario do dolar e da
+#           Selic (silver.fato_indicador_macro), so para explicar o mes parcial
 # SAIDA:    site/dados/*.json e site/img/previa.jpg (substitui os arquivos a cada execucao)
 #
 # =============================================================================
@@ -63,6 +64,7 @@ ORDEM = {                     # ordenacao das linhas em cada arquivo
     "momento_expansao": "mes",
 }
 CAMADAS = ["bronze", "silver", "gold"]   # contagem de linhas para a secao "Dados"
+SERIES_DIARIAS = ["dolar_venda", "selic_meta"]   # ultimo fechamento diario (silver), para explicar o mes parcial
 POPULACAO_MINIMA = 50_000                # so informativo no meta.json (o corte vale na gold)
 ANO_CENSO = 2022
 CASAS_DECIMAIS = 6
@@ -124,6 +126,25 @@ def maior_ano(df: pd.DataFrame, coluna: str):
     return int(df[coluna].max())
 
 
+def ler_ultimos_fechamentos(engine) -> dict:
+    """Ultimo valor diario de cada serie do BCB (silver.fato_indicador_macro), ate hoje.
+
+    A gold guarda medias mensais; o site usa este valor so para explicar o mes corrente (parcial),
+    por exemplo "ultimo fechamento 26/11: R$ 5,74".
+    """
+    from sqlalchemy import text
+
+    resultado = {}
+    with engine.connect() as conexao:
+        for serie in SERIES_DIARIAS:
+            linha = conexao.execute(text(
+                "SELECT data, valor FROM silver.fato_indicador_macro "
+                "WHERE indicador_id = :serie AND valor IS NOT NULL AND data <= current_date "
+                "ORDER BY data DESC LIMIT 1"), {"serie": serie}).first()
+            resultado[serie] = {"data": linha[0].isoformat(), "valor": float(linha[1])} if linha else None
+    return resultado
+
+
 def ler_gold() -> dict:
     """Le as tabelas gold.* e os metadados que o site mostra."""
     engine = conectar_banco()
@@ -144,8 +165,23 @@ def ler_gold() -> dict:
         "versao_pesos": str(criterios["versao_pesos"].iloc[0]) if len(criterios) else None,
         "populacao_minima_universo": POPULACAO_MINIMA,
         "camadas": contar_camadas(engine),
+        "ultimos_fechamentos": ler_ultimos_fechamentos(engine),
         "tabelas": tabelas,
     }
+
+
+def separar_aviso_estimativa(tabelas: dict) -> str | None:
+    """O aviso de estimativa e o mesmo texto em todas as linhas: vai uma vez para o meta.json.
+
+    Na tabela fica so verdadeiro/falso (a linha tem estimativa), o que corta ~1 MB do arquivo.
+    """
+    ind = tabelas["indicadores_municipio"]
+    if "estimativa" not in ind:
+        return None
+    textos = ind["estimativa"].dropna().astype(str).str.strip()
+    textos = textos[textos != ""]
+    ind["estimativa"] = ind["estimativa"].notna() & (ind["estimativa"].astype(str).str.strip() != "")
+    return textos.mode().iloc[0] if len(textos) else None
 
 
 def preparar(df: pd.DataFrame) -> pd.DataFrame:
@@ -195,6 +231,7 @@ def main() -> None:
     print("Exportando dados do site a partir da camada gold ...")
     dados = ler_gold()
     conferir(dados["tabelas"])
+    aviso_estimativa = separar_aviso_estimativa(dados["tabelas"])
     PASTA_SAIDA.mkdir(parents=True, exist_ok=True)
     print("Gravando:")
     exportado = {nome: gravar_tabela(nome, df, dados["gerado_em"]) for nome, df in dados["tabelas"].items()}
@@ -207,6 +244,8 @@ def main() -> None:
         "populacao_minima_universo": dados["populacao_minima_universo"],
         "periodos": dados["periodos"],
         "camadas": dados["camadas"],
+        "ultimos_fechamentos": dados["ultimos_fechamentos"],
+        "aviso_estimativa": aviso_estimativa,
         "exportado": exportado,
     }
     (PASTA_SAIDA / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")

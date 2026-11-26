@@ -1,4 +1,6 @@
-{"tabela": "gold.parametro_ranking", "gerado_em": "2026-11-26T17:02:24-03:00", "colunas": ["parametro", "valor", "descricao", "versao_pesos"],"linhas":[
+{"tabela": "gold.parametro_ranking", "gerado_em": "2026-11-26T17:15:52-03:00", "colunas": ["parametro", "valor", "descricao", "versao_pesos"],"linhas":[
+["ano_projecao_populacao",2028.0,"Estimativa: ano da populacao projetada (populacao atual x (1 + crescimento anual) ^ anos ate la)","prd-v0.5"],
+["faixas_renda_referencia",5.0,"Estimativa: faixas de renda (quintis do universo) usadas na densidade de referencia de academias","prd-v0.5"],
 ["nota_minima_poder_compra",50.0,"Trava de renda: so entra na lista de recomendadas quem tem nota de poder de compra >= este valor (percentil 50 do universo)","prd-v0.4"],
 ["unidades_recomendadas",5.0,"Quantidade de cidades na lista de unidades recomendadas (no maximo uma por regiao imediata)","prd-v0.4"]
 ]}
