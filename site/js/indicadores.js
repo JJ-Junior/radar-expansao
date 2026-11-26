@@ -1,4 +1,4 @@
-// Rótulos de regiões e UFs, critérios do ranking, indicadores da ficha e ícones do semáforo.
+// Rótulos de regiões e UFs, critérios do ranking, indicadores da ficha e rótulos do semáforo.
 // Nenhum cálculo de nota acontece aqui: o site só lê as colunas da gold.
 
 import { decimal, fracaoAoAno, inteiro, reais } from "./formato.js";
@@ -75,14 +75,3 @@ export const STATUS_RECOMENDACAO = {
   "Esperar": "vermelho",
 };
 export const ROTULO_SINAL = { verde: "favorável", amarelo: "neutro", vermelho: "desfavorável" };
-
-const ICONES = {
-  verde: '<path d="M5 12.5l4.2 4.2L19 7" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>',
-  amarelo: '<path d="M12 5v9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="12" cy="19" r="1.8" fill="currentColor"/>',
-  vermelho: '<path d="M6.5 6.5l11 11M17.5 6.5l-11 11" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>',
-};
-
-/** Ícone redondo do semáforo: forma + cor, nunca só cor. */
-export function iconeStatus(status, extraClasse = "") {
-  return `<span class="icone-status icone-status--${status} ${extraClasse}" aria-hidden="true"><svg viewBox="0 0 24 24">${ICONES[status] ?? ""}</svg></span>`;
-}

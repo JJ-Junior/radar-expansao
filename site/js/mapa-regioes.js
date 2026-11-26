@@ -5,6 +5,7 @@
 import { NOMES_UF, REGIOES } from "./indicadores.js";
 import { compacto, decimal, inteiro } from "./formato.js";
 import { feicoes, objetoDe } from "./geo.js";
+import { conteudoDica, esconderDica, mostrarDica } from "./dica.js";
 
 const L = 1000, A = 960;                          // sistema de coordenadas do SVG
 const NIVEIS = ["brasil", "regiao", "uf", "intermediaria", "imediata"];
@@ -18,8 +19,6 @@ export function criarMapaRegioes({ topos, estado, aoSelecionar }) {
   const d3 = window.d3;
   const topojson = window.topojson;
   const svg = d3.select("#mapa-svg").attr("viewBox", `0 0 ${L} ${A}`);
-  const area = document.getElementById("mapa-area");
-  const dica = document.getElementById("mapa-dica");
 
   // ------------------------------------------------------------ geometria
   const geo = {
@@ -113,11 +112,38 @@ export function criarMapaRegioes({ topos, estado, aoSelecionar }) {
     .attr("class", (d) => `cidade${d.c.ranking.recomendado_top5 ? " cidade--recomendada" : ""}`)
     .attr("cx", (d) => d.x).attr("cy", (d) => d.y).attr("r", (d) => d.r)
     .on("click", (_, d) => aoSelecionar(d.c.municipio_id))
-    .on("mousemove", (e, d) => mostrarDica(e, `<strong>${d.c.municipio_nome} · ${d.c.uf_sigla}</strong>
-      <span class="mono">${d.c.ranking.posicao_brasil}º no Brasil${d.c.ranking.recomendado_top5 ? ` · recomendada nº ${d.c.ranking.ordem_recomendacao}` : ""}</span><br>Nota <b>${decimal(d.c.ranking.nota_final, 1)}</b> · ${compacto(d.c.populacao)} hab.`))
-    .on("mouseleave", esconderDica);
+    .on("pointerenter", (e, d) => mostrarDica(e.currentTarget, dicaCidade(d.c)))
+    .on("pointerleave", esconderDica);
   pontos.filter((d) => d.c.ranking.recomendado_top5).raise();   // recomendadas por cima das outras
-  pontos.append("title").text((d) => `${d.c.municipio_nome} (${d.c.uf_sigla}), nota ${decimal(d.c.ranking.nota_final, 1)}`);
+  pontos.append("desc").text((d) => `${d.c.municipio_nome} (${d.c.uf_sigla}), nota ${decimal(d.c.ranking.nota_final, 1)}`);
+
+  /** Tooltip de uma cidade. */
+  function dicaCidade(c) {
+    const r = c.ranking;
+    return conteudoDica({
+      titulo: `${c.municipio_nome} · ${c.uf_sigla}`,
+      chip: r.recomendado_top5 ? { texto: `Recomendada nº ${r.ordem_recomendacao}`, estado: "verde" } : null,
+      linhas: [
+        { rotulo: "Nota final", valor: decimal(r.nota_final, 1), detalhe: `${r.posicao_brasil}º no Brasil` },
+        { rotulo: "População", valor: compacto(c.populacao), detalhe: c.regiao_imediata_nome ?? "" },
+      ],
+      nota: "Clique para abrir a ficha.",
+    });
+  }
+
+  /** Tooltip de uma área (região, UF, região intermediária ou imediata). */
+  function dicaArea(d) {
+    return conteudoDica({
+      titulo: d.nome,
+      chip: { texto: NOME_NIVEL[d.nivel] },
+      linhas: d.n ? [
+        { rotulo: "Cidades avaliadas", valor: inteiro(d.n) },
+        { rotulo: "Nota média", valor: decimal(d.media, 1) },
+        { rotulo: "Líder", valor: d.lider.municipio_nome, detalhe: `nota ${decimal(d.lider.ranking.nota_final, 1)}` },
+      ] : [],
+      nota: d.n ? (d.nivel === "imediata" ? "Enter ou clique para focar esta região." : "Enter ou clique para aproximar.") : "Nenhuma cidade com 50 mil habitantes ou mais.",
+    });
+  }
 
   // ------------------------------------------------------------ zoom animado
   let visao = [L / 2, A / 2, L];                  // [centro x, centro y, largura visível]
@@ -153,10 +179,14 @@ export function criarMapaRegioes({ topos, estado, aoSelecionar }) {
     gAreas.selectAll("path").data(filhos, (d) => `${d.nivel}-${d.codigo}`).join(
       (entra) => entra.append("path").attr("class", "area").attr("d", (d) => caminho(d.feicao)).style("opacity", 0),
     )
-      .on("click", (_, d) => descer(d))
-      .on("mousemove", (e, d) => mostrarDica(e, `<span class="mono">${NOME_NIVEL[d.nivel]}</span><strong>${d.nome}</strong>
-        ${d.n ? `${inteiro(d.n)} ${d.n === 1 ? "cidade avaliada" : "cidades avaliadas"} · nota média <b>${decimal(d.media, 1)}</b><br><span class="mono">líder: ${d.lider.municipio_nome}</span>` : "Nenhuma cidade com 50 mil hab. ou mais"}`))
-      .on("mouseleave", esconderDica)
+      .attr("tabindex", 0).attr("role", "button")
+      .attr("aria-label", (d) => `${NOME_NIVEL[d.nivel]} ${d.nome}: ${d.n ? `${d.n} cidades avaliadas, nota média ${decimal(d.media, 1)}` : "nenhuma cidade avaliada"}`)
+      .on("click", (_, d) => { esconderDica(); descer(d); })
+      .on("keydown", (e, d) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); esconderDica(); descer(d); } })
+      .on("pointermove", (e, d) => mostrarDica(e, dicaArea(d)))
+      .on("pointerleave", esconderDica)
+      .on("focus", (e, d) => mostrarDica(e.currentTarget, dicaArea(d), { alvo: e.currentTarget }))
+      .on("blur", esconderDica)
       .style("fill", corDe)
       .style("opacity", (d) => (foco && d.codigo !== foco.codigo ? 0.55 : 1));
 
@@ -182,7 +212,7 @@ export function criarMapaRegioes({ topos, estado, aoSelecionar }) {
     mostrar(u);
   }
 
-  // ------------------------------------------------------------ trilha, legenda, dica, resumo
+  // ------------------------------------------------------------ trilha, legenda e resumo
   const trilha = document.getElementById("mapa-trilha");
   function desenharTrilha(u) {
     const lista = cadeia(u);
@@ -196,16 +226,7 @@ export function criarMapaRegioes({ topos, estado, aoSelecionar }) {
     <div style="margin-top:6px"><span class="ponto"></span>cidade avaliada (tamanho = população)</div>
     ${estado.recomendadas.length ? `<div><span class="ponto ponto--recomendada"></span>unidade recomendada</div>` : ""}`;
 
-  function mostrarDica(e, html) {
-    dica.innerHTML = html;
-    dica.hidden = false;
-    const r = area.getBoundingClientRect();
-    const x = e.clientX - r.left, y = e.clientY - r.top;
-    const w = dica.offsetWidth, h = dica.offsetHeight;
-    dica.style.left = `${Math.max(8, x + 16 + w > r.width ? x - w - 16 : x + 16)}px`;
-    dica.style.top = `${Math.min(Math.max(8, y - h / 2), r.height - h - 8)}px`;
-  }
-  function esconderDica() { dica.hidden = true; }
+
 
   const resumo = document.getElementById("explorar-resumo");
   const lista = document.getElementById("explorar-lista");

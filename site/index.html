@@ -119,7 +119,7 @@
           <div class="semaforo__principal" data-revela>
             <p class="rotulo" id="semaforo-mes">—</p>
             <p class="semaforo__recomendacao" id="semaforo-recomendacao">—</p>
-            <p class="semaforo__justificativa" id="semaforo-justificativa"></p>
+            <p class="semaforo__contexto" id="semaforo-contexto"></p>
           </div>
           <ul class="semaforo__sinais" id="semaforo-sinais"></ul>
         </div>
@@ -150,7 +150,6 @@
           <div class="mapa" id="mapa-area">
             <svg id="mapa-svg" role="img" aria-labelledby="mapa-descricao"></svg>
             <p class="visualmente-oculto" id="mapa-descricao">Mapa do Brasil por regiões do IBGE, colorido pela nota média das cidades avaliadas em cada recorte.</p>
-            <div class="mapa__dica" id="mapa-dica" role="tooltip" hidden></div>
             <div class="mapa__carregando" id="mapa-carregando">Carregando as malhas do IBGE…</div>
             <nav class="mapa__trilha" id="mapa-trilha" aria-label="Recorte do mapa"></nav>
             <div class="mapa__legenda" id="mapa-legenda"></div>
@@ -182,8 +181,10 @@
           </header>
           <div class="segmentado" id="top-filtro" role="radiogroup" aria-label="Lista de cidades"></div>
         </div>
-        <div class="top__janela">
+        <div class="largura top__janela">
           <ol class="top__trilho" id="top-trilho"></ol>
+          <p class="top__rolar" aria-hidden="true">Arraste para o lado para ver as outras →</p>
+          <div class="top-fora" id="top-fora" hidden></div>
         </div>
       </div>
     </section>
@@ -192,34 +193,37 @@
     <section class="secao secao--invertida" id="ficha" aria-labelledby="ficha-nome">
       <div class="largura">
         <header class="ficha__cabecalho">
-          <div>
+          <div class="ficha__identidade">
             <p class="rotulo" id="ficha-sobre"><span class="rotulo__num">04</span> Ficha da cidade</p>
             <h2 id="ficha-nome">Escolha uma cidade</h2>
-            <p class="secao__lede" id="ficha-resumo">Use a busca, clique num ponto do mapa ou num card.</p>
-          </div>
-          <button class="botao botao--fantasma" type="button" id="ficha-copiar">Copiar link da ficha</button>
-        </header>
-
-        <div class="ficha" id="ficha-corpo" hidden aria-live="polite">
-          <div class="ficha__radar">
-            <div id="ficha-grafico"></div>
+            <p class="ficha__onde" id="ficha-onde">Use a busca, clique num ponto do mapa ou num card.</p>
+            <div class="ficha__selos" id="ficha-selos"></div>
           </div>
           <div class="ficha__placar">
-            <div class="ficha__nota">
-              <span class="rotulo">Nota final</span>
-              <span class="ficha__nota-valor" id="ficha-nota">—</span>
-              <span class="discreto">de 0 a 100</span>
-            </div>
-            <ul class="ficha__posicoes" id="ficha-posicoes"></ul>
-            <ul class="ficha__avisos" id="ficha-avisos"></ul>
+            <span class="ficha__nota-valor" id="ficha-nota">—</span>
+            <span class="ficha__nota-escala" id="ficha-nota-escala"></span>
+            <ul class="ficha__posicoes" id="ficha-posicoes" aria-label="Posições no ranking"></ul>
+          </div>
+        </header>
+        <p class="ficha__resumo" id="ficha-resumo" aria-live="polite"></p>
+        <ul class="ficha__avisos" id="ficha-avisos"></ul>
+
+        <div class="ficha" id="ficha-corpo" hidden>
+          <section class="ficha__porque" id="ficha-porque" aria-labelledby="ficha-porque-titulo">
+            <h3 class="ficha__titulo" id="ficha-porque-titulo">Por que esta cidade</h3>
+            <p class="discreto">Nota de 0 a 100 em cada critério (percentil no universo do ranking). A linha marca 50.</p>
             <ul class="barras-criterio" id="ficha-criterios"></ul>
-          </div>
-          <div class="ficha__indicadores">
-            <h3 class="subtitulo subtitulo--p">Indicadores <span class="discreto">· comparados às cidades do Brasil</span></h3>
+          </section>
+          <section class="ficha__indicadores" aria-labelledby="ficha-ind-titulo">
+            <h3 class="ficha__titulo" id="ficha-ind-titulo">Indicadores</h3>
+            <p class="discreto">Comparados aos 5.571 municípios do Brasil.</p>
             <dl class="indicadores" id="ficha-indicadores"></dl>
-            <h3 class="subtitulo subtitulo--p">Cidades com perfil parecido</h3>
+          </section>
+          <section class="ficha__parecidos" aria-labelledby="ficha-par-titulo">
+            <h3 class="ficha__titulo" id="ficha-par-titulo">Cidades com perfil parecido</h3>
             <ul class="parecidos" id="ficha-parecidos"></ul>
-          </div>
+            <button class="botao botao--fantasma" type="button" id="ficha-copiar">Copiar link da ficha</button>
+          </section>
         </div>
       </div>
     </section>

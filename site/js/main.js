@@ -9,7 +9,7 @@ import { criarCards } from "./cards.js";
 import { criarFicha } from "./ficha.js";
 import { criarBusca } from "./busca.js";
 import { desenharCamadas, desenharCriterios } from "./metodologia.js";
-import { STATUS_RECOMENDACAO, iconeStatus } from "./indicadores.js";
+import { STATUS_RECOMENDACAO } from "./indicadores.js";
 import { dataCurta, decimal, inteiro, mesPorExtenso, paraData, porcento, reaisCentavos } from "./formato.js";
 
 const TITULO_BASE = "Radar de Expansão";
@@ -40,7 +40,7 @@ function preencherKpis(estado, momentoAtual) {
     kpi("topo-nota").textContent = `${primeiro.uf_sigla} · nota ${decimal(primeiro.nota_final, 1)}${previa}`;
   }
   if (momentoAtual) {
-    kpi("momento").innerHTML = `${iconeStatus(STATUS_RECOMENDACAO[momentoAtual.recomendacao])}<span>${momentoAtual.recomendacao}</span>`;
+    kpi("momento").innerHTML = `<i class="ponto-estado ponto-estado--${STATUS_RECOMENDACAO[momentoAtual.recomendacao]}"></i><span>${momentoAtual.recomendacao}</span>`;
     kpi("momento-nota").textContent = `${mesPorExtenso(paraData(momentoAtual.mes))}${previa}`;
   }
   kpi("data").textContent = dataCurta(meta.gerado_em);
