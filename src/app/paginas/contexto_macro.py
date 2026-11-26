@@ -40,7 +40,7 @@
 # ============================== CONFIG ==============================
 PERIODOS = {"12 meses": 12, "3 anos": 36, "5 anos": 60, "Desde 2015": None}
 PERIODO_PADRAO = "5 anos"
-TETO_IPCA = 4.5   # % - limite usado pelo semaforo (spec.md, secao 5.1)
+TETO_IPCA = 4.5   # % - padrao; o valor oficial vem de gold.parametro_ranking
 ALTURA_GRAFICO = 300
 # ====================================================================
 
@@ -51,6 +51,8 @@ from plotly.subplots import make_subplots
 
 import dados
 import formato as fmt
+
+TETO_IPCA = dados.parametro("semaforo_teto_ipca_pct", TETO_IPCA)  # valor oficial da gold, se houver
 
 macro = dados.tabela("contexto_macro").sort_values("mes")
 momento = dados.tabela("momento_expansao").sort_values("mes")
@@ -71,18 +73,30 @@ variacao_ipca = (ultimo_ipca["ipca_12m"] - ipca_3m_antes.iloc[-1]["ipca_12m"]
                  if not ipca_3m_antes.empty else None)
 
 
-def parcial(linha) -> str:
-    """Marca o mes ainda em andamento."""
-    return " (mês em andamento)" if bool(linha.get("mes_parcial")) else ""
+fechamentos = dados.ultimos_fechamentos()
+fechamento_dolar = fechamentos.get("dolar_venda") or {}
+ultimo_semaforo = momento["mes"].max() if not momento.empty else None
+
+
+def rotulo_mes(linha, prefixo: str) -> str:
+    """'media de nov/2026 (parcial, ate 26/11)' quando o mes ainda esta em andamento."""
+    texto = f"{prefixo} {fmt.mes_curto(linha['mes'])}"
+    if not bool(linha.get("mes_parcial")):
+        return texto
+    data = pd.to_datetime(fechamento_dolar.get("data"), errors="coerce")
+    if pd.notna(data) and (data.year, data.month) == (linha["mes"].year, linha["mes"].month):
+        return f"{texto} (parcial, até {data.strftime('%d/%m')})"
+    return f"{texto} (parcial)"
 
 
 with st.container(horizontal=True):
     st.metric(
-        f"Selic (meta) · {fmt.mes_curto(ultimo_selic['mes'])}{parcial(ultimo_selic)}",
+        f"Selic (meta) · {fmt.mes_curto(ultimo_selic['mes'])}",
         f"{fmt.numero(ultimo_selic['selic_meta'], 2)}% a.a.",
         delta=None if fmt.ausente(ultimo_selic["selic_var_12m_pp"])
         else f"{fmt.pontos(ultimo_selic['selic_var_12m_pp'])} em 12 meses",
         delta_color="inverse", border=True,
+        help="Meta da Selic vigente no último dia do mês (no mês em andamento, a vigente hoje).",
     )
     st.metric(
         f"IPCA em 12 meses · {fmt.mes_curto(ultimo_ipca['mes'])}",
@@ -92,11 +106,32 @@ with st.container(horizontal=True):
         help=f"Teto usado pelo semáforo: {fmt.numero(TETO_IPCA, 1)}%.",
     )
     st.metric(
-        f"Dólar médio · {fmt.mes_curto(ultimo_dolar['mes'])}{parcial(ultimo_dolar)}",
+        rotulo_mes(ultimo_dolar, "Dólar · média de"),
         fmt.reais(ultimo_dolar["dolar_medio"]),
         delta=None if fmt.ausente(ultimo_dolar["dolar_var_12m_pct"])
         else f"{fmt.porcentagem(ultimo_dolar['dolar_var_12m_pct'] / 100, sinal=True)} em 12 meses",
         delta_color="inverse", border=True,
+        help="Média dos fechamentos diários do mês. No mês em andamento, a média ainda muda até o fim do mês.",
+    )
+    if fechamento_dolar.get("valor") is not None:
+        st.metric(
+            f"Dólar · último fechamento ({fmt.data_curta(fechamento_dolar.get('data'))})",
+            fmt.reais(fechamento_dolar["valor"], 3), border=True,
+            help="Cotação diária do Banco Central no último dia com dado, registrada na última exportação.",
+        )
+
+semaforo = dados.semaforo_atual()
+if semaforo["tipo"] == "atual":
+    st.caption(
+        f":material/traffic: Semáforo de hoje (**{semaforo['recomendacao']}**): câmbio pela média dos "
+        f"{int(semaforo.get('janela_dias') or 30)} dias até {fmt.data_curta(semaforo['ref_cambio'])}, Selic de "
+        f"{fmt.data_curta(semaforo['ref_juros'])} e IPCA até {fmt.mes_curto(semaforo['ref_inflacao'])} "
+        "(último publicado). Na faixa abaixo, o mês em andamento aparece como parcial."
+    )
+elif ultimo_semaforo is not None:
+    st.caption(
+        f":material/traffic: O semáforo usa o último mês fechado com os três sinais: "
+        f"**{fmt.mes_extenso(semaforo['mes'])}**. Os números do mês em andamento não entram nele."
     )
 
 periodo = st.segmented_control("Período", list(PERIODOS), default=PERIODO_PADRAO,
@@ -105,6 +140,15 @@ meses = PERIODOS[periodo or PERIODO_PADRAO]
 inicio = macro["mes"].max() - pd.DateOffset(months=meses - 1) if meses else macro["mes"].min()
 recorte = macro[macro["mes"] >= inicio]
 recorte_momento = momento[momento["mes"] >= inicio]
+
+
+meses_parciais = set(momento.loc[momento.get("mes_parcial", pd.Series(False, index=momento.index))
+                                  .astype(bool), "mes"])
+
+
+def rotulo_parcial(mes) -> str:
+    """'nov/2026 (parcial)' para o mes em andamento."""
+    return fmt.mes_curto(mes) + (" (parcial)" if mes in meses_parciais else "")
 
 
 def estilo(figura: go.Figure, titulo: str) -> go.Figure:
@@ -135,7 +179,7 @@ with col2:
         hovertemplate="R$ %{y:.2f}<extra></extra>",
     ))
     dolar.update_yaxes(tickprefix="R$ ")
-    st.plotly_chart(estilo(dolar, "Dólar: média do mês (R$)"), config={"displayModeBar": False},
+    st.plotly_chart(estilo(dolar, "Dólar: média do mês (R$; o último mês pode ser parcial)"), config={"displayModeBar": False},
                     alt="Linha do dólar médio mensal no período escolhido.")
 
 ipca = make_subplots(specs=[[{"secondary_y": True}]])
@@ -173,7 +217,7 @@ else:
         "Recomendação": recorte_momento["recomendacao"].map(valor_recomendacao),
     }
     textos = [
-        [f"{fmt.mes_curto(m)}: {t}" for m, t in zip(recorte_momento["mes"], coluna)]
+        [f"{rotulo_parcial(m)}: {t}" for m, t in zip(recorte_momento["mes"], coluna)]
         for coluna in (
             recorte_momento["sinal_juros"], recorte_momento["sinal_inflacao"],
             recorte_momento["sinal_cambio"],
@@ -197,7 +241,7 @@ else:
                         "recomendação de cada mês.")
 
     tabela_meses = recorte_momento.sort_values("mes", ascending=False).assign(
-        Mês=lambda d: d["mes"].map(fmt.mes_curto),
+        Mês=lambda d: d["mes"].map(rotulo_parcial),
     )[["Mês", "recomendacao", "pontuacao", "justificativa"]]
     st.dataframe(
         tabela_meses, hide_index=True, height=320,

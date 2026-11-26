@@ -58,8 +58,7 @@ import formato as fmt
 
 ranking = dados.ranking_completo()
 lista = dados.recomendadas()
-momento = dados.tabela("momento_expansao").sort_values("mes")
-atual = momento.iloc[-1]
+atual = dados.semaforo_atual()
 
 st.title("Onde abrir as próximas academias")
 st.caption(
@@ -77,30 +76,42 @@ ICONE_RECOMENDACAO = {
 }
 
 
-def frases_do_semaforo(justificativa: str) -> list[str]:
-    """Separa a justificativa da gold em uma frase por sinal (juros, inflacao, cambio)."""
-    partes = re.split(r"(?<=\))\.\s*", str(justificativa).strip())
-    return [p.strip().rstrip(".") + "." for p in partes if p.strip()]
+def frases_do_semaforo(justificativa: str) -> dict[str, str]:
+    """Separa a justificativa da gold em uma frase por sinal, pelo nome de cada sinal."""
+    partes = re.split(r"\s*(?=(?:Juros|Inflação|Câmbio):)", str(justificativa).strip())
+    frases = {}
+    for parte in partes:
+        nome, _, texto = parte.partition(":")
+        if texto:
+            texto = re.sub(r"\s*\((verde|amarelo|vermelho)\)\.?\s*$", ".", texto.strip())
+            frases[nome.strip()] = texto
+    return frases
 
+
+if atual["tipo"] == "atual":
+    referencia = (f"Momento econômico · hoje: câmbio até {fmt.data_curta(atual['ref_cambio'])}, "
+                  f"Selic de {fmt.data_curta(atual['ref_juros'])}, IPCA até {fmt.mes_curto(atual['ref_inflacao'])}")
+else:
+    referencia = f"Momento econômico · {fmt.mes_extenso(atual['mes'])} (último mês fechado)"
 
 with st.container(border=True):
     cor = COR_RECOMENDACAO.get(atual["recomendacao"], "gray")
     col_sinal, col_motivos = st.columns([1, 2], vertical_alignment="center")
     with col_sinal:
-        st.caption(f"Momento econômico · {fmt.mes_extenso(atual['mes'])}")
+        st.caption(referencia)
         st.markdown(f"## :{cor}[{ICONE_RECOMENDACAO.get(atual['recomendacao'], '')} "
                     f"{atual['recomendacao']}]")
+        alerta = (" Alerta de alta do dólar no curto prazo." if atual.get("alerta_cambio_curto_prazo")
+                  else "")
         st.caption(
             f"Pontuação {int(atual['pontuacao']):+d} na soma dos três sinais "
-            "(+1 verde, 0 amarelo, −1 vermelho). Vale igual para todas as cidades."
+            f"(+1 verde, 0 amarelo, −1 vermelho). Vale igual para todas as cidades.{alerta}"
         )
     with col_motivos:
         frases = frases_do_semaforo(atual["justificativa"])
-        for i, (coluna, nome) in enumerate(NOME_SINAL.items()):
+        for coluna, nome in NOME_SINAL.items():
             sinal = atual[coluna]
-            texto = frases[i] if i < len(frases) and len(frases) == 3 else ""
-            texto = re.sub(r"^\w+:\s*", "", texto)            # tira "Juros:" do inicio
-            texto = re.sub(r"\s*\((verde|amarelo|vermelho)\)\.$", ".", texto)
+            texto = frases.get(nome, "")
             with st.container(horizontal=True, vertical_alignment="center", gap="small"):
                 st.badge(f"{nome} · {sinal}", color=fmt.COR_SINAL_STREAMLIT.get(sinal, "gray"),
                          width=150)

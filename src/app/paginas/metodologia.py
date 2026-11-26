@@ -163,6 +163,18 @@ st.markdown(
 )
 st.table(pd.DataFrame(REGRAS_SEMAFORO), hide_index=True,
          alt="Regras de cada sinal do semáforo: juros, inflação e câmbio.")
+janela = int(dados.parametro("semaforo_janela_dias", 30))
+alerta = dados.parametro("semaforo_alerta_cambio_30d_pct", 5)
+st.markdown(
+    f"- **Semáforo de hoje:** o câmbio usa a média do dólar nos **{janela} dias** até o último fechamento (contra a "
+    f"mesma janela 12 meses antes), os juros usam a meta da Selic do último dia disponível e a inflação, o último "
+    f"IPCA publicado.\n"
+    f"- **Alerta de alta do dólar no curto prazo:** se a média dos últimos {janela} dias ficar mais de "
+    f"{fmt.numero(alerta, 0)}% acima da média dos {janela} dias anteriores, o câmbio não pode ficar verde. Média contra "
+    "média, para um dia atípico não disparar o alerta.\n"
+    "- **Histórico:** a linha do tempo da página \"Momento econômico\" usa os meses fechados; o mês em andamento "
+    "aparece como parcial."
+)
 
 # --- Caminho do dado -----------------------------------------------------------
 st.subheader("De onde vêm os dados")

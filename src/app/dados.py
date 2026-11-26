@@ -55,6 +55,8 @@ TABELAS_GOLD = {
     "contexto_macro": "mes",
     "momento_expansao": "mes",
 }
+# Tabelas que podem ainda nao existir na copia de contingencia (o app segue sem elas).
+TABELAS_OPCIONAIS = {"momento_atual": "ref_cambio"}
 SEGREDOS = ("SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_CHAVE_LEITURA")
 LINHAS_POR_CHAMADA = 1000      # limite de linhas por resposta da API
 TIMEOUT_SEGUNDOS = 10
@@ -155,6 +157,13 @@ def preparar(tabelas: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
         ranking[coluna] = ranking[coluna].fillna(False).astype(bool)
     for nome in ("contexto_macro", "momento_expansao"):
         tabelas[nome]["mes"] = pd.to_datetime(tabelas[nome]["mes"])
+        if "mes_parcial" in tabelas[nome].columns:
+            tabelas[nome]["mes_parcial"] = tabelas[nome]["mes_parcial"].fillna(False).astype(bool)
+    atual = tabelas.get("momento_atual")
+    if atual is not None and not atual.empty:
+        for coluna in ("mes", "ref_juros", "ref_cambio", "ref_inflacao"):
+            if coluna in atual.columns:
+                atual[coluna] = pd.to_datetime(atual[coluna])
     tabelas["parametro_ranking"]["valor"] = pd.to_numeric(tabelas["parametro_ranking"]["valor"])
     return tabelas
 
@@ -173,6 +182,11 @@ def carregar_gold() -> dict:
         }
         try:
             tabelas = {t: buscar_tabela_api(t, o, url, cabecalhos) for t, o in TABELAS_GOLD.items()}
+            for t, o in TABELAS_OPCIONAIS.items():
+                try:
+                    tabelas[t] = buscar_tabela_api(t, o, url, cabecalhos)
+                except Exception:  # tabela opcional ausente nao derruba a leitura
+                    tabelas[t] = pd.DataFrame()
             tabelas = preparar(tabelas)
             return {
                 "tabelas": tabelas,
@@ -188,6 +202,9 @@ def carregar_gold() -> dict:
         motivo = "os segredos da API não estão configurados"
 
     tabelas = {t: ler_json_colunar(PASTA_SNAPSHOT / f"{t}.json") for t in TABELAS_GOLD}
+    for t in TABELAS_OPCIONAIS:
+        caminho = PASTA_SNAPSHOT / f"{t}.json"
+        tabelas[t] = ler_json_colunar(caminho) if caminho.exists() else pd.DataFrame()
     tabelas = preparar(tabelas)
     return {
         "tabelas": tabelas,
@@ -250,6 +267,54 @@ def ranking_completo() -> pd.DataFrame:
     ranking[["latitude", "longitude"]] = ranking[["latitude", "longitude"]].apply(
         pd.to_numeric, errors="coerce")
     return ranking.sort_values("posicao_brasil")
+
+
+def municipios_completos() -> pd.DataFrame:
+    """Todos os municipios (indicadores da gold) + notas do ranking quando a cidade esta no universo."""
+    indicadores = tabela("indicadores_municipio")
+    indicadores["regiao_nome"] = indicadores["regiao_sigla"].map(fmt.REGIOES)
+    if "latitude" not in indicadores.columns:  # copia antiga, sem coordenadas na gold
+        indicadores = indicadores.merge(
+            carregar_territorio()[["municipio_id", "latitude", "longitude"]], on="municipio_id", how="left")
+    notas = [c for c in tabela("ranking_expansao").columns if c.startswith(("nota_", "posicao_"))]
+    ranking = tabela("ranking_expansao")[
+        ["municipio_id", *notas, "recomendado_top5", "ordem_recomendacao", "dados_incompletos",
+         "verificar_concorrencia", "elegivel_recomendacao"]
+    ]
+    completos = indicadores.merge(ranking, on="municipio_id", how="left")
+    completos["no_universo"] = completos["nota_final"].notna()
+    for coluna in ("latitude", "longitude"):
+        completos[coluna] = pd.to_numeric(completos[coluna], errors="coerce")
+    return completos
+
+
+def semaforo_atual() -> dict:
+    """Semaforo exibido: gold.momento_atual (janela movel ate o ultimo fechamento) ou,
+    se a tabela ainda nao existir, o ultimo mes fechado de gold.momento_expansao."""
+    atual = carregar_gold()["tabelas"].get("momento_atual")
+    if atual is not None and not atual.empty:
+        linha = atual.iloc[0].to_dict()
+        linha["tipo"] = "atual"
+        return linha
+    historico = tabela("momento_expansao").sort_values("mes")
+    if "mes_parcial" in historico.columns:
+        historico = historico[~historico["mes_parcial"]]
+    linha = historico.iloc[-1].to_dict()
+    linha["tipo"] = "mes_fechado"
+    return linha
+
+
+def ultimos_fechamentos() -> dict:
+    """Ultimo fechamento diario do dolar: colunas dolar_ultimo/_data da gold ou, na copia
+    antiga, o valor gravado na exportacao (site/dados/meta.json)."""
+    macro = tabela("contexto_macro")
+    if {"dolar_ultimo", "dolar_ultimo_data"} <= set(macro.columns):  # gold v0.13 em diante
+        com_dado = macro.dropna(subset=["dolar_ultimo", "dolar_ultimo_data"])
+        if not com_dado.empty:
+            ultima = com_dado.sort_values("mes").iloc[-1]
+            return {"dolar_venda": {"data": str(ultima["dolar_ultimo_data"])[:10],
+                                    "valor": float(ultima["dolar_ultimo"])}}
+    return ler_meta_snapshot().get("ultimos_fechamentos") or {}
 
 
 def recomendadas() -> pd.DataFrame:
