@@ -7,11 +7,12 @@ Vitrine de expansão para o diretor da rede de academias, numa página só, cont
 3. **Quando:** semáforo econômico, histórico mês a mês e as três séries.
 4. **Onde:** mapa por regiões do IBGE que se aproxima com o scroll — Brasil → região → estado → região intermediária → região imediata —, e depois fica livre para explorar.
 5. **As 5 recomendadas:** cards com o gráfico-radar das notas, num trilho horizontal, e o motivo de quem ficou de fora (trava de renda ou região imediata repetida); também o ranking geral por região.
-6. **Ficha da cidade**, com endereço próprio (`?municipio=<código IBGE>`).
-7. **Critérios:** o perfil que o Radar procura (cada setor = peso).
-8. **Método:** fórmula, regras, semáforo e limitações.
-9. **Dados:** as camadas do Lakehouse.
-10. **Chamada** para o dashboard e o repositório.
+6. **Explorar as 687 cidades:** um ponto por cidade num canvas; cinco vistas (mapa, renda × concorrência, crescimento × renda, ranking e por região) reorganizam os mesmos pontos com animação, com tooltip, busca e alternativa em tabela.
+7. **Ficha da cidade**, com endereço próprio (`?municipio=<código IBGE>`).
+8. **Critérios:** o perfil que o Radar procura (cada setor = peso).
+9. **Método:** fórmula, regras, semáforo e limitações.
+10. **Dados:** as camadas do Lakehouse.
+11. **Chamada** para o dashboard e o repositório.
 
 **Não é o dashboard oficial** (esse é o Streamlit em `src/app/`): é a porta de entrada pública do projeto.
 
@@ -45,7 +46,9 @@ site/
 │   ├── macro.js          semáforo, histórico e gráficos de Selic, IPCA e dólar
 │   ├── mapa-regioes.js   mapa por regiões do IBGE: história guiada pelo scroll + exploração livre
 │   ├── geo.js            utilidades das malhas TopoJSON
-│   ├── cards.js          as recomendadas e o ranking geral em trilho horizontal
+│   ├── cards.js          as recomendadas e o ranking geral (grade; carrossel no celular)
+│   ├── explorar.js       as 687 cidades como pontos em canvas, cinco vistas com transição
+│   ├── dica.js           tooltip único do site (hover, foco, toque; Esc fecha)
 │   ├── recomendacao.js   explica a lista de recomendadas (trava de renda, uma por região imediata)
 │   ├── grafico-radar.js  gráfico-radar das 6 notas (SVG)
 │   ├── ficha.js          ficha da cidade: notas, percentis, cidades parecidas

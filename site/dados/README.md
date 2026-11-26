@@ -196,7 +196,7 @@ O site usa a **última linha** como semáforo atual e as anteriores como histór
 ### `territorio.json` — hierarquia do IBGE e ponto de cada município
 
 Mesmo formato colunar (`"tabela": "ibge.territorio"`). Não vem da gold: é referência territorial do IBGE, igual para
-qualquer versão do ranking. Serve para agrupar as cidades por região intermediária e imediata e para pôr cada uma no mapa.
+qualquer versão do ranking. Serve para agrupar as cidades por região intermediária e imediata e para pôr cada uma no mapa (o radar do topo, o mapa por regiões e a vista "Mapa" do Explorar usam a `longitude`/`latitude` daqui).
 
 | Coluna | Tipo | Descrição |
 |---|---|---|

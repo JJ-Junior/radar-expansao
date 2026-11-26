@@ -69,6 +69,7 @@
         <a href="#agora">Quando</a>
         <a href="#mapa">Onde</a>
         <a href="#top">Top cidades</a>
+        <a href="#explorar-cidades">Explorar</a>
         <a href="#ideal">Critérios</a>
         <a href="#arquitetura">Dados</a>
       </nav>
@@ -208,12 +209,47 @@
       </div>
     </section>
 
-    <!-- 04 FICHA ----------------------------------------------------------------------------->
+    <!-- 04 EXPLORAR AS CIDADES ------------------------------------------------------------->
+    <section class="secao" id="explorar-cidades" aria-labelledby="titulo-explorar">
+      <div class="largura">
+        <header class="secao__cabecalho" data-revela>
+          <p class="rotulo"><span class="rotulo__num">04</span> Explorar</p>
+          <h2 id="titulo-explorar">Explorar as cidades</h2>
+          <p class="secao__lede">Um ponto por cidade avaliada; o tamanho é a população e a cor, a nota final. Troque a vista e os mesmos pontos se reorganizam. Passe o mouse para ver os números e clique para abrir a ficha.</p>
+        </header>
+        <div class="explorar__barra">
+          <div class="abas-explorar" id="explorar-abas" role="tablist" aria-label="Forma de ver as cidades"></div>
+          <label class="explorar__busca">
+            <span class="visualmente-oculto">Destacar uma cidade</span>
+            <input id="explorar-busca" type="search" list="explorar-opcoes" placeholder="Destacar uma cidade" autocomplete="off">
+            <datalist id="explorar-opcoes"></datalist>
+          </label>
+        </div>
+        <p class="explorar__frase" id="explorar-frase" aria-live="polite"></p>
+        <div class="explorar__palco" id="explorar-palco" role="tabpanel">
+          <svg class="explorar__eixos" id="explorar-eixos" aria-hidden="true"></svg>
+          <canvas id="explorar-canvas" role="img" aria-label="Cidades avaliadas como pontos; a mesma informação está na tabela abaixo"></canvas>
+        </div>
+        <div class="explorar__rodape">
+          <div class="mapa__legenda explorar__legenda" id="explorar-legenda"></div>
+          <button class="botao botao--fantasma" type="button" id="explorar-ver-tabela" aria-expanded="false" aria-controls="explorar-tabela">Ver como tabela</button>
+        </div>
+        <div class="tabela-rolagem explorar__tabela" id="explorar-tabela" hidden>
+          <table class="tabela">
+            <caption class="visualmente-oculto">Cidades avaliadas pela ordem do ranking</caption>
+            <thead><tr><th scope="col" class="num">Pos.</th><th scope="col">Cidade</th><th scope="col">Região</th><th scope="col" class="num">Nota</th><th scope="col" class="num">Renda</th><th scope="col" class="num">Academias/10 mil</th><th scope="col" class="num">Crescimento</th><th scope="col">Recomendada</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 FICHA -->
     <section class="secao secao--invertida" id="ficha" aria-labelledby="ficha-nome">
       <div class="largura">
         <header class="ficha__cabecalho">
           <div class="ficha__identidade">
-            <p class="rotulo" id="ficha-sobre"><span class="rotulo__num">04</span> Ficha da cidade</p>
+            <p class="rotulo" id="ficha-sobre"><span class="rotulo__num">05</span> Ficha da cidade</p>
             <h2 id="ficha-nome">Escolha uma cidade</h2>
             <p class="ficha__onde" id="ficha-onde">Use a busca, clique num ponto do mapa ou num card.</p>
             <div class="ficha__selos" id="ficha-selos"></div>
@@ -251,7 +287,7 @@
     <section class="secao secao--ideal" id="ideal" aria-labelledby="titulo-ideal">
       <div class="largura ideal">
         <header class="secao__cabecalho" data-revela>
-          <p class="rotulo"><span class="rotulo__num">05</span> Critérios</p>
+          <p class="rotulo"><span class="rotulo__num">06</span> Critérios</p>
           <h2 id="titulo-ideal">O perfil que o Radar procura</h2>
           <p class="secao__lede">Cada setor é um critério; o tamanho do setor é o peso na nota final. Gente <em>e</em> renda são a base; pouca concorrência e crescimento fazem a diferença.</p>
         </header>
@@ -266,7 +302,7 @@
     <section class="secao" id="metodo" aria-labelledby="titulo-metodo">
       <div class="largura">
         <header class="secao__cabecalho" data-revela>
-          <p class="rotulo"><span class="rotulo__num">06</span> Método</p>
+          <p class="rotulo"><span class="rotulo__num">07</span> Método</p>
           <h2 id="titulo-metodo">Como o ranking é calculado</h2>
         </header>
 
@@ -315,7 +351,7 @@
     <section class="secao secao--arquitetura" id="arquitetura" aria-labelledby="titulo-arquitetura">
       <div class="largura">
         <header class="secao__cabecalho" data-revela>
-          <p class="rotulo"><span class="rotulo__num">07</span> Dados</p>
+          <p class="rotulo"><span class="rotulo__num">08</span> Dados</p>
           <h2 id="titulo-arquitetura">Do dado bruto ao ranking</h2>
           <p class="secao__lede">Um Lakehouse em três camadas no Postgres do Supabase autohospedado, atualizado toda semana pelo n8n.</p>
         </header>

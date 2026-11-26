@@ -6,6 +6,7 @@ import { criarRadarHero } from "./hero-radar.js";
 import { criarMacro } from "./macro.js";
 import { criarMapaRegioes } from "./mapa-regioes.js";
 import { criarCards } from "./cards.js";
+import { criarExplorar } from "./explorar.js";
 import { criarFicha } from "./ficha.js";
 import { criarBusca } from "./busca.js";
 import { desenharCamadas, desenharCriterios } from "./metodologia.js";
@@ -129,6 +130,7 @@ async function iniciar() {
   try {
     const { ufs } = await carregarMalhas(["ufs"]);
     criarRadarHero({ canvas: document.getElementById("hero-radar"), topoUfs: ufs, cidades: estado.universo });
+    criarExplorar({ estado, topoUfs: ufs, aoSelecionar: selecionar });
     const outras = await carregarMalhas(["regioes", "intermediarias", "imediatas"]);
     criarMapaRegioes({ topos: { ufs, ...outras }, estado, aoSelecionar: selecionar });
   } catch (erro) {
