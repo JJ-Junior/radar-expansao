@@ -17,7 +17,7 @@
 # ENTRADA:  tabelas gold.* do Supabase autohospedado via Docker (conexao pelo
 #           .env, incluindo DB_SSLMODE) + contagem de linhas das camadas
 #           bronze, silver e gold
-# SAIDA:    site/dados/*.json (substitui os arquivos inteiros a cada execucao)
+# SAIDA:    site/dados/*.json e site/img/previa.jpg (substitui os arquivos a cada execucao)
 #
 # =============================================================================
 # NOVIDADES DESTA ETAPA (vs o que voce ja aprendeu no curso)
@@ -211,6 +211,13 @@ def main() -> None:
     }
     (PASTA_SAIDA / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print("  site/dados/meta.json")
+
+    # a imagem de previa do link (site/img/previa.jpg) mostra o momento e as recomendadas: refaz junto
+    from gerar_previa import gerar as gerar_previa
+    try:
+        gerar_previa()
+    except Exception as erro:  # sem navegador na maquina: os dados ficam prontos mesmo assim
+        print(f"  aviso: previa do link nao foi gerada ({erro}); rode src/exportacao/gerar_previa.py depois")
     print("Pronto.")
 
 

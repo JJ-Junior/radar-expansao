@@ -12,7 +12,7 @@ import { desenharCamadas, desenharCriterios } from "./metodologia.js";
 import { STATUS_RECOMENDACAO } from "./indicadores.js";
 import { dataCurta, decimal, inteiro, mesPorExtenso, paraData, porcento, reaisCentavos } from "./formato.js";
 
-const TITULO_BASE = "Radar de Expansão";
+const TITULO_BASE = "Radar de Expansão · Squad DROP Database";
 const TITULO_INICIAL = document.title;
 
 // ---------------------------------------------------------------- tema (escuro é o padrão da marca)

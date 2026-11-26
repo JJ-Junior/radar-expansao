@@ -114,7 +114,10 @@ button, select, input { font: inherit; color: inherit; }
 /* ---------------------------------------------------------------- topo */
 .topo { position: sticky; top: 0; z-index: 50; background: color-mix(in srgb, var(--fundo) 82%, transparent); backdrop-filter: blur(12px); border-bottom: 1px solid var(--linha); }
 .topo__interno { width: min(var(--largura), 100% - 40px); margin-inline: auto; height: var(--topo); display: flex; align-items: center; gap: 24px; }
-.marca { display: flex; align-items: center; gap: 8px; text-decoration: none; font-family: var(--display); font-weight: 900; font-size: 1.45rem; text-transform: uppercase; letter-spacing: .02em; }
+.marca { display: flex; align-items: center; gap: 8px; text-decoration: none; font-family: var(--display); font-weight: 900; font-size: 1.45rem; text-transform: uppercase; letter-spacing: .02em; min-width: 0; }
+.marca__textos { display: flex; align-items: baseline; gap: 8px; min-width: 0; white-space: nowrap; }
+.marca__squad { font-weight: 600; color: var(--tinta-3); }
+.marca__curto { display: none; }
 .marca__icone { width: 28px; height: 28px; color: var(--limao-texto); }
 .topo__nav { margin-left: auto; display: flex; gap: 24px; font-family: var(--mono); font-size: .78rem; text-transform: uppercase; letter-spacing: .1em; }
 .topo__nav a { text-decoration: none; color: var(--tinta-2); }
@@ -122,7 +125,13 @@ button, select, input { font: inherit; color: inherit; }
 .botao-tema { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--linha-forte); background: transparent; display: grid; place-items: center; cursor: pointer; }
 .botao-tema svg { width: 17px; height: 17px; }
 @media (max-width: 860px) { .topo__nav { display: none; } .botao-tema { margin-left: auto; } }
-@media (max-width: 400px) { .marca__nome span { display: none; } }
+/* sem espaço para tudo numa linha: o squad desce para uma segunda linha menor */
+@media (max-width: 1180px) {
+  .marca__textos { flex-direction: column; align-items: flex-start; gap: 0; line-height: 1; }
+  .marca__sep { display: none; }
+  .marca__squad { font-size: .62em; letter-spacing: .06em; margin-top: 2px; }
+}
+@media (max-width: 360px) { .marca__longo { display: none; } .marca__curto { display: inline; } }
 
 .previa { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 8px 16px; font-size: .8rem; background: var(--fundo-2); color: var(--tinta-2); border-top: 1px solid var(--linha); text-align: center; }
 .previa[hidden] { display: none; }

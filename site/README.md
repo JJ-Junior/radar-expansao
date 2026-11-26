@@ -77,6 +77,10 @@ python src/exportacao/baixar_territorio.py   # só quando o IBGE mudar a divisã
 python src/exportacao/exportar_site.py       # regenera site/dados/*.json
 ```
 
+A **imagem de prévia do link** (`img/previa.jpg`, 1200 × 630, usada pelas tags `og:image` e `twitter:image`) é gerada por
+`src/exportacao/gerar_previa.py` a partir dos próprios dados (momento econômico e as recomendadas), com o Edge/Chrome sem janela;
+o `exportar_site.py` a refaz no fim de cada exportação.
+
 O `exportar_site.py` lê as tabelas `gold.*` com as credenciais do `.env` (o mesmo banco dos scripts de transformação).
 Ele também conta as linhas de cada camada para a seção "Dados" e confere a soma dos pesos, as notas entre 0 e 100 e a
 quantidade de cidades recomendadas antes de gravar. O site não calcula nota nem escolhe as recomendadas: só lê a gold.
