@@ -91,7 +91,7 @@ Cada tarefa numerada (`F2.3`, `F4.2`...) é pensada para virar **uma Issue no Gi
 - **Depende de:** —. **Destrava:** todas as frentes.
 - **Tarefas:**
   - [ ] F1.1 Revisar o `prd.md` com o squad (perguntas de negócio, critérios e pesos)
-  - [ ] F1.2 Revisar o `spec.md` e decidir onde o n8n roda (`spec.md`, seção 8)
+  - [ ] F1.2 Revisar o `spec.md` e escolher o cenário de ingestão da entrega — A (Python) ou B (n8n) — após a comparação (`spec.md`, seção 8)
   - [ ] F1.3 Revisar o `agents.md` (regras, cabeçalho padrão, padrão de commit)
   - [ ] F1.4 Criar o quadro no GitHub Projects e abrir as Issues a partir deste documento
   - [ ] F1.5 Proteger o `main` (merge só por PR com 1 aprovação)
@@ -104,15 +104,15 @@ Cada tarefa numerada (`F2.3`, `F4.2`...) é pensada para virar **uma Issue no Gi
 - **Entregáveis:** projeto no Supabase com os schemas `bronze`, `silver` e `gold`; `sql/bronze/` (`api_resposta`, `execucao`, `vw_ultimo_periodo`);
   `src/ingestao/` (localidades, agregados do IBGE em lotes, séries do BCB, carga inicial).
 - **Pronto quando:**
-  - Supabase criado e acessível pelo Session pooler até 28/11;
+  - Supabase e n8n autohospedados via Docker no ar e banco acessível aos scripts (túnel autenticado em `localhost:5432`) até 28/11;
   - `bronze.api_resposta` tem respostas de todos os recursos do `spec.md`, seção 2 (localidades, 6579, 4714, 5938, 7060, 10295, 9418, 9509, BCB 432 e 10813);
   - nenhuma chamada passa do limite de valores do IBGE (lotes por ano/UF);
   - rodar a carga duas vezes não duplica respostas;
   - erros de API ficam registrados em `bronze.execucao` sem derrubar o script.
 - **Depende de:** F1 (`spec.md` aprovado). **Destrava:** F3 e F5.
 - **Tarefas:**
-  - [ ] F2.1 Criar o projeto no Supabase e os schemas `bronze`, `silver` e `gold`
-  - [ ] F2.2 Testar a conexão pelo Session pooler a partir do `.env` (máquina local)
+  - [ ] F2.1 Subir o Supabase autohospedado via Docker e criar os schemas `bronze`, `silver` e `gold`
+  - [ ] F2.2 Testar a conexão com o banco a partir do `.env` (túnel autenticado em `localhost:5432`)
   - [ ] F2.3 DDL da bronze: `api_resposta`, `execucao` e `vw_ultimo_periodo`
   - [ ] F2.4 Módulo comum: conexão, chamada HTTP com timeout, 3 tentativas, validação de `content-type` e gravação na bronze com hash
   - [ ] F2.5 Ingestão de Localidades (regiões, estados, municípios `view=nivelado`)
@@ -178,10 +178,10 @@ Cada tarefa numerada (`F2.3`, `F4.2`...) é pensada para virar **uma Issue no Gi
   - uma execução de ponta a ponta termina com `sucesso` ou `sem_novidade` em `bronze.execucao`;
   - rodar duas vezes seguidas não duplica dados;
   - o JSON exportado não tem senha nem token.
-- **Depende de:** F2 (bronze) e F4 (para a execução completa). Decisão pendente: onde o n8n roda (`spec.md`, seção 8).
+- **Depende de:** F2 (bronze) e F4 (para a execução completa). Decisão pendente: cenário de ingestão A ou B (`spec.md`, seção 8).
 - **Tarefas:**
-  - [ ] F5.1 Subir ou acessar o n8n, conforme a decisão da F1.2
-  - [ ] F5.2 Criar a credencial Postgres no n8n (Session pooler)
+  - [ ] F5.1 Subir o n8n autohospedado via Docker (fuso America/Sao_Paulo)
+  - [ ] F5.2 Criar a credencial Postgres no n8n (rede Docker interna, papel `etl_radar`)
   - [ ] F5.3 Gatilho de agenda semanal (segunda, 06:00)
   - [ ] F5.4 Checagem de período novo do IBGE (`/periodos` × `bronze.vw_ultimo_periodo`)
   - [ ] F5.5 Busca incremental do BCB (última data salva − 30 dias; HTTP 404 = nada novo)
@@ -215,9 +215,9 @@ Cada tarefa numerada (`F2.3`, `F4.2`...) é pensada para virar **uma Issue no Gi
 
 - **Entregáveis:** `site/` publicado, com metodologia, arquitetura e vitrine de dados da gold.
 - **Pronto quando:** publicado com link no README; números iguais aos do dashboard; sem nenhuma credencial no código.
-- **Depende de:** F4. Decisão pendente: stack do site.
+- **Depende de:** F4. Stack definida: HTML/CSS/JS estático no GitHub Pages (`spec.md`, seção 9.2).
 - **Tarefas:**
-  - [ ] F7.1 Decidir a stack e a hospedagem do site
+  - [x] F7.1 Definir a stack e a hospedagem do site (HTML/CSS/JS estático no GitHub Pages)
   - [ ] F7.2 Exportar os dados da gold para arquivos lidos pelo site
   - [ ] F7.3 Páginas de metodologia, arquitetura e vitrine de dados
   - [ ] F7.4 Publicar e colocar o link no README

@@ -30,16 +30,19 @@ tamanho de mercado com poder de compra, concorrência (academias por habitante) 
 
 ```mermaid
 flowchart LR
-    IBGE[API IBGE<br/>Localidades + Agregados] --> ING[Ingestão Python<br/>src/ingestao]
+    IBGE[API IBGE<br/>Localidades + Agregados] --> ING[Ingestão<br/>Python ou n8n]
     BCB[API BCB<br/>SGS] --> ING
     N8N[n8n<br/>agenda semanal] -.dispara.-> ING
     ING --> B[(bronze<br/>JSON original)]
     B --> S[(silver<br/>modelo estrela)]
     S --> G[(gold<br/>tabelas de consumo)]
-    G --> APP[Streamlit<br/>dashboard]
+    G -->|API REST| APP[Streamlit<br/>dashboard]
+    G -->|JSON exportado| SITE[Site de apoio<br/>GitHub Pages]
 ```
 
-Detalhes completos (endpoints, modelo das tabelas, regras de transformação, lotes e carga incremental) em [`spec.md`](spec.md).
+**Supabase e n8n autohospedados via Docker.** O dashboard lê só a camada gold, pela API REST do Supabase, com permissão somente leitura.
+
+Detalhes completos (endpoints, modelo das tabelas, regras de transformação, lotes, carga incremental e os dois cenários de ingestão) em [`spec.md`](spec.md).
 
 ## 4. Dashboard
 
@@ -57,10 +60,11 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 Copy-Item .env.example .env   # preencha com as credenciais do seu banco
+Copy-Item .streamlit\secrets.toml.example .streamlit\secrets.toml   # segredos do dashboard
 ```
 
-A conexão com o Supabase usa o **Session pooler** (IPv4): a conexão direta do Supabase é só IPv6 e falha em várias redes
-e no Streamlit Cloud. Os campos estão explicados no [`.env.example`](.env.example).
+Supabase e n8n são autohospedados via Docker. Os campos estão explicados no [`.env.example`](.env.example)
+e no [`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example).
 
 Comandos de carga, transformação e do dashboard: _(a preencher quando os scripts existirem)_.
 
