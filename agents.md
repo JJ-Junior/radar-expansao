@@ -135,7 +135,7 @@ load_dotenv()  # credenciais vêm do .env, nunca do código
 
 ## 6. O assistente de IA NUNCA deve
 
-- Apagar, truncar ou atualizar dados da **bronze** (ela só recebe `INSERT`).
+- Apagar, truncar ou atualizar as respostas da **bronze** (`bronze.api_resposta` só recebe `INSERT`; só as tabelas de controle são atualizadas).
 - Transformar dado na ingestão.
 - Colocar chave, senha, token ou string de conexão em código, notebook, SQL, workflow exportado ou documentação.
 - Commitar `.env`, `.venv/`, `__pycache__/`, `.ipynb_checkpoints/`, dados locais ou configurações locais de ferramentas.
