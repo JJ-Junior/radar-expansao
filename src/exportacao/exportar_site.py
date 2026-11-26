@@ -15,8 +15,9 @@
 # OBJETIVO: gerar os arquivos JSON que o site de apoio le (contrato em
 #           site/dados/README.md), a partir da camada gold ou, enquanto ela nao
 #           existe, de uma previa calculada direto das APIs (previa_api.py).
-# ENTRADA:  FONTE = "gold": tabelas gold.* do Supabase (+ contagem de linhas
-#           das camadas bronze, silver e gold)
+# ENTRADA:  FONTE = "gold": tabelas gold.* do Supabase autohospedado via Docker
+#           (conexao pelo .env, incluindo DB_SSLMODE) + contagem de linhas
+#           das camadas bronze, silver e gold
 #           FONTE = "api":  APIs do IBGE e do BCB
 # SAIDA:    site/dados/*.json (substitui os arquivos inteiros a cada execucao)
 #
@@ -78,7 +79,7 @@ PASTA_SAIDA = RAIZ / "site" / "dados"
 
 
 def conectar_banco():
-    """Cria a engine do SQLAlchemy com as variaveis do .env (Session pooler, SSL)."""
+    """Cria a engine do SQLAlchemy com as variaveis do .env (Supabase autohospedado via Docker)."""
     from dotenv import load_dotenv
     from sqlalchemy import create_engine
     from sqlalchemy.engine import URL
@@ -89,7 +90,7 @@ def conectar_banco():
         sys.exit(f"Variaveis ausentes no .env: {', '.join(faltando)}")
     url = URL.create("postgresql+psycopg2", username=os.getenv("DB_USER"), password=os.getenv("DB_PASSWORD"),
                      host=os.getenv("DB_HOST"), port=int(os.getenv("DB_PORT")), database=os.getenv("DB_NAME"),
-                     query={"sslmode": "require"})
+                     query={"sslmode": os.getenv("DB_SSLMODE") or "prefer"})  # prefer | require | disable
     return create_engine(url)
 
 
