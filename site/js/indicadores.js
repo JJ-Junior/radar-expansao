@@ -29,6 +29,33 @@ export const CRITERIOS = [
   { criterio: "mercado_formal", nome: "Mercado formal", indicador: "salario_medio" },
 ];
 
+/**
+ * Componentes da nota como estão em ranking_criterio.json (7 linhas: a riqueza local tem nível e tendência).
+ * Nome e descrição com acento para exibir; peso, fonte, sentido e ordem vêm sempre da gold.
+ */
+export const COMPONENTES = {
+  mercado: { nome: "Tamanho de mercado", descricao: "População estimada mais recente." },
+  poder_compra: { nome: "Poder de compra", descricao: "Renda domiciliar per capita média (Censo 2022)." },
+  espaco_competitivo: { nome: "Espaço competitivo", descricao: "Academias (CNAE 93.13-1) por 10 mil habitantes, limitado aos percentis 5% e 95% do universo." },
+  crescimento: { nome: "Crescimento", descricao: "Taxa anual de crescimento da população desde o Censo 2022." },
+  riqueza_nivel: { nome: "Riqueza · nível", descricao: "PIB per capita do último ano disponível." },
+  riqueza_tendencia: { nome: "Riqueza · tendência", descricao: "Taxa média anual do PIB per capita em 5 anos." },
+  mercado_formal: { nome: "Mercado formal", descricao: "Salário médio mensal dos empregos formais." },
+};
+export const nomeComponente = (c) => COMPONENTES[c.criterio]?.nome ?? c.criterio;
+
+/** Peso de um critério do radar (soma dos componentes do mesmo grupo: riqueza = nível + tendência). */
+export function pesoDoCriterio(criterios, criterio) {
+  const linhas = criterios.filter((x) => (x.grupo ?? x.criterio) === criterio);
+  return linhas.length ? linhas.reduce((s, x) => s + Number(x.peso), 0) : null;
+}
+
+/** Parâmetro de gold.parametro_ranking (ou o padrão, se o arquivo não existir). */
+export function parametro(estado, nome, padrao) {
+  const linha = estado.parametros?.find((p) => p.parametro === nome);
+  return linha ? Number(linha.valor) : padrao;
+}
+
 /** Indicadores da ficha. `comparacao` vira a frase do percentil. */
 export const INDICADORES_FICHA = [
   { coluna: "populacao", rotulo: "População", formato: inteiro, comparacao: "maior que" },

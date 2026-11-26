@@ -178,8 +178,9 @@
           <header class="secao__cabecalho">
             <p class="rotulo"><span class="rotulo__num">03</span> Top cidades</p>
             <h2 id="titulo-top">As mais prontas</h2>
+            <p class="secao__lede" id="top-explica"></p>
           </header>
-          <div class="segmentado" id="top-filtro" role="radiogroup" aria-label="Região das cidades"></div>
+          <div class="segmentado" id="top-filtro" role="radiogroup" aria-label="Lista de cidades"></div>
         </div>
         <div class="top__janela">
           <ol class="top__trilho" id="top-trilho"></ol>
@@ -210,6 +211,7 @@
               <span class="discreto">de 0 a 100</span>
             </div>
             <ul class="ficha__posicoes" id="ficha-posicoes"></ul>
+            <ul class="ficha__avisos" id="ficha-avisos"></ul>
             <ul class="barras-criterio" id="ficha-criterios"></ul>
           </div>
           <div class="ficha__indicadores">
@@ -250,8 +252,9 @@
         <div class="cartoes-regra">
           <article class="cartao-regra" data-revela><span class="cartao-regra__num">A</span><h3>Universo</h3><p>Só entram cidades com <b data-meta="pop-minima">50.000</b> habitantes ou mais. Abaixo disso, o público pagante de uma unidade de médio porte é pequeno demais.</p></article>
           <article class="cartao-regra" data-revela><span class="cartao-regra__num">B</span><h3>Percentil</h3><p>Nota 80 em poder de compra quer dizer renda maior que a de 80% das cidades do universo. Todas as notas vão de 0 a 100.</p></article>
-          <article class="cartao-regra" data-revela><span class="cartao-regra__num">C</span><h3>Sentido</h3><p>No espaço competitivo a escala é invertida: menos academias por habitante dá nota maior.</p></article>
-          <article class="cartao-regra" data-revela><span class="cartao-regra__num">D</span><h3>Dado faltante</h3><p>O critério recebe nota neutra 50 e a cidade aparece com o aviso “dados incompletos”.</p></article>
+          <article class="cartao-regra" data-revela><span class="cartao-regra__num">C</span><h3>Sentido</h3><p>No espaço competitivo a escala é invertida: menos academias por habitante dá nota maior. Antes, o indicador é limitado aos percentis 5% e 95%, para valores extremos não dominarem a nota.</p></article>
+          <article class="cartao-regra" data-revela><span class="cartao-regra__num">D</span><h3>Dado faltante</h3><p>O peso do critério sem dado é dividido entre os demais, na mesma proporção, e a cidade aparece com o aviso “dados incompletos”.</p></article>
+          <article class="cartao-regra cartao-regra--destaque" data-revela><span class="cartao-regra__num">E</span><h3>As <b data-param="unidades">5</b> recomendadas</h3><p>Percorre o ranking de cima para baixo e escolhe a cidade se ela tiver nota de poder de compra a partir de <b data-param="trava">50</b> (trava de renda) e se a sua região imediata ainda não tiver uma escolhida. O ranking completo não muda.</p></article>
         </div>
 
         <div class="duas-colunas">

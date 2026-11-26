@@ -1,7 +1,8 @@
 // Ficha da cidade: gráfico-radar das notas, posição, notas por critério, percentis e cidades parecidas.
 // Percentis e "parecidas" são leituras das colunas da gold feitas no navegador.
 
-import { CRITERIOS, INDICADORES_FICHA, NOMES_UF, REGIOES } from "./indicadores.js";
+import { COMPONENTES, CRITERIOS, INDICADORES_FICHA, NOMES_UF, REGIOES, pesoDoCriterio } from "./indicadores.js";
+import { motivoFora } from "./recomendacao.js";
 import { decimal, inteiro, ordinal } from "./formato.js";
 import { graficoRadar } from "./grafico-radar.js";
 
@@ -47,7 +48,7 @@ export function criarFicha({ estado, aoSelecionar }) {
       .sort((a, b) => a.d - b.d).slice(0, quantas);
   }
 
-  const peso = (criterio) => estado.criterios.find((c) => c.criterio === criterio)?.peso ?? null;
+  const peso = (criterio) => pesoDoCriterio(estado.criterios, criterio);
   const totalUf = d3.rollup(estado.ranking, (v) => v.length, (r) => r.uf_sigla);
 
   function resumo(r) {
@@ -59,6 +60,19 @@ export function criarFicha({ estado, aoSelecionar }) {
     return [fortes.length && `Destaque em ${juntar(fortes)}.`, fracos.length && `Ponto de atenção: ${juntar(fracos)}.`].filter(Boolean).join(" ");
   }
 
+  /** Recomendação, motivo de estar fora da lista e alertas da gold (concorrência e dado faltante). */
+  function avisos(r) {
+    const lista = [];
+    if (r.recomendado_top5) lista.push(`<li class="aviso--recomendada"><b>Recomendada nº ${r.ordem_recomendacao}</b> na lista de ${estado.recomendadas.length} unidades.</li>`);
+    else if (estado.recomendadas.length) lista.push(`<li>Fora da lista de recomendadas: ${motivoFora(estado, r)}.</li>`);
+    if (r.verificar_concorrencia) lista.push(`<li class="aviso--atencao"><b>Verificar concorrência no local:</b> nenhuma academia formal registrada (CNAE 93.13-1).</li>`);
+    if (r.dados_incompletos) {
+      const nomes = (r.criterios_ausentes ?? []).map((c) => COMPONENTES[c]?.nome ?? c).join(", ");
+      lista.push(`<li class="aviso--atencao"><b>Dados incompletos:</b> ${nomes || "algum critério"} sem dado; o peso foi dividido entre os demais.</li>`);
+    }
+    return lista.join("");
+  }
+
   function mostrar(id, { exemplo = false } = {}) {
     const m = estado.porId.get(id);
     if (!m) return;
@@ -66,7 +80,7 @@ export function criarFicha({ estado, aoSelecionar }) {
     const regiao = REGIOES.find((x) => x.sigla === m.regiao_sigla)?.nome ?? m.regiao_sigla;
     const onde = [NOMES_UF[m.uf_sigla] ?? m.uf_sigla, regiao, m.regiao_imediata_nome && `região imediata de ${m.regiao_imediata_nome}`].filter(Boolean).join(" · ");
 
-    el("ficha-sobre").innerHTML = `<span class="rotulo__num">04</span> ${exemplo ? "Ficha da cidade · exemplo: a 1ª do ranking" : "Ficha da cidade"}`;
+    el("ficha-sobre").innerHTML = `<span class="rotulo__num">04</span> ${exemplo ? "Ficha da cidade · exemplo: a 1ª recomendada" : "Ficha da cidade"}`;
     el("ficha-nome").textContent = `${m.municipio_nome} (${m.uf_sigla})`;
     el("ficha-resumo").textContent = r
       ? `${onde}. ${resumo(r)}`
@@ -81,9 +95,11 @@ export function criarFicha({ estado, aoSelecionar }) {
     el("ficha-nota").classList.toggle("ficha__nota-valor--sem", !r);
     el("ficha-posicoes").innerHTML = r
       ? `<li><span>No Brasil</span><b>${ordinal(r.posicao_brasil)} de ${inteiro(estado.ranking.length)}</b></li>
-         <li><span>Em ${m.uf_sigla}</span><b>${ordinal(r.posicao_uf)} de ${inteiro(totalUf.get(m.uf_sigla))}</b></li>
-         ${r.dados_incompletos ? "<li><span>⚠ Dados incompletos</span><b>nota neutra</b></li>" : ""}`
+         ${r.posicao_regiao ? `<li><span>Na região ${regiao}</span><b>${ordinal(r.posicao_regiao)}</b></li>` : ""}
+         <li><span>Em ${m.uf_sigla}</span><b>${ordinal(r.posicao_uf)} de ${inteiro(totalUf.get(m.uf_sigla))}</b></li>`
       : `<li class="ficha__fora">Fora do universo do ranking: menos de 50 mil habitantes.</li>`;
+
+    el("ficha-avisos").innerHTML = r ? avisos(r) : "";
 
     el("ficha-criterios").innerHTML = r ? CRITERIOS.map((c) => {
       const v = r[`nota_${c.criterio}`];

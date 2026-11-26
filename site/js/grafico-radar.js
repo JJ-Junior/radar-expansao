@@ -10,7 +10,7 @@ const CURTOS = {
 
 /** Devolve o HTML de um <svg> com o radar das notas de `ranking` (linha de ranking_expansao). */
 export function graficoRadar(ranking, { tamanho = 220, rotulos = true, valores = false, titulo = "" } = {}) {
-  const margem = rotulos ? 38 : 6;
+  const margem = !rotulos ? 6 : tamanho > 260 ? 78 : 38;   // nomes completos precisam de mais espaço
   const raio = tamanho / 2 - margem;
   const centro = tamanho / 2;
   const n = CRITERIOS.length;

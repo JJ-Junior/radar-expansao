@@ -79,7 +79,7 @@
 
 /* ---------------------------------------------------------------- base */
 *, *::before, *::after { box-sizing: border-box; }
-html { scroll-padding-top: calc(var(--topo-total, var(--topo)) + 16px); }
+html { overflow-x: clip; scroll-padding-top: calc(var(--topo-total, var(--topo)) + 16px); }
 html.lenis, html.lenis body { height: auto; }
 .lenis.lenis-smooth { scroll-behavior: auto !important; }
 body {
@@ -125,6 +125,7 @@ button, select, input { font: inherit; color: inherit; }
 @media (max-width: 400px) { .marca__nome span { display: none; } }
 
 .previa { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 6px 16px; font-size: .8rem; background: var(--fundo-2); color: var(--tinta-2); border-top: 1px solid var(--linha); text-align: center; }
+.previa[hidden] { display: none; }
 .previa__tag { font-family: var(--mono); font-weight: 600; font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; background: var(--amarelo); color: #1d1500; padding: 2px 8px; border-radius: 4px; flex: none; }
 @media (max-width: 700px) { .previa__longo { display: none; } .previa { font-size: .74rem; } }
 .selo-previa { display: inline-flex; gap: 8px; align-items: center; font-family: var(--mono); font-size: .72rem; letter-spacing: .1em; text-transform: uppercase; color: var(--tinta-2); border: 1px dashed var(--amarelo); border-radius: 6px; padding: 4px 10px; }
@@ -281,6 +282,8 @@ button, select, input { font: inherit; color: inherit; }
 .mapa .cidade { fill: var(--sinal); stroke: var(--halo); stroke-width: .8; vector-effect: non-scaling-stroke; cursor: pointer; transition: opacity .4s; }
 .mapa .cidade--fora { opacity: .12; pointer-events: none; }
 .mapa .cidade:hover { stroke: var(--tinta); stroke-width: 2; }
+.mapa .cidade--recomendada { fill: var(--limao-texto); stroke: var(--halo); stroke-width: 2; }
+.mapa__legenda .ponto--recomendada { background: var(--limao-texto); }
 .mapa .rotulo-cidade { font-family: var(--mono); font-weight: 600; fill: var(--tinta); paint-order: stroke; stroke: var(--halo); pointer-events: none; }
 
 .historia__passos { padding-bottom: 20vh; }
@@ -339,6 +342,17 @@ button, select, input { font: inherit; color: inherit; }
 .cartao-cidade__numeros span { font-family: var(--mono); font-size: .6rem; letter-spacing: .08em; text-transform: uppercase; color: var(--tinta-3); }
 .cartao-cidade__nota b { color: var(--limao-texto); }
 .cartao-cidade button { margin-top: auto; }
+.cartao-cidade--recomendada { border-color: color-mix(in srgb, var(--limao) 55%, var(--linha)); }
+.cartao-cidade--recomendada .cartao-cidade__pos { -webkit-text-stroke-color: var(--limao-texto); }
+.selo-recomendada { align-self: flex-start; margin: -4px 0 0; font-family: var(--mono); font-size: .66rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; background: var(--limao); color: var(--limao-sobre); padding: 3px 8px; border-radius: 4px; }
+.cartao-cidade--nota { background: transparent; border-style: dashed; justify-content: flex-start; }
+.cartao-cidade--nota:hover { transform: none; }
+.fora-lista { list-style: none; margin: 4px 0 8px; padding: 0; display: grid; gap: 12px; }
+.fora-lista button { all: unset; cursor: pointer; display: block; font-size: 1rem; }
+.fora-lista button:hover b, .fora-lista button:focus-visible b { color: var(--limao-texto); }
+.fora-lista button:focus-visible { outline: 3px solid var(--foco); }
+.fora-lista button span { font-family: var(--mono); font-size: .7rem; color: var(--tinta-3); }
+.fora-lista small { display: block; color: var(--tinta-2); font-size: .82rem; line-height: 1.35; margin-top: 2px; }
 
 /* gráfico-radar das 6 notas */
 .radar-notas { display: block; width: 100%; height: auto; overflow: visible; }
@@ -382,6 +396,11 @@ button, select, input { font: inherit; color: inherit; }
 .parecidos button { border: 1px solid var(--linha-forte); background: transparent; border-radius: 999px; padding: 7px 14px; cursor: pointer; font-size: .9rem; }
 .parecidos button:hover { border-color: var(--limao-texto); }
 .parecidos small { font-family: var(--mono); color: var(--tinta-3); margin-left: 6px; font-size: .7rem; }
+.ficha__avisos { list-style: none; margin: -10px 0 22px; padding: 0; display: grid; gap: 8px; }
+.ficha__avisos li { font-size: .86rem; padding: 8px 12px; border-radius: var(--raio-p); background: var(--superficie-2); color: var(--tinta-2); border-left: 3px solid var(--linha-forte); }
+.ficha__avisos li b { color: var(--tinta); }
+.ficha__avisos .aviso--recomendada { border-left-color: var(--limao-texto); }
+.ficha__avisos .aviso--atencao { border-left-color: var(--amarelo); }
 .ficha__fora { background: var(--superficie-2); border-radius: var(--raio); padding: 16px 18px; color: var(--tinta-2); display: block !important; }
 @media (max-width: 1080px) { .ficha { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .ficha__indicadores { grid-column: 1 / -1; } }
 @media (max-width: 700px) { .ficha { grid-template-columns: 1fr; } .indicadores { grid-template-columns: 1fr 1fr; } }
@@ -415,13 +434,13 @@ button, select, input { font: inherit; color: inherit; }
 /* ---------------------------------------------------------------- 06 método */
 .formula { font-family: var(--mono); font-size: clamp(.78rem, 1.3vw, .98rem); background: var(--superficie); border: 1px solid var(--linha); border-left: 3px solid var(--limao); border-radius: var(--raio-p); padding: 22px 24px; overflow-x: auto; color: var(--tinta-2); margin: 0 0 32px; line-height: 1.8; }
 .formula b { color: var(--limao-texto); font-weight: 600; }
-.cartoes-regra { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 32px; }
+.cartoes-regra { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; margin-bottom: 32px; }
+.cartao-regra--destaque { border-color: var(--limao); background: color-mix(in srgb, var(--limao) 8%, var(--superficie)); }
 .cartao-regra { background: var(--superficie); border: 1px solid var(--linha); border-radius: var(--raio); padding: 22px; }
 .cartao-regra__num { font-family: var(--mono); font-size: .75rem; color: var(--limao-texto); }
 .cartao-regra h3 { font-family: var(--display); font-weight: 900; font-size: 1.8rem; text-transform: uppercase; margin: 8px 0 10px; }
 .cartao-regra p { font-size: .92rem; color: var(--tinta-2); margin: 0; }
-@media (max-width: 960px) { .cartoes-regra { grid-template-columns: 1fr 1fr; } }
-@media (max-width: 560px) { .cartoes-regra { grid-template-columns: 1fr; } }
+
 .duas-colunas { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 16px; align-items: start; }
 @media (max-width: 900px) { .duas-colunas { grid-template-columns: minmax(0, 1fr); } }
 .painel { background: var(--superficie); border: 1px solid var(--linha); border-radius: var(--raio); padding: 6px 22px 18px; }

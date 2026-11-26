@@ -110,11 +110,13 @@ export function criarMapaRegioes({ topos, estado, aoSelecionar }) {
     return { c, x, y, r: 2.2 + Math.sqrt(c.populacao / 1e6) * 5 };
   });
   const pontos = gCidades.selectAll("circle").data(cidades).join("circle")
-    .attr("class", "cidade").attr("cx", (d) => d.x).attr("cy", (d) => d.y).attr("r", (d) => d.r)
+    .attr("class", (d) => `cidade${d.c.ranking.recomendado_top5 ? " cidade--recomendada" : ""}`)
+    .attr("cx", (d) => d.x).attr("cy", (d) => d.y).attr("r", (d) => d.r)
     .on("click", (_, d) => aoSelecionar(d.c.municipio_id))
     .on("mousemove", (e, d) => mostrarDica(e, `<strong>${d.c.municipio_nome} · ${d.c.uf_sigla}</strong>
-      <span class="mono">${d.c.ranking.posicao_brasil}º no Brasil</span><br>Nota <b>${decimal(d.c.ranking.nota_final, 1)}</b> · ${compacto(d.c.populacao)} hab.`))
+      <span class="mono">${d.c.ranking.posicao_brasil}º no Brasil${d.c.ranking.recomendado_top5 ? ` · recomendada nº ${d.c.ranking.ordem_recomendacao}` : ""}</span><br>Nota <b>${decimal(d.c.ranking.nota_final, 1)}</b> · ${compacto(d.c.populacao)} hab.`))
     .on("mouseleave", esconderDica);
+  pontos.filter((d) => d.c.ranking.recomendado_top5).raise();   // recomendadas por cima das outras
   pontos.append("title").text((d) => `${d.c.municipio_nome} (${d.c.uf_sigla}), nota ${decimal(d.c.ranking.nota_final, 1)}`);
 
   // ------------------------------------------------------------ zoom animado
@@ -191,7 +193,8 @@ export function criarMapaRegioes({ topos, estado, aoSelecionar }) {
   document.getElementById("mapa-legenda").innerHTML = `Nota média das cidades avaliadas
     <div class="escala">${CORES.map((c) => `<i style="background:var(${c})"></i>`).join("")}</div>
     <div style="display:flex;justify-content:space-between"><span>&lt; ${LIMIARES[0]}</span><span>${LIMIARES.at(-1)}+</span></div>
-    <div style="margin-top:6px"><span class="ponto"></span>cidade avaliada (tamanho = população)</div>`;
+    <div style="margin-top:6px"><span class="ponto"></span>cidade avaliada (tamanho = população)</div>
+    ${estado.recomendadas.length ? `<div><span class="ponto ponto--recomendada"></span>unidade recomendada</div>` : ""}`;
 
   function mostrarDica(e, html) {
     dica.innerHTML = html;
@@ -232,7 +235,7 @@ export function criarMapaRegioes({ topos, estado, aoSelecionar }) {
     <div><b>${decimal(u.media, 1)}</b><span>nota média</span></div><div><b>${compacto(u.populacao)}</b><span>habitantes</span></div></div>`;
   const passos = [
     { u: brasil, nivel: "01 · Brasil", titulo: `${inteiro(brasil.n)} cidades no radar`,
-      texto: `Todas as cidades com 50 mil habitantes ou mais, nas 5 regiões. A mais bem colocada é ${brasil.lider.municipio_nome} (${brasil.lider.uf_sigla}).` },
+      texto: `Todas as cidades com 50 mil habitantes ou mais, nas 5 regiões. A mais bem colocada é ${brasil.lider.municipio_nome} (${brasil.lider.uf_sigla})${estado.recomendadas.length ? `; os pontos verdes são as ${estado.recomendadas.length} unidades recomendadas` : ""}.` },
     { u: regiao, nivel: "02 · Região", titulo: `${regiao.nome} na frente`,
       texto: `É a região com a maior nota média entre as cidades avaliadas. Líder: ${regiao.lider.municipio_nome} (${regiao.lider.uf_sigla}).` },
     { u: uf, nivel: "03 · Estado", titulo: uf.nome,

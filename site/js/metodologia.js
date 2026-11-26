@@ -1,8 +1,9 @@
 // Critérios (painel em estilo radar: setor = peso), fórmula da nota e camadas do Lakehouse.
 // Pesos, descrições e fontes vêm de ranking_criterio.json; nada é fixado aqui além da ordem de exibição.
 
-import { CRITERIOS } from "./indicadores.js";
-import { inteiro } from "./formato.js";
+import { COMPONENTES, nomeComponente } from "./indicadores.js";
+import { decimal, inteiro } from "./formato.js";
+import { quantidadeRecomendada, travaDeRenda } from "./recomendacao.js";
 import { movimentoLigado } from "./movimento.js";
 
 const R_INTERNO = 92, R_EXTERNO = 250, FOLGA = 1.6;   // raios e espaço entre setores (graus)
@@ -14,7 +15,12 @@ function arco(r0, r1, a0, a1) {
 }
 
 export function desenharCriterios({ estado }) {
-  const criterios = CRITERIOS.map((c, i) => ({ ...c, codigo: `CRT-0${i + 1}`, ...estado.criterios.find((x) => x.criterio === c.criterio) }));
+  // um setor por componente da gold (a riqueza local aparece como nível + tendência)
+  const criterios = estado.criterios.map((c, i) => ({
+    ...c, peso: Number(c.peso), codigo: `CRT-0${i + 1}`, nome: nomeComponente(c),
+    descricao: COMPONENTES[c.criterio]?.descricao ?? c.descricao,
+  }));
+  const grupos = new Set(estado.criterios.map((c) => c.grupo ?? c.criterio)).size;
   const rad = (g) => (g * Math.PI) / 180;
 
   // ------------------------------------------------------------ painel em radar
@@ -44,7 +50,7 @@ export function desenharCriterios({ estado }) {
       ${aneis}${tiques}
       <path class="varredura" d="${arco(0, R_EXTERNO, rad(-40), rad(0))}"/>
       ${setores}
-      <text class="centro-num" text-anchor="middle" y="8" font-size="64">6</text>
+      <text class="centro-num" text-anchor="middle" y="8" font-size="64">${grupos}</text>
       <text class="centro-txt" text-anchor="middle" y="36">critérios</text>
     </svg>`;
 
@@ -72,14 +78,18 @@ export function desenharCriterios({ estado }) {
     const { gsap } = window;
     const disparo = { trigger: "#ideal-radar", start: "top 75%", once: true };
     gsap.from("#ideal-radar .setor-grupo", { scale: 0, svgOrigin: "0 0", opacity: 0, duration: 0.9, ease: "back.out(1.4)", stagger: 0.1, scrollTrigger: disparo });
-    gsap.from("#ideal-lista li", { x: 40, opacity: 0, duration: 0.6, ease: "power3.out", stagger: 0.08, scrollTrigger: { ...disparo } });
+    gsap.from("#ideal-lista li", { y: 24, opacity: 0, duration: 0.6, ease: "power3.out", stagger: 0.08, scrollTrigger: { ...disparo } });
   }
 
   // ------------------------------------------------------------ fórmula
   const nomeColuna = (c) => c.criterio;
   document.getElementById("formula").innerHTML =
     `nota_final = ${criterios.map((c) => `<b>${String(c.peso.toFixed(2)).replace(".", ",")}</b> × nota_${nomeColuna(c)}`).join("\n           + ")}\n\n` +
-    `nota_&lt;critério&gt; = percentil da cidade no universo (0 a 100)  · invertido quando menor é melhor`;
+    `nota_&lt;critério&gt; = percentil da cidade no universo (0 a 100)  · invertido quando menor é melhor
+` +
+    `sem dado num critério  → nota_final = Σ(peso × nota) / Σ(pesos com dado)`;
+  for (const el of document.querySelectorAll('[data-param="trava"]')) el.textContent = decimal(travaDeRenda(estado), 0);
+  for (const el of document.querySelectorAll('[data-param="unidades"]')) el.textContent = inteiro(quantidadeRecomendada(estado));
 
   for (const el of document.querySelectorAll('[data-meta="pop-minima"]')) el.textContent = inteiro(estado.meta.populacao_minima_universo);
 }
@@ -108,7 +118,7 @@ export function desenharCamadas({ estado }) {
     { classe: "silver", sub: "camada 2", nome: "Silver", texto: "Modelo estrela: dimensões de região, UF, município e calendário; fatos municipais e macroeconômicos.", lista: tabelas("silver") },
     { classe: "gold", sub: "camada 3", nome: "Gold", texto: "Tabelas prontas para consumo: indicadores, ranking, critérios, contexto macro e semáforo.", lista: tabelas("gold") },
     { classe: "uso", sub: "consumo", nome: "Painéis", texto: "Dashboard Streamlit lendo a gold e este site, que lê arquivos JSON exportados da gold.",
-      lista: "<ul><li>dashboard<span>em breve</span></li><li>site de apoio<span>no ar</span></li></ul>" },
+      lista: "<ul><li>dashboard<span>em breve</span></li><li>site de apoio<span>esta página</span></li></ul>" },
   ];
   document.getElementById("camadas").innerHTML = etapas.map((e) => `
     <li class="camada camada--${e.classe}">

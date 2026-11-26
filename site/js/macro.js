@@ -87,7 +87,7 @@ export function criarMacro({ estado }) {
     cartao.setAttribute("data-revela", "");
     cartao.innerHTML = `<h4>${serie.titulo}</h4>
       <p class="grafico__atual">${serie.formato(ultimo[serie.coluna])}</p>
-      <p class="grafico__var">${mesCurto(ultimo.data)} · ${serie.variacao(ultimo)}</p>
+      <p class="grafico__var">${mesCurto(ultimo.data)}${ultimo.mes_parcial ? " (mês parcial)" : ""} · ${serie.variacao(ultimo)}</p>
       <div class="grafico__dica" hidden></div>`;
     area.appendChild(cartao);
 

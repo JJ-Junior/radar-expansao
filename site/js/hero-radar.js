@@ -6,7 +6,7 @@ import { feicoes, objetoDe } from "./geo.js";
 const VELOCIDADE = 0.85;          // radianos por segundo (~7 s por volta)
 const LARGURA_RASTRO = 1.1;       // abertura do rastro da varredura, em radianos
 const MEIA_VIDA = 1.8;            // segundos que um ponto leva para apagar depois de varrido
-const ROTULOS = 5;                // cidades do topo que ganham nome quando acesas
+const ROTULOS = 5;                // sem lista de recomendadas: quantas do topo ganham nome
 
 const cor = (nome) => getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
 function rgba(hex, a) {
@@ -65,13 +65,15 @@ export function criarRadarHero({ canvas, topoUfs, cidades }) {
     sctx.strokeStyle = rgba(cor("--tinta-2"), 0.55); sctx.lineWidth = 1.2;
     sctx.beginPath(); caminho(contorno); sctx.stroke();
 
+    const temLista = cidades.some((c) => c.ranking?.recomendado_top5);
     pontos = cidades.filter((c) => c.longitude !== null).map((c, i) => {
       const [x, y] = projecao([c.longitude, c.latitude]);
       return {
         x, y,
         angulo: Math.atan2(y - cy, x - cx),
         r: 1.3 + Math.sqrt(c.populacao / 1e6) * 3.2,
-        nome: i < ROTULOS ? c.municipio_nome : null,
+        // nomes no radar: as unidades recomendadas (ou as primeiras do ranking, se não houver lista)
+        nome: (temLista ? c.ranking?.recomendado_top5 : i < ROTULOS) ? c.municipio_nome : null,
       };
     });
   }

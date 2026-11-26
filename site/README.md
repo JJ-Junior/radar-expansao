@@ -3,10 +3,10 @@
 Vitrine de expansão para o diretor da rede de academias, numa página só, contada como um pitch:
 
 1. **Hero:** o radar varre o Brasil e acende as cidades avaliadas; KPIs e busca de cidade.
-2. **Letreiro** com os números do momento (Selic, IPCA, dólar, cidades no radar, 1ª do ranking).
+2. **Letreiro** com os números do momento (Selic, IPCA, dólar, cidades no radar, 1ª do ranking, as recomendadas).
 3. **Quando:** semáforo econômico, histórico mês a mês e as três séries.
 4. **Onde:** mapa por regiões do IBGE que se aproxima com o scroll — Brasil → região → estado → região intermediária → região imediata —, e depois fica livre para explorar.
-5. **Top cidades:** cards com o gráfico-radar das 6 notas, num trilho horizontal.
+5. **As 5 recomendadas:** cards com o gráfico-radar das notas, num trilho horizontal, e o motivo de quem ficou de fora (trava de renda ou região imediata repetida); também o ranking geral por região.
 6. **Ficha da cidade**, com endereço próprio (`?municipio=<código IBGE>`).
 7. **Critérios:** o perfil que o Radar procura (cada setor = peso).
 8. **Método:** fórmula, regras, semáforo e limitações.
@@ -45,7 +45,8 @@ site/
 │   ├── macro.js          semáforo, histórico e gráficos de Selic, IPCA e dólar
 │   ├── mapa-regioes.js   mapa por regiões do IBGE: história guiada pelo scroll + exploração livre
 │   ├── geo.js            utilidades das malhas TopoJSON
-│   ├── cards.js          top cidades em trilho horizontal
+│   ├── cards.js          as recomendadas e o ranking geral em trilho horizontal
+│   ├── recomendacao.js   explica a lista de recomendadas (trava de renda, uma por região imediata)
 │   ├── grafico-radar.js  gráfico-radar das 6 notas (SVG)
 │   ├── ficha.js          ficha da cidade: notas, percentis, cidades parecidas
 │   ├── metodologia.js    painel dos critérios, fórmula e camadas do Lakehouse
@@ -76,9 +77,9 @@ python src/exportacao/baixar_territorio.py   # só quando o IBGE mudar a divisã
 python src/exportacao/exportar_site.py       # regenera site/dados/*.json
 ```
 
-No `CONFIG` do `exportar_site.py`:
-- `FONTE = "api"` gera a **prévia** direto das APIs, e o site mostra o aviso "Prévia — ranking calculado após a camada gold".
-- `FONTE = "gold"` serve para quando a camada gold existir. O script lê as tabelas `gold.*` com as credenciais do `.env`, conta as linhas de cada camada para a seção "Dados", e o aviso de prévia some sozinho.
+O `exportar_site.py` lê as tabelas `gold.*` com as credenciais do `.env` (o mesmo banco dos scripts de transformação).
+Ele também conta as linhas de cada camada para a seção "Dados" e confere a soma dos pesos, as notas entre 0 e 100 e a
+quantidade de cidades recomendadas antes de gravar. O site não calcula nota nem escolhe as recomendadas: só lê a gold.
 
 ## Publicar no GitHub Pages
 

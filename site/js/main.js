@@ -61,6 +61,7 @@ function montarLetreiro(estado, { atual, linhaAtual }) {
     ["Cidades no radar", inteiro(estado.ranking.length)],
     primeiro && ["1ª do ranking", `${primeiro.municipio_nome} ${decimal(primeiro.nota_final, 1)}`],
     atual && ["Momento", atual.recomendacao],
+    estado.recomendadas.length && [`${estado.recomendadas.length} recomendadas`, estado.recomendadas.map((r) => r.municipio_nome).join(" · ")],
   ].filter(Boolean);
   const grupo = (oculto) => `<div class="letreiro__grupo" ${oculto ? 'aria-hidden="true"' : ""}>${itens.map(([r, v]) => `<span class="letreiro__item">${r}<b>${v}</b></span>`).join("")}</div>`;
   // dois grupos iguais: o trilho anda metade da largura e recomeça sem emenda
@@ -114,7 +115,7 @@ async function iniciar() {
   const daUrl = () => Number(new URLSearchParams(location.search).get("municipio")) || null;
   const inicial = daUrl();
   if (inicial && estado.porId.has(inicial)) selecionar(inicial, { historico: false, rolar: false });
-  else if (estado.ranking[0]) ficha.mostrar(estado.ranking[0].municipio_id, { exemplo: true });
+  else if (estado.ranking[0]) ficha.mostrar((estado.recomendadas[0] ?? estado.ranking[0]).municipio_id, { exemplo: true });
   window.addEventListener("popstate", () => {
     const id = daUrl();
     if (id && estado.porId.has(id)) selecionar(id, { historico: false, rolar: false });
@@ -136,7 +137,10 @@ async function iniciar() {
     throw erro;
   } finally {
     atualizarGatilhos();
-    if (inicial && estado.porId.has(inicial)) rolarAte(document.getElementById("ficha"));
+    // endereço com ?municipio=: vai direto à ficha depois que o layout assentou (mapa e seções presas)
+    if (inicial && estado.porId.has(inicial)) {
+      rolarAte(document.getElementById("ficha"), { imediato: true });
+    }
   }
 }
 

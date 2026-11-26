@@ -44,11 +44,14 @@ export function ligarAncoras() {
   });
 }
 
-export function rolarAte(elemento) {
+export function rolarAte(elemento, { imediato = false } = {}) {
   const topo = document.querySelector(".topo");
   const deslocamento = -(topo ? topo.offsetHeight : 64) - 12;
-  if (lenis) lenis.scrollTo(elemento, { offset: deslocamento });
-  else elemento.scrollIntoView({ block: "start", behavior: prefereMenos.matches ? "auto" : "smooth" });
+  if (lenis) {
+    lenis.resize();   // a página cresce depois de carregar (mapa, passos): o Lenis precisa da altura nova
+    lenis.scrollTo(elemento, { offset: deslocamento, immediate: imediato, force: true });
+  }
+  else elemento.scrollIntoView({ block: "start", behavior: imediato || prefereMenos.matches ? "auto" : "smooth" });
 }
 
 /** Entrada do hero: linhas do título sobem por trás de uma máscara. */
