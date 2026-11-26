@@ -43,7 +43,9 @@ function preencherKpis(estado, momentoAtual) {
   }
   if (momentoAtual) {
     kpi("momento").innerHTML = `<i class="ponto-estado ponto-estado--${STATUS_RECOMENDACAO[momentoAtual.recomendacao]}"></i><span>${momentoAtual.recomendacao}</span>`;
-    kpi("momento-nota").textContent = `${mesPorExtenso(paraData(momentoAtual.mes))}${previa}`;
+    kpi("momento-nota").textContent = momentoAtual.ref_cambio
+      ? `dados até ${dataCurta(momentoAtual.ref_cambio)}${previa}`
+      : `${mesPorExtenso(paraData(momentoAtual.mes))}${previa}`;
   }
   kpi("data").textContent = dataCurta(meta.gerado_em);
   const p = meta.periodos ?? {};
@@ -53,13 +55,15 @@ function preencherKpis(estado, momentoAtual) {
 }
 
 // ---------------------------------------------------------------- letreiro com números reais
-function montarLetreiro(estado, { atual, linhaAtual }) {
+function montarLetreiro(estado, { atual, linhaAtual, agora }) {
   const ultimoDolar = [...estado.macro].reverse().find((l) => l.dolar_medio !== null);
+  const ultimoIpca = [...estado.macro].reverse().find((l) => l.ipca_12m !== null);
   const primeiro = estado.ranking[0];
+  const dia = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
   const itens = [
-    linhaAtual && ["Selic", `${decimal(linhaAtual.selic_meta, 2)}% a.a.`],
-    linhaAtual && ["IPCA 12 meses", porcento(linhaAtual.ipca_12m, 2)],
-    ultimoDolar && ["Dólar", reaisCentavos(ultimoDolar.dolar_medio, 2)],
+    agora ? ["Selic", `${decimal(agora.selic_meta, 2)}% a.a.`] : linhaAtual && ["Selic", `${decimal(linhaAtual.selic_meta, 2)}% a.a.`],
+    agora ? ["IPCA 12 meses", porcento(agora.ipca_12m, 2)] : ultimoIpca && ["IPCA 12 meses", porcento(ultimoIpca.ipca_12m, 2)],
+    agora ? [`Dólar ${dia(agora.ref_cambio)}`, reaisCentavos(agora.dolar_ultimo, 2)] : ultimoDolar && ["Dólar", reaisCentavos(ultimoDolar.dolar_medio, 2)],
     ["Cidades no radar", inteiro(estado.ranking.length)],
     primeiro && ["1ª do ranking", `${primeiro.municipio_nome} ${decimal(primeiro.nota_final, 1)}`],
     atual && ["Momento", atual.recomendacao],

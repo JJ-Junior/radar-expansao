@@ -47,6 +47,8 @@ export function paraData(texto) {
 export const mesPorExtenso = (d) => `${MESES[d.getMonth()]} de ${d.getFullYear()}`;
 export const mesCurto = (d) => `${MESES[d.getMonth()].slice(0, 3)}/${String(d.getFullYear()).slice(2)}`;
 export const dataCurta = (iso) => {
+  // data sem hora ("2026-11-26") é dia do calendário: não passa por fuso (new Date leria meia-noite UTC = dia anterior aqui)
+  if (/^\d{4}-\d{2}-\d{2}$/.test(iso ?? "")) return `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? TRACO : d.toLocaleDateString("pt-BR");
 };

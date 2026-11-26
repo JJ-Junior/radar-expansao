@@ -1,9 +1,11 @@
-// Quando: recomendação do mês, os três sinais como cards de dado, a recomendação mês a mês e as três séries.
+// Quando: o semáforo de hoje (gold.momento_atual: câmbio e juros pela janela móvel até o último fechamento,
+// inflação pelo último IPCA), os três sinais como cards de dado com a data de cada um,
+// a recomendação mês a mês e as três séries.
 // Cada série tem o próprio gráfico (escalas diferentes não dividem eixo); a mira é sincronizada
 // e o tooltip é o componente único do site (dica.js).
 
 import { ROTULO_SINAL, STATUS_RECOMENDACAO } from "./indicadores.js";
-import { decimal, mesCurto, mesPorExtenso, paraData, porcento, reaisCentavos } from "./formato.js";
+import { dataCurta, decimal, mesCurto, mesPorExtenso, paraData, porcento, reaisCentavos } from "./formato.js";
 import { movimentoLigado } from "./movimento.js";
 import { conteudoDica, esconderDica, mostrarDica } from "./dica.js";
 
@@ -17,25 +19,46 @@ function variacao(v, formatar) {
   return `${seta} ${formatar(Math.abs(v))}`;
 }
 
-/** Os três sinais do semáforo e como mostrar cada um (valor, variação, série). */
+/** "2026-11-26" -> "26/11". */
+const diaMesIso = (iso) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "—");
+
+/** Os três sinais do semáforo e como mostrar cada um: no mês (contexto_macro) e hoje (momento_atual). */
 const SINAIS = [
   {
     chave: "sinal_juros", nome: "Juros", indicador: "Meta da Selic", coluna: "selic_meta",
     valor: (l) => `${decimal(l.selic_meta, 2)}% a.a.`,
     variacao: (l) => variacao(l.selic_var_12m_pp, (v) => `${decimal(v, 2)} p.p.`),
     periodo: "em 12 meses",
+    hoje: {
+      indicador: (a) => `Meta da Selic · em ${diaMesIso(a.ref_juros)}`,
+      valor: (a) => `${decimal(a.selic_meta, 2)}% a.a.`,
+      variacao: (a) => variacao(a.selic_var_12m_pp, (v) => `${decimal(v, 2)} p.p.`),
+    },
   },
   {
     chave: "sinal_inflacao", nome: "Inflação", indicador: "IPCA acumulado em 12 meses", coluna: "ipca_12m",
     valor: (l) => porcento(l.ipca_12m, 2),
     variacao: (l, antes) => variacao(antes ? l.ipca_12m - antes.ipca_12m : null, (v) => `${decimal(v, 2)} p.p.`),
     periodo: "vs. 3 meses antes", referencia: 4.5,
+    hoje: {
+      indicador: (a) => `IPCA em 12 meses · até ${mesCurto(paraData(a.ref_inflacao))}`,
+      valor: (a) => porcento(a.ipca_12m, 2),
+      variacao: (a) => variacao(a.ipca_12m - a.ipca_12m_meses_antes, (v) => `${decimal(v, 2)} p.p.`),
+    },
   },
   {
     chave: "sinal_cambio", nome: "Câmbio", indicador: "Dólar, média do mês", coluna: "dolar_medio",
     valor: (l) => reaisCentavos(l.dolar_medio, 2),
     variacao: (l) => variacao(l.dolar_var_12m_pct, (v) => `${decimal(v, 1)}%`),
     periodo: "em 12 meses",
+    hoje: {
+      indicador: (a) => `Dólar, média de ${a.janela_dias} dias · até ${diaMesIso(a.ref_cambio)}`,
+      valor: (a) => reaisCentavos(a.dolar_media_janela, 2),
+      variacao: (a) => variacao(a.dolar_var_12m_pct, (v) => `${decimal(v, 1)}%`),
+      extra: (a) => `último fechamento ${diaMesIso(a.ref_cambio)}: ${reaisCentavos(a.dolar_ultimo, 2)} · ` +
+        `${variacao(a.dolar_var_janela_pct, (v) => `${decimal(v, 1)}%`)} sobre os ${a.janela_dias} dias anteriores` +
+        (a.alerta_cambio_curto_prazo ? " (alerta de alta)" : ""),
+    },
   },
 ];
 
@@ -45,21 +68,24 @@ export function criarMacro({ estado }) {
   const macro = estado.macro.map((l) => ({ ...l, data: paraData(l.mes) }));
   const indiceMacro = new Map(macro.map((l, i) => [l.mes, i]));
   const momentoPorMes = new Map(momento.map((l) => [l.mes, l]));
-  const atual = momento.at(-1);
+  const agora = estado.agora ? { ...estado.agora, data: paraData(estado.agora.mes) } : null;
+  const atual = agora ?? momento.at(-1);                          // o semáforo exibido
   const linhaAtual = atual ? macro[indiceMacro.get(atual.mes)] : null;
   const tresAntes = (l) => macro[(indiceMacro.get(l.mes) ?? 0) - 3] ?? null;
 
-  // mês corrente (parcial): a média é só até o último dia com dado; o semáforo usa o último mês fechado
-  const fechamentos = estado.meta.ultimos_fechamentos ?? {};
-  const diaMes = (iso) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
-  const ultimoDia = fechamentos.dolar_venda?.data ?? fechamentos.selic_meta?.data ?? null;
+  // mês corrente (parcial): médias só até o último fechamento; o semáforo de hoje usa a janela móvel
+  const parcial = macro.find((l) => l.mes_parcial) ?? null;
+  const ultimoDia = agora?.ref_cambio ?? parcial?.dolar_ultimo_data ?? null;
   const textoFechamento = {
-    selic_meta: fechamentos.selic_meta ? `último valor ${diaMes(fechamentos.selic_meta.data)}: ${decimal(fechamentos.selic_meta.valor, 2)}% a.a.` : "",
-    dolar_medio: fechamentos.dolar_venda ? `último fechamento ${diaMes(fechamentos.dolar_venda.data)}: ${reaisCentavos(fechamentos.dolar_venda.valor, 2)}` : "",
+    selic_meta: parcial?.selic_ultima_data ? `meta em ${diaMesIso(parcial.selic_ultima_data)}: ${decimal(parcial.selic_meta, 2)}% a.a.` : "",
+    dolar_medio: parcial?.dolar_ultimo ? `último fechamento ${diaMesIso(parcial.dolar_ultimo_data)}: ${reaisCentavos(parcial.dolar_ultimo, 2)}` : "",
   };
-  const mesAno = (d) => `${mesCurto(d).slice(0, 3)}/${d.getFullYear()}`;          // "out/2026"
-  const referenciaSemaforo = atual ? `semáforo: referência ${mesAno(atual.data)}` : "";
-  const rotuloParcial = (l) => `${mesPorExtenso(l.data)} (parcial${ultimoDia ? `, até ${diaMes(ultimoDia)}` : ""})`;
+  const mesAno = (d) => `${mesCurto(d).slice(0, 3)}/${d.getFullYear()}`;          // "nov/2026"
+  const janelaHoje = agora ? `semáforo: média de ${agora.janela_dias} dias até ${diaMesIso(agora.ref_cambio)}: ${reaisCentavos(agora.dolar_media_janela, 2)}` : "";
+  const rotuloParcial = (l) => `${mesPorExtenso(l.data)} (parcial${ultimoDia ? `, até ${diaMesIso(ultimoDia)}` : ""})`;
+  const datasHoje = agora
+    ? `dólar e Selic até ${diaMesIso(agora.ref_cambio)}, IPCA até ${mesCurto(paraData(agora.ref_inflacao))}`
+    : atual ? `referência ${mesCurto(atual.data)}` : "";
 
   /** Linhas do tooltip de um mês: Juros · Inflação · Câmbio → valor, variação, estado. */
   function conteudoDoMes(linha) {
@@ -71,15 +97,15 @@ export function criarMacro({ estado }) {
         estado: est, estadoTexto: est ? ROTULO_SINAL[est] : "",
       };
     });
-    const parcial = linha.mes_parcial
-      ? `Média do mês até ${ultimoDia ? diaMes(ultimoDia) : "hoje"}. ${[textoFechamento.dolar_medio, textoFechamento.selic_meta].filter(Boolean).join(" · ")}. ` +
-        `O semáforo usa o último mês fechado (${atual ? mesAno(atual.data) : "—"}).`
+    const nota = linha.mes_parcial
+      ? `Média do mês até ${ultimoDia ? diaMesIso(ultimoDia) : "hoje"}. ${[textoFechamento.dolar_medio, textoFechamento.selic_meta].filter(Boolean).join(" · ")}. ` +
+        (agora ? `Semáforo de hoje: câmbio pela média de ${agora.janela_dias} dias até ${diaMesIso(agora.ref_cambio)}, juros pela meta de ${diaMesIso(agora.ref_juros)} e inflação pelo IPCA de ${mesCurto(paraData(agora.ref_inflacao))}.` : "")
       : "Variação: juros e câmbio em 12 meses; inflação contra 3 meses antes.";
     return conteudoDica({
       titulo: linha.mes_parcial ? rotuloParcial(linha) : mesPorExtenso(linha.data),
       chip: m ? { texto: m.recomendacao, estado: STATUS_RECOMENDACAO[m.recomendacao] } : null,
       linhas,
-      nota: parcial,
+      nota,
     });
   }
 
@@ -89,11 +115,11 @@ export function criarMacro({ estado }) {
     const estados = SINAIS.map((s) => atual[s.chave]);
     const conta = (e) => estados.filter((x) => x === e).length;
     const partes = [`${conta("verde")} de ${SINAIS.length} sinais favoráveis`];
-    if (conta("vermelho")) partes.push(`${conta("vermelho")} desfavorável${conta("vermelho") > 1 ? "is" : ""}`);
-    partes.push(`referência ${mesCurto(atual.data)}`);
+    if (conta("vermelho")) partes.push(`${conta("vermelho")} ${conta("vermelho") > 1 ? "desfavoráveis" : "desfavorável"}`);
+    if (datasHoje) partes.push(datasHoje);
 
     document.querySelector(".semaforo__principal").style.setProperty("--status", COR_STATUS[status]);
-    document.getElementById("semaforo-mes").textContent = "Momento econômico";
+    document.getElementById("semaforo-mes").textContent = agora ? `Momento econômico · ${dataCurta(agora.ref_cambio)}` : "Momento econômico";
     document.getElementById("semaforo-recomendacao").textContent = atual.recomendacao;
     document.getElementById("semaforo-contexto").textContent = partes.join(" · ");
 
@@ -101,6 +127,7 @@ export function criarMacro({ estado }) {
     const lista = document.getElementById("semaforo-sinais");
     lista.replaceChildren();
     const fim = indiceMacro.get(atual.mes);
+    const linhaIpca = [...macro].reverse().find((l) => l.ipca_12m !== null);   // o IPCA sai com ~1 mês de atraso
     for (const s of SINAIS) {
       const est = atual[s.chave];
       const li = document.createElement("li");
@@ -113,16 +140,19 @@ export function criarMacro({ estado }) {
         <p class="sinal__variacao"></p>`;
       li.querySelector(".sinal__rotulo").textContent = s.nome;
       li.querySelector(".sinal__estado span").textContent = ROTULO_SINAL[est];
-      li.querySelector(".sinal__indicador").textContent = `${s.indicador} · ${mesCurto(atual.data)}`;
-      li.querySelector(".sinal__valor").textContent = s.valor(linhaAtual);
-      const v = s.variacao(linhaAtual, tresAntes(linhaAtual));
+      // hoje (momento_atual) com a data de cada sinal; sem ele, a linha mensal do mês de referência
+      const base = s.coluna === "ipca_12m" ? linhaIpca : linhaAtual;
+      li.querySelector(".sinal__indicador").textContent = agora ? s.hoje.indicador(agora) : `${s.indicador} · ${mesCurto(atual.data)}`;
+      li.querySelector(".sinal__valor").textContent = agora ? s.hoje.valor(agora) : s.valor(base);
+      const v = agora ? s.hoje.variacao(agora) : s.variacao(base, tresAntes(base));
       li.querySelector(".sinal__variacao").textContent = v ? `${v} ${s.periodo}` : "";
-      if (s.coluna === "dolar_medio" && textoFechamento.dolar_medio) {
+      if (agora && s.hoje.extra) {
         const extra = document.createElement("p");
         extra.className = "sinal__fechamento";
-        extra.textContent = textoFechamento.dolar_medio;
+        extra.textContent = s.hoje.extra(agora);
         li.querySelector(".sinal__variacao").after(extra);
       }
+      // a série mensal vai até o último mês com dado (o câmbio e a Selic incluem o mês corrente, parcial)
       li.append(sparkline(macro.slice(Math.max(0, fim - MESES_SPARKLINE + 1), fim + 1), s));
       lista.append(li);
     }
@@ -146,7 +176,7 @@ export function criarMacro({ estado }) {
     svg.append("circle").attr("class", "sparkline__ponto").attr("r", 3).attr("cx", x(pontos.length - 1)).attr("cy", y(ultimo[s.coluna]));
     const rotulo = document.createElement("p");
     rotulo.className = "sparkline__eixo";
-    rotulo.textContent = `${mesCurto(pontos[0].data)} → ${mesCurto(ultimo.data)}`;
+    rotulo.textContent = `${mesCurto(pontos[0].data)} → ${mesCurto(ultimo.data)}${ultimo.mes_parcial ? " (parcial)" : ""}`;
     const caixa = document.createElement("div");
     caixa.className = "sinal__grafico";
     caixa.append(svg.node(), rotulo);
@@ -223,8 +253,8 @@ export function criarMacro({ estado }) {
     cartao.querySelector(".grafico__atual").textContent = serie.formato(ultimo[serie.coluna]);
     const v = serie.sinal.variacao(ultimo, tresAntes(ultimo));
     cartao.querySelector(".grafico__var").textContent = ultimo.mes_parcial
-      ? [`média de ${mesAno(ultimo.data)} (parcial${ultimoDia ? `, até ${diaMes(ultimoDia)}` : ""})`,
-        textoFechamento[serie.coluna], referenciaSemaforo].filter(Boolean).join(" · ")
+      ? [`${serie.coluna === "dolar_medio" ? "média de " : ""}${mesAno(ultimo.data)} (parcial${ultimoDia ? `, até ${diaMesIso(ultimoDia)}` : ""})`,
+        textoFechamento[serie.coluna], serie.coluna === "dolar_medio" ? janelaHoje : ""].filter(Boolean).join(" · ")
       : `${mesCurto(ultimo.data)}${v ? ` · ${v} ${serie.sinal.periodo}` : ""}`;
     area.appendChild(cartao);
 
@@ -297,5 +327,5 @@ export function criarMacro({ estado }) {
     });
   }
 
-  return { atual, linhaAtual };
+  return { atual, linhaAtual, agora };
 }

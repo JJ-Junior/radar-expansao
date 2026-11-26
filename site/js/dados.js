@@ -19,7 +19,7 @@ export function paraObjetos(tabela) {
 
 /** Tabelas da gold + território do IBGE. */
 export async function carregarDados() {
-  const [meta, indicadores, ranking, criteriosBrutos, parametros, macro, momento, territorio] = await Promise.all([
+  const [meta, indicadores, ranking, criteriosBrutos, parametros, macro, momento, agoraLista, territorio] = await Promise.all([
     buscarJson("meta.json"),
     buscarJson("indicadores_municipio.json").then(paraObjetos),
     buscarJson("ranking_expansao.json").then(paraObjetos),
@@ -27,6 +27,7 @@ export async function carregarDados() {
     buscarJson("parametro_ranking.json").then(paraObjetos).catch(() => []),   // opcional
     buscarJson("contexto_macro.json").then(paraObjetos),
     buscarJson("momento_expansao.json").then(paraObjetos),
+    buscarJson("momento_atual.json").then(paraObjetos).catch(() => []),   // semáforo de hoje (opcional)
     buscarJson("territorio.json").then(paraObjetos),
   ]);
   const criterios = [...criteriosBrutos].sort((a, b) => (a.ordem ?? 0) - (b.ordem ?? 0));
@@ -60,7 +61,8 @@ export async function carregarDados() {
   const ufs = [...new Set(indicadores.map((m) => m.uf_sigla))].sort();
   // cidades do universo, já na ordem do ranking
   const universo = ranking.map((r) => porId.get(r.municipio_id)).filter(Boolean);
-  return { meta, indicadores, ranking, criterios, parametros, recomendadas, macro, momento, porId, ufs, universo };
+  const agora = agoraLista[0] ?? null;
+  return { meta, indicadores, ranking, criterios, parametros, recomendadas, macro, momento, agora, porId, ufs, universo };
 }
 
 /** Malhas do IBGE (TopoJSON): carregadas à parte, sem travar o resto da página. */
