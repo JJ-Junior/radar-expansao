@@ -52,6 +52,11 @@ jobs:
         with:
           path: site
 
+      # o deploy às vezes não acha o artefato logo após o upload ("No artifacts named github-pages");
+      # uma espera curta evita a corrida. Se falhar mesmo assim, rode de novo pelo "Run workflow" (não pelo "Re-run").
+      - name: Aguarda o artefato ficar disponível
+        run: sleep 10
+
       - name: Publica
         id: deploy
         uses: actions/deploy-pages@v4

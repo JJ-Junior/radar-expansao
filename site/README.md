@@ -86,7 +86,16 @@ quantidade de cidades recomendadas antes de gravar. O site não calcula nota nem
 O workflow [`.github/workflows/site.yml`](../.github/workflows/site.yml) confere os arquivos de dados e publica a pasta `site/`.
 Ele roda a cada push na branch `junior` que altere o site, ou manualmente em **Actions → Site de apoio (GitHub Pages) → Run workflow**.
 
-Antes do primeiro deploy, quem administra o repositório precisa liberar duas coisas (uma vez só):
+O site está no ar em **https://jj-junior.github.io/radar-expansao/**.
+
+Se o passo "Publica" falhar com *"No artifacts named github-pages were found"* (corrida logo após o upload; o workflow
+já espera 10 s para evitar), **não use "Re-run"**: ele duplica o artefato e falha de novo. Dispare uma execução nova:
+
+```powershell
+gh workflow run site.yml --ref junior
+```
+
+Configuração do repositório (já feita; registrada para quem montar um repositório novo):
 
 1. **Settings → Pages → Build and deployment → Source:** escolher **GitHub Actions**.
 2. **Settings → Environments → `github-pages` → Deployment branches and tags:** adicionar a regra para a branch **`junior`**.
