@@ -348,7 +348,8 @@ button, select, input { font: inherit; color: inherit; }
 .top__cabecalho .secao__cabecalho { margin-bottom: 0; }
 .top__trilho { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 1240px) { .top__trilho { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-.top__rolar { display: none; }
+.top__navegar { display: none; }
+.cartao-cidade__barras { display: none; }
 .cartao-cidade { background: var(--superficie); border-radius: var(--raio); padding: 24px 16px 16px; display: grid; grid-template-rows: auto auto 1fr auto; gap: 16px; min-width: 0; box-shadow: inset 0 0 0 1px transparent; transition: box-shadow .2s; }
 .cartao-cidade:hover, .cartao-cidade:focus-within { box-shadow: inset 0 0 0 1px var(--limao-texto); }
 .cartao-cidade__cabeca { display: grid; gap: 8px; }
@@ -378,13 +379,39 @@ button, select, input { font: inherit; color: inherit; }
 .top-fora button:focus-visible { outline: 3px solid var(--foco); }
 .top-fora button span { font-family: var(--mono); font-size: .7rem; color: var(--tinta-3); }
 .top-fora .discreto { margin: 0; }
-/* celular: carrossel com snap, o próximo card aparece pela metade para indicar que rola */
+/* celular: carrossel com snap; card compacto (números no topo, 6 barras no lugar do radar),
+   o próximo card aparece de propósito na borda e o indicador diz onde se está (1 / 5, pontos e setas) */
 @media (max-width: 860px) {
+  .top__cabecalho { margin-bottom: 24px; }
+  .segmentado { display: flex; flex-wrap: nowrap; max-width: 100%; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .segmentado::-webkit-scrollbar { display: none; }
+  .segmentado button { flex: none; white-space: nowrap; scroll-snap-align: start; }
+  .segmentado.tem-depois { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+  .segmentado.tem-antes { -webkit-mask-image: linear-gradient(to right, transparent, #000 40px); mask-image: linear-gradient(to right, transparent, #000 40px); }
+  .segmentado.tem-antes.tem-depois { -webkit-mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
   .top__janela { width: 100%; }
-  .top__trilho { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 24px; padding: 0 24px 8px; gap: 12px; scrollbar-width: thin; }
-  .cartao-cidade { flex: 0 0 78%; scroll-snap-align: start; }
-  .cartao-cidade__nome { font-size: 1.7rem; }
-  .top__rolar { display: block; font-family: var(--mono); font-size: .7rem; letter-spacing: .06em; color: var(--tinta-3); margin: 8px 24px 0; }
+  .top__trilho { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-padding-inline: 24px; padding: 0 24px 4px; gap: 12px; scrollbar-width: none; overscroll-behavior-x: contain; }
+  .top__trilho::-webkit-scrollbar { display: none; }
+  .cartao-cidade { flex: 0 0 85%; scroll-snap-align: start; grid-template-rows: none; gap: 12px; padding: 16px; }
+  .cartao-cidade__cabeca { order: 0; gap: 4px; }
+  .cartao-cidade__nome { font-size: 1.6rem; min-height: 0; }
+  .cartao-cidade__numeros { order: 1; padding: 12px 0; border-bottom: 1px solid var(--linha); }
+  .cartao-cidade__radar { display: none; }
+  .cartao-cidade__barras { order: 2; display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: .66rem; }
+  .cartao-cidade__barras li { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) 2.2em; align-items: center; gap: 8px; }
+  .cartao-cidade__barras span { color: var(--tinta-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cartao-cidade__barras i { display: block; height: 6px; border-radius: 3px; background: linear-gradient(to right, var(--limao) var(--v), var(--superficie-2) var(--v)); }
+  .cartao-cidade:not(.cartao-cidade--recomendada) .cartao-cidade__barras i { background: linear-gradient(to right, var(--pt-3) var(--v), var(--superficie-2) var(--v)); }
+  .cartao-cidade__barras b { text-align: right; font-weight: 600; color: var(--tinta); }
+  .cartao-cidade > .botao { order: 3; }
+  .top__navegar { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 16px 24px 0; }
+  .top__seta { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--linha-forte); background: transparent; color: var(--tinta); font-size: 1.1rem; cursor: pointer; }
+  .top__seta:disabled { opacity: .35; cursor: default; }
+  .top__seta:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+  .top__pontos { display: flex; gap: 6px; }
+  .top__pontos i { width: 6px; height: 6px; border-radius: 3px; background: var(--linha-forte); transition: width .2s, background .2s; }
+  .top__pontos i.ativo { width: 18px; background: var(--limao-texto); }
+  .top__contador { font-family: var(--mono); font-size: .74rem; letter-spacing: .08em; color: var(--tinta-2); min-width: 3.5em; text-align: center; }
   .top-fora { margin: 16px 24px 0; }
 }
 

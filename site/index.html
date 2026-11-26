@@ -204,7 +204,12 @@
         </div>
         <div class="largura top__janela">
           <ol class="top__trilho" id="top-trilho"></ol>
-          <p class="top__rolar" aria-hidden="true">Arraste para o lado para ver as outras →</p>
+          <div class="top__navegar" id="top-navegar">
+            <button type="button" class="top__seta" aria-label="Cidade anterior" aria-controls="top-trilho">←</button>
+            <span class="top__pontos" aria-hidden="true"></span>
+            <span class="top__contador" aria-live="polite"></span>
+            <button type="button" class="top__seta" aria-label="Próxima cidade" aria-controls="top-trilho">→</button>
+          </div>
           <div class="top-fora" id="top-fora" hidden></div>
         </div>
       </div>
