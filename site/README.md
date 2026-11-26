@@ -48,6 +48,7 @@ site/
 │   ├── geo.js            utilidades das malhas TopoJSON
 │   ├── cards.js          as recomendadas e o ranking geral (grade; carrossel no celular)
 │   ├── explorar.js       as 687 cidades como pontos em canvas, cinco vistas com transição
+│   ├── simulador.js      simule sua região: cidade central + raio (?centro=&raio=), mapa e ranking local
 │   ├── dica.js           tooltip único do site (hover, foco, toque; Esc fecha)
 │   ├── recomendacao.js   explica a lista de recomendadas (trava de renda, uma por região imediata)
 │   ├── grafico-radar.js  gráfico-radar das 6 notas (SVG)

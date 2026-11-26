@@ -70,6 +70,7 @@
         <a href="#mapa">Onde</a>
         <a href="#top">Top cidades</a>
         <a href="#explorar-cidades">Explorar</a>
+        <a href="#simulador">Simular</a>
         <a href="#ideal">Critérios</a>
         <a href="#arquitetura">Dados</a>
       </nav>
@@ -244,12 +245,61 @@
       </div>
     </section>
 
-    <!-- 05 FICHA -->
+    <!-- 05 SIMULE SUA REGIÃO ---------------------------------------------------------------->
+    <section class="secao" id="simulador" aria-labelledby="titulo-simulador">
+      <div class="largura">
+        <header class="secao__cabecalho" data-revela>
+          <p class="rotulo"><span class="rotulo__num">05</span> Simular</p>
+          <h2 id="titulo-simulador">Simule sua região</h2>
+          <p class="secao__lede">Escolha uma cidade central e um raio. O mapa aproxima a região, as cidades de fora esmaecem e as de dentro ganham um ranking local, com a distância e a lacuna de academias de cada uma.</p>
+        </header>
+        <div class="sim__controles">
+          <label class="sim__campo">
+            <span class="sim__rotulo">Cidade central</span>
+            <input id="sim-centro" type="search" list="sim-opcoes" autocomplete="off" placeholder="Digite o nome da cidade">
+            <datalist id="sim-opcoes"></datalist>
+          </label>
+          <label class="sim__campo sim__campo--raio">
+            <span class="sim__rotulo">Raio <output id="sim-raio-valor" for="sim-raio">100 km</output></span>
+            <input id="sim-raio" type="range" min="10" max="300" step="10" value="100">
+          </label>
+          <label class="sim__marcar">
+            <input id="sim-pequenas" type="checkbox">
+            <span>Incluir cidades com menos de 50 mil hab. (sem nota)</span>
+          </label>
+          <button class="botao botao--fantasma" type="button" id="sim-copiar">Copiar link da simulação</button>
+        </div>
+        <div class="sim__grade">
+          <div class="sim__mapa">
+            <div class="abas-explorar" id="sim-abas" role="tablist" aria-label="Forma de ver a região">
+              <button type="button" role="tab" aria-selected="true" tabindex="0" data-vista="mapa" aria-controls="sim-palco">Mapa da região</button>
+              <button type="button" role="tab" aria-selected="false" tabindex="-1" data-vista="ranking" aria-controls="sim-palco">Ranking local</button>
+            </div>
+            <div class="explorar__palco sim__palco" id="sim-palco" role="tabpanel">
+              <canvas id="sim-canvas" role="img" aria-label="Cidades da região como pontos; a mesma informação está na lista ao lado"></canvas>
+            </div>
+          </div>
+          <div class="sim__lado">
+            <div class="sim__resumo" id="sim-resumo" aria-live="polite"></div>
+            <div class="tabela-rolagem sim__lista" id="sim-lista">
+              <table class="tabela">
+                <caption class="visualmente-oculto">Cidades no raio, pela nota final</caption>
+                <thead><tr><th scope="col" class="num">No raio</th><th scope="col">Cidade</th><th scope="col" class="num">Brasil</th><th scope="col" class="num">Nota</th><th scope="col" class="num">Distância</th><th scope="col" class="num">Lacuna*</th><th scope="col" class="num">Pop. proj.*</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <p class="sim__aviso" id="sim-aviso"></p>
+      </div>
+    </section>
+
+    <!-- 06 FICHA -->
     <section class="secao secao--invertida" id="ficha" aria-labelledby="ficha-nome">
       <div class="largura">
         <header class="ficha__cabecalho">
           <div class="ficha__identidade">
-            <p class="rotulo" id="ficha-sobre"><span class="rotulo__num">05</span> Ficha da cidade</p>
+            <p class="rotulo" id="ficha-sobre"><span class="rotulo__num">06</span> Ficha da cidade</p>
             <h2 id="ficha-nome">Escolha uma cidade</h2>
             <p class="ficha__onde" id="ficha-onde">Use a busca, clique num ponto do mapa ou num card.</p>
             <div class="ficha__selos" id="ficha-selos"></div>
@@ -283,11 +333,11 @@
       </div>
     </section>
 
-    <!-- 05 A CIDADE IDEAL ------------------------------------------------------------------>
+    <!-- 07 A CIDADE IDEAL ------------------------------------------------------------------>
     <section class="secao secao--ideal" id="ideal" aria-labelledby="titulo-ideal">
       <div class="largura ideal">
         <header class="secao__cabecalho" data-revela>
-          <p class="rotulo"><span class="rotulo__num">06</span> Critérios</p>
+          <p class="rotulo"><span class="rotulo__num">07</span> Critérios</p>
           <h2 id="titulo-ideal">O perfil que o Radar procura</h2>
           <p class="secao__lede">Cada setor é um critério; o tamanho do setor é o peso na nota final. Gente <em>e</em> renda são a base; pouca concorrência e crescimento fazem a diferença.</p>
         </header>
@@ -298,11 +348,11 @@
       </div>
     </section>
 
-    <!-- 06 COMO CALCULAMOS ------------------------------------------------------------------>
+    <!-- 08 COMO CALCULAMOS ------------------------------------------------------------------>
     <section class="secao" id="metodo" aria-labelledby="titulo-metodo">
       <div class="largura">
         <header class="secao__cabecalho" data-revela>
-          <p class="rotulo"><span class="rotulo__num">07</span> Método</p>
+          <p class="rotulo"><span class="rotulo__num">08</span> Método</p>
           <h2 id="titulo-metodo">Como o ranking é calculado</h2>
         </header>
 
@@ -347,11 +397,11 @@
       </div>
     </section>
 
-    <!-- 07 ARQUITETURA ---------------------------------------------------------------------->
+    <!-- 09 ARQUITETURA ---------------------------------------------------------------------->
     <section class="secao secao--arquitetura" id="arquitetura" aria-labelledby="titulo-arquitetura">
       <div class="largura">
         <header class="secao__cabecalho" data-revela>
-          <p class="rotulo"><span class="rotulo__num">08</span> Dados</p>
+          <p class="rotulo"><span class="rotulo__num">09</span> Dados</p>
           <h2 id="titulo-arquitetura">Do dado bruto ao ranking</h2>
           <p class="secao__lede">Um Lakehouse em três camadas no Postgres do Supabase autohospedado, atualizado toda semana pelo n8n.</p>
         </header>

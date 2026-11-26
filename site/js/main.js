@@ -7,6 +7,7 @@ import { criarMacro } from "./macro.js";
 import { criarMapaRegioes } from "./mapa-regioes.js";
 import { criarCards } from "./cards.js";
 import { criarExplorar } from "./explorar.js";
+import { criarSimulador } from "./simulador.js";
 import { criarFicha } from "./ficha.js";
 import { criarBusca } from "./busca.js";
 import { desenharCamadas, desenharCriterios } from "./metodologia.js";
@@ -126,11 +127,13 @@ async function iniciar() {
   animarHero();
   revelarAoRolar();
 
+  let simulador = null;
   // malhas: as UFs primeiro (radar do hero), depois o resto (mapa por regiões)
   try {
     const { ufs } = await carregarMalhas(["ufs"]);
     criarRadarHero({ canvas: document.getElementById("hero-radar"), topoUfs: ufs, cidades: estado.universo });
     criarExplorar({ estado, topoUfs: ufs, aoSelecionar: selecionar });
+    simulador = criarSimulador({ estado, topoUfs: ufs, aoSelecionar: selecionar });
     const outras = await carregarMalhas(["regioes", "intermediarias", "imediatas"]);
     criarMapaRegioes({ topos: { ufs, ...outras }, estado, aoSelecionar: selecionar });
   } catch (erro) {
@@ -142,6 +145,9 @@ async function iniciar() {
     // endereço com ?municipio=: vai direto à ficha depois que o layout assentou (mapa e seções presas)
     if (inicial && estado.porId.has(inicial)) {
       rolarAte(document.getElementById("ficha"), { imediato: true });
+    } else if (simulador?.veioDoEndereco) {
+      // endereço com ?centro=&raio=: vai direto à simulação compartilhada
+      rolarAte(document.getElementById("simulador"), { imediato: true });
     }
   }
 }

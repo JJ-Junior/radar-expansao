@@ -565,6 +565,42 @@ button, select, input { font: inherit; color: inherit; }
 .dica__estado .ponto-estado { width: 8px; height: 8px; }
 .dica__nota { margin: 8px 0 0; font-size: .7rem; color: var(--tinta-3); }
 
+/* ---------------------------------------------------------------- 05 simule sua região */
+.sim__controles { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 24px; margin-bottom: 24px; }
+.sim__campo { display: grid; gap: 8px; }
+.sim__rotulo { font-family: var(--mono); font-size: .7rem; letter-spacing: .12em; text-transform: uppercase; color: var(--tinta-3); }
+.sim__rotulo output { color: var(--limao-texto); font-weight: 600; margin-left: 8px; }
+.sim__campo input[type=search] { width: min(280px, 80vw); border: 0; border-radius: 999px; padding: 8px 16px; background: var(--superficie); color: var(--tinta); font-size: .95rem; }
+.sim__campo--raio input { width: min(240px, 80vw); accent-color: var(--limao); }
+.sim__campo input:focus-visible, .sim__marcar input:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+.sim__marcar { display: flex; align-items: center; gap: 8px; font-size: .9rem; color: var(--tinta-2); cursor: pointer; }
+.sim__marcar input { accent-color: var(--limao); width: 18px; height: 18px; }
+.sim__grade { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+.sim__mapa { display: grid; gap: 16px; justify-items: start; }
+.explorar__palco.sim__palco { aspect-ratio: 1 / 1; max-height: 640px; }
+.sim__lado { display: grid; gap: 16px; min-width: 0; }
+.sim__frase { margin: 0 0 16px; color: var(--tinta-2); }
+.sim__frase b { color: var(--tinta); }
+.sim__numeros { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin: 0; }
+.sim__numeros dt { font-family: var(--mono); font-size: .64rem; letter-spacing: .1em; text-transform: uppercase; color: var(--tinta-3); }
+.sim__numeros dd { margin: 4px 0 0; font-family: var(--display); font-weight: 800; font-size: 1.7rem; }
+.sim__lista { max-height: 480px; overflow: auto; border-radius: var(--raio); background: var(--superficie); padding: 0 16px; }
+.sim__lista thead th { position: sticky; top: 0; background: var(--superficie); z-index: 1; }
+.sim__lista th button { border: 0; background: none; padding: 0; color: inherit; font: inherit; font-weight: 600; cursor: pointer; text-align: left; }
+.sim__lista th button:hover, .sim__lista th button:focus-visible { color: var(--limao-texto); text-decoration: underline; }
+.sim__lista th small { color: var(--tinta-3); font-family: var(--mono); font-size: .7rem; }
+.sim__lista td, .sim__lista th { white-space: nowrap; }
+.sim__centro th button { color: var(--limao-texto); }
+.sim__pequena { color: var(--tinta-3); }
+.sim__lacuna--espaco { color: var(--limao-texto); font-weight: 600; }
+.sim__lacuna--saturada { color: var(--tinta-3); }
+.sim__aviso { margin-top: 16px; font-size: .82rem; color: var(--tinta-3); max-width: 110ch; }
+@media (max-width: 1000px) {
+  .sim__grade { grid-template-columns: 1fr; }
+  .explorar__palco.sim__palco { aspect-ratio: 4 / 5; }
+  .sim__numeros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 /* ---------------------------------------------------------------- 04 explorar as cidades */
 .explorar__barra { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 16px; }
 .abas-explorar { display: inline-flex; flex-wrap: wrap; gap: 4px; padding: 4px; border-radius: 999px; background: var(--superficie); }

@@ -92,7 +92,7 @@ export function criarFicha({ estado, aoSelecionar }) {
     const r = m.ranking;
     const regiao = REGIOES.find((x) => x.sigla === m.regiao_sigla)?.nome ?? m.regiao_sigla;
 
-    el("ficha-sobre").innerHTML = `<span class="rotulo__num">05</span> ${exemplo ? "Ficha da cidade · exemplo: a 1ª recomendada" : "Ficha da cidade"}`;
+    el("ficha-sobre").innerHTML = `<span class="rotulo__num">06</span> ${exemplo ? "Ficha da cidade · exemplo: a 1ª recomendada" : "Ficha da cidade"}`;
     el("ficha-nome").textContent = m.municipio_nome;
     el("ficha-onde").textContent = [NOMES_UF[m.uf_sigla] ?? m.uf_sigla, regiao, m.regiao_imediata_nome && `região imediata de ${m.regiao_imediata_nome}`].filter(Boolean).join(" · ");
 

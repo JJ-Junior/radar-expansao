@@ -46,8 +46,9 @@ export async function carregarDados() {
       regiao_intermediaria_nome: t.regiao_intermediaria_nome ?? null,
       regiao_imediata_id: t.regiao_imediata_id ?? null,
       regiao_imediata_nome: t.regiao_imediata_nome ?? null,
-      longitude: t.longitude ?? null,
-      latitude: t.latitude ?? null,
+      // centroide oficial da gold (IBGE, Malhas v4); o do territorio.json fica de reserva
+      longitude: m.longitude ?? t.longitude ?? null,
+      latitude: m.latitude ?? t.latitude ?? null,
       ranking: null,
     });
   }
