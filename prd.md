@@ -1,7 +1,8 @@
 # prd.md — Radar de Expansão · Rede de academias
 
 > ⚠️ **RASCUNHO**
-> Versão 0.3 (26/11/2026). Cliente confirmado pelo squad: rede de academias. Critérios e pesos ainda em revisão; qualquer mudança é registrada aqui antes de ir para o código.
+> Versão 0.4 (26/11/2026). Cliente confirmado pelo squad: rede de academias. Critérios e pesos ainda em revisão; qualquer mudança é registrada aqui antes de ir para o código.
+> v0.4: trava de renda mínima na lista das 5 unidades recomendadas (nota de poder de compra ≥ 50).
 > v0.3: dado faltante com redistribuição de peso; recomendação com no máximo uma cidade por região imediata; espaço competitivo
 > com limites nos percentis 5% e 95%; tendência do PIB per capita como taxa média anual (CAGR).
 
@@ -36,7 +37,7 @@ esteiras em boa parte importados, unidades de médio porte. Quer abrir **5 novas
 | P5 | Onde há **poucas academias por habitante** em cidades com bom poder de compra (espaço para entrar)? | `gold.ranking_expansao` · nota de espaço competitivo |
 | P6 | A Selic subiu ou caiu nos últimos 12 meses? A inflação (IPCA) está acelerando? O dólar subiu? | `gold.contexto_macro` |
 | P7 | **Fator quando:** o momento econômico favorece **expandir agora, com cautela ou esperar**? | `gold.momento_expansao` · semáforo no topo do dashboard |
-| P8 | Se a rede abrir 5 unidades no próximo ano, quais municípios são os melhores candidatos (no máximo um por região imediata) — e por quê? | `gold.ranking_expansao` + `gold.ranking_criterio` · página "Como o ranking é calculado" |
+| P8 | Se a rede abrir 5 unidades no próximo ano, quais municípios são os melhores candidatos (renda acima da mediana do universo e no máximo um por região imediata) — e por quê? | `gold.ranking_expansao` + `gold.ranking_criterio` · página "Como o ranking é calculado" |
 
 ## 4. Critérios do ranking ("fator onde")
 
@@ -86,11 +87,19 @@ atividade ou estúdios informais, e precisa de checagem local antes de virar rec
 
 ### 4.2 Recomendação das 5 unidades (P8)
 
-A lista **"5 unidades recomendadas"** segue a ordem da nota final, com uma regra a mais: **no máximo uma cidade por região
-imediata do IBGE**. Regiões imediatas agrupam os municípios que dividem o mesmo polo de comércio e serviços; duas unidades na
-mesma região disputariam o mesmo público (canibalização). Quando a próxima cidade do ranking cai numa região imediata já escolhida,
-ela é pulada e a lista segue para a seguinte. O **ranking completo continua com todas as cidades** — a regra vale só para a lista
-das 5 recomendadas.
+A lista **"5 unidades recomendadas"** segue a ordem da nota final, com duas regras a mais:
+
+1. **Trava de renda mínima:** só entra na lista a cidade com **nota de poder de compra ≥ 50**, ou seja, renda domiciliar per
+   capita na metade de cima do universo (percentil 50). É a resposta da pergunta de teste 1: cidade populosa com renda baixa é
+   armadilha para uma academia de padrão intermediário a alto, mesmo que o tamanho de mercado e o espaço competitivo puxem
+   a nota final para cima.
+2. **No máximo uma cidade por região imediata do IBGE.** Regiões imediatas agrupam os municípios que dividem o mesmo polo de
+   comércio e serviços; duas unidades na mesma região disputariam o mesmo público (canibalização).
+
+Quando a próxima cidade do ranking não passa na trava ou cai numa região imediata já escolhida, ela é pulada e a lista segue
+para a seguinte. O **ranking completo não muda** — as duas regras valem só para a lista das 5 recomendadas, e a cidade pulada
+continua na sua posição (com a indicação de que não é elegível para a recomendação). Os dois valores (quantidade de cidades e
+nota mínima de poder de compra) ficam num único lugar, a tabela de parâmetros do ranking, e aparecem na página de metodologia.
 
 ## 5. Momento econômico ("fator quando")
 
@@ -111,7 +120,8 @@ recomendar segurar o caixa até o cenário melhorar.
 O squad usa estas perguntas para checar se o ranking faz sentido para **este** cliente:
 
 1. **Cidade populosa com renda baixa é oportunidade ou armadilha?** Para academia de padrão intermediário a alto, **armadilha**:
-   por isso poder de compra pesa tanto quanto tamanho de mercado.
+   por isso poder de compra pesa tanto quanto tamanho de mercado, e a lista das 5 recomendadas só aceita cidades com renda
+   acima da mediana do universo (trava de renda, seção 4.2).
 2. **Capital cheia de concorrentes ou cidade média crescendo sem chamar atenção?** O espaço competitivo e o crescimento favorecem
    a cidade média; o dashboard permite comparar as duas lado a lado.
 3. **Como explicar o ranking a um diretor que decide no feeling?** Cada município mostra a nota de cada critério (0 a 100) e uma frase
@@ -162,4 +172,5 @@ Fase 2 do projeto: início em 18/11/2026, **entrega em 20/12/2026**.
 - [ ] Em 30 segundos, o diretor de expansão identifica as 5 cidades candidatas e o motivo de cada uma.
 - [ ] O semáforo mostra a recomendação do momento e explica o porquê.
 - [ ] Checagens automáticas: soma dos pesos = 100% (também depois da redistribuição em cada município), todos os municípios do
-      universo com nota, nenhuma nota fora de 0–100, as 5 recomendadas em regiões imediatas diferentes.
+      universo com nota, nenhuma nota fora de 0–100, as 5 recomendadas em regiões imediatas diferentes e todas com nota
+      de poder de compra ≥ 50.

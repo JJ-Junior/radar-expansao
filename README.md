@@ -8,7 +8,7 @@
 > | 2 · Exploração das APIs | ✅ concluída (achados em `spec.md`, seção 2) |
 > | 3 · Camada bronze (ingestão em Python) | ✅ concluída: 13 recursos carregados no banco do projeto; incremental sem duplicar |
 > | 4 · Camada silver (modelo estrela) | ✅ concluída: 5 dimensões, 2 fatos, 12 testes de qualidade passando |
-> | 5 · Camada gold (ranking, contexto macro, semáforo) | ✅ concluída: 5 tabelas de consumo, 13 testes de qualidade passando |
+> | 5 · Camada gold (ranking, contexto macro, semáforo) | ✅ concluída: tabelas de consumo + parâmetros do ranking, 14 testes de qualidade passando |
 > | 6 · n8n · 7 · Streamlit | ⏳ próximas etapas |
 > | Extra · Site de apoio | ✅ publicado com prévia dos dados |
 
@@ -129,7 +129,7 @@ python -m src.transformacao.executar            # silver + gold, com os testes d
 
 A gold é recalculada inteira pela função SQL `gold.atualizar()` seguindo as regras do [`prd.md`](prd.md) (seção 4):
 notas de 0 a 100 por percentil, peso redistribuído quando falta dado, espaço competitivo limitado aos percentis 5% e 95%,
-e as **5 unidades recomendadas com no máximo uma cidade por região imediata**. Ao final, o terminal mostra os testes,
+e as **5 unidades recomendadas com renda acima da mediana do universo e no máximo uma cidade por região imediata**. Ao final, o terminal mostra os testes,
 as 5 recomendadas, o top 10 e o semáforo do momento econômico.
 
 **Passos seguintes** — automação no n8n e dashboard: _(a preencher quando as etapas forem concluídas)_.

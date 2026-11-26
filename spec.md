@@ -1,6 +1,7 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
-> **RASCUNHO v0.7 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> **RASCUNHO v0.8 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> v0.8: trava de renda mínima nas 5 recomendadas (`gold.parametro_ranking`, coluna `elegivel_recomendacao`, teste 14).
 > v0.7: gold implementada (seção 3.3 reflete `sql/gold/`; posição na região; nota de riqueza agregada; `mes_parcial`).
 > v0.6: regras da gold alinhadas ao prd v0.3 (redistribuição de peso, uma cidade por região imediata no top 5, limites P5/P95 no espaço competitivo, CAGR da tendência).
 > v0.5: silver implementada (seções 3.2 e 4); `dim_indicador` com agregado/variável/série; `dim_municipio` com regiões imediata e intermediária.
@@ -338,16 +339,17 @@ Cada tabela responde a perguntas do `prd.md`, anotadas no comentário da tabela 
 
 | Arquivo | Conteúdo |
 |---|---|
-| `01_tabelas.sql` | as cinco tabelas abaixo + os pesos de `ranking_criterio` (versão `prd-v0.3`) |
+| `01_tabelas.sql` | as tabelas abaixo + os pesos de `ranking_criterio` e os parâmetros de `parametro_ranking` |
 | `02_atualizar_gold.sql` | `gold.atualizar(populacao_minima)`: recalcula a gold inteira a partir da silver (seção 5) |
-| `03_testes_qualidade.sql` | `gold.vw_testes_qualidade` (13 testes) e `gold.vw_rastreio_exemplo` (um número da gold até a bronze) |
-| `04_permissoes.sql` | `web_leitor` só com `SELECT` nas cinco tabelas, RLS, views e função fora da API, recarga do schema da API |
+| `03_testes_qualidade.sql` | `gold.vw_testes_qualidade` (14 testes) e `gold.vw_rastreio_exemplo` (um número da gold até a bronze) |
+| `04_permissoes.sql` | `web_leitor` só com `SELECT` nas tabelas de consumo, RLS, views e função fora da API, recarga do schema da API |
 
 | Tabela | Pergunta | Grão | Colunas principais |
 |---|---|---|---|
 | `gold.indicadores_municipio` | P1, P3, P4 | 1 linha por município (5.571) | `populacao`/`populacao_ano`, `populacao_censo_2022`, `crescimento_pop_aa`, `pib_mil_reais`/`pib_ano`, `pib_per_capita`, `pib_per_capita_tendencia`/`tendencia_ano_inicial`, `renda_dom_per_capita`/`renda_ano`, `academias_qtd`/`academias_ano`, `academias_por_10mil_hab`, `salario_medio`/`salario_ano`, `regiao_imediata_id`/`_nome` |
-| `gold.ranking_expansao` | P2, P5, P8 | 1 linha por município do universo (≥ 50 mil hab.; 687) | `nota_mercado`, `nota_poder_compra`, `nota_espaco_competitivo`, `nota_crescimento`, `nota_riqueza_nivel`, `nota_riqueza_tendencia`, `nota_riqueza` (média ponderada das duas), `nota_mercado_formal`, `nota_final`, `posicao_brasil`, `posicao_regiao`, `posicao_uf`, `dados_incompletos`, `criterios_ausentes`, `peso_considerado`, `verificar_concorrencia`, `recomendado_top5`, `ordem_recomendacao`, `regiao_imediata_id`/`_nome`, `versao_pesos` |
+| `gold.ranking_expansao` | P2, P5, P8 | 1 linha por município do universo (≥ 50 mil hab.; 687) | `nota_mercado`, `nota_poder_compra`, `nota_espaco_competitivo`, `nota_crescimento`, `nota_riqueza_nivel`, `nota_riqueza_tendencia`, `nota_riqueza` (média ponderada das duas), `nota_mercado_formal`, `nota_final`, `posicao_brasil`, `posicao_regiao`, `posicao_uf`, `dados_incompletos`, `criterios_ausentes`, `peso_considerado`, `verificar_concorrencia`, `elegivel_recomendacao`, `recomendado_top5`, `ordem_recomendacao`, `regiao_imediata_id`/`_nome`, `versao_pesos` |
 | `gold.ranking_criterio` | P8 | 1 linha por componente (7) | `criterio` (a nota fica em `nota_<criterio>`), `grupo` (critério do prd: `riqueza` agrupa nível e tendência), `descricao`, `fonte`, `peso`, `sentido`, `ordem`, `versao_pesos` |
+| `gold.parametro_ranking` | P8 | 1 linha por parâmetro | `unidades_recomendadas` (5) e `nota_minima_poder_compra` (50): lugar único para ajustar a lista recomendada |
 | `gold.contexto_macro` | P6 | 1 linha por mês | `mes`, `mes_parcial`, `selic_meta`, `selic_var_12m_pp`, `dolar_medio`, `dolar_var_12m_pct`, `ipca_mensal`, `ipca_12m` |
 | `gold.momento_expansao` | P7 | 1 linha por mês com os três sinais | `sinal_juros`, `sinal_inflacao`, `sinal_cambio` (`verde`/`amarelo`/`vermelho`), `pontuacao`, `recomendacao`, `justificativa` |
 
@@ -479,11 +481,12 @@ toda linha rastreável até a bronze · nenhuma data futura nos fatos macro · I
   `nota_final = Σ(peso × nota dos disponíveis) / Σ(pesos disponíveis)`; `peso_considerado` guarda o denominador,
   `criterios_ausentes` lista o que faltou e `dados_incompletos = true`.
 - **Posições:** `posicao_brasil` e `posicao_uf` por `nota_final` decrescente (desempate pela maior população).
-- **5 unidades recomendadas (P8):** percorre o ranking em ordem de `posicao_brasil` e escolhe a cidade se a sua
-  `regiao_imediata_id` ainda não foi escolhida, até completar 5 (`recomendado_top5`, `ordem_recomendacao`).
-  O ranking completo não é filtrado.
+- **5 unidades recomendadas (P8):** primeiro marca `elegivel_recomendacao = nota_poder_compra >= nota_minima_poder_compra`
+  (trava de renda; valor em `gold.parametro_ranking`, hoje 50 = percentil 50 do universo). Depois percorre só as elegíveis em
+  ordem de `posicao_brasil` e escolhe a cidade se a sua `regiao_imediata_id` ainda não foi escolhida, até completar
+  `unidades_recomendadas` (`recomendado_top5`, `ordem_recomendacao`). O ranking completo não é filtrado nem reordenado.
 - **Testes da gold:** soma dos pesos = 1; `peso_considerado` entre 0 e 1; notas entre 0 e 100; todos os municípios do universo
-  com nota; exatamente 5 recomendados, em 5 regiões imediatas diferentes.
+  com nota; exatamente 5 recomendados, em 5 regiões imediatas diferentes e nenhum abaixo da trava de renda.
 - A gold é **recalculada inteira** a cada execução (são poucos milhares de linhas; leva cerca de 2 s).
 - **Execução:** `python -m src.transformacao.executar` roda silver e gold em sequência, cada uma com seus testes;
   `--camadas gold` roda só a gold. No cenário B, o n8n aciona o mesmo job (ou `SELECT * FROM gold.atualizar()`).

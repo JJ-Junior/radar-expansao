@@ -67,4 +67,5 @@ O que muda no próximo pedido (e, se for regra, o que entrou no agents.md).
 | 3 | [01-ingestao-python.md](etapa-3-bronze/01-ingestao-python.md) | Camada bronze e ingestão em Python (cenário A) |
 | 4 | [01-modelo-estrela.md](etapa-4-silver/01-modelo-estrela.md) | Camada silver: modelo estrela, transformação única e testes de qualidade |
 | 5 | [01-ranking-e-semaforo.md](etapa-5-gold/01-ranking-e-semaforo.md) | Camada gold: ranking, recomendação das 5 unidades e semáforo |
+| 5 | [02-trava-renda-minima.md](etapa-5-gold/02-trava-renda-minima.md) | Trava de renda mínima nas unidades recomendadas |
 | extra | [01-site-estatico.md](extra-site-de-apoio/01-site-estatico.md) | Site de apoio estático no GitHub Pages |
