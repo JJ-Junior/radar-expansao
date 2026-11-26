@@ -1,6 +1,7 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
-> **RASCUNHO v0.11 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> **RASCUNHO v0.12 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> v0.12: dashboard Streamlit implementado (seção 9.1): 5 páginas, camada de dados única com cache de 10 minutos e cópia de contingência.
 > v0.11: simulador de região (P9): centroides dos municípios (API de Malhas v4), coordenadas na silver e na gold, estimativas de
 > população projetada e lacuna de academias (seções 2.1, 3.2, 3.3, 5.4 e 9.4).
 > v0.10: site publicado só no servidor autohospedado, atualizado a partir da branch `junior` a cada 10 minutos.
@@ -688,17 +689,39 @@ Workflows exportados (sempre **sem credenciais**): `n8n/radar-expansao-cenario-a
 
 ### 9.1 Dashboard
 
-- `src/app/app.py`, publicado no Streamlit Cloud. Páginas: **Ranking** (filtros por região e UF, top N) ·
-  **Município** (ficha com os indicadores e as notas) · **Momento econômico** (Selic, câmbio e IPCA no tempo + semáforo) ·
-  **Como o ranking é calculado** (critérios, pesos e fontes).
+Implementado em `src/app/` e publicado no Streamlit Cloud (repositório `JJ-Junior/radar-expansao`, branch `junior`,
+arquivo `src/app/app.py`). O app **só lê e apresenta**: ranking, notas, lista recomendada e semáforo vêm prontos da gold.
+
+| Arquivo | Conteúdo |
+|---|---|
+| `app.py` | ponto de entrada: `st.set_page_config`, menu no topo (`st.navigation`) com as 5 páginas e o aviso de contingência |
+| `dados.py` | camada de dados única: lê as 6 tabelas da gold pela API (ou a cópia), acerta tipos e guarda em cache |
+| `formato.py` | rótulos dos critérios, cores do tema e números no padrão brasileiro |
+| `paginas/visao_geral.py` | semáforo + justificativa, 5 recomendadas em cards (nota, posição, população, 2 pontos fortes), motivo das cidades bem colocadas que ficaram fora, mapa do universo e números de contexto (P7, P8) |
+| `paginas/ranking.py` | filtros por região, UF, faixa de população, nome e elegibilidade; top 10 do recorte; tabela com notas por critério; CSV (`;` e vírgula decimal) (P2, P4, P5) |
+| `paginas/municipio.py` | nota, posições, nota e peso por componente, indicadores com percentil no universo e medianas do universo e da UF, alertas (P1, P3, P8) |
+| `paginas/contexto_macro.py` | Selic, IPCA mensal e 12 meses (teto de 4,5%) e dólar por período + faixa do semáforo mês a mês com a justificativa (P6, P7) |
+| `paginas/metodologia.py` | critérios, pesos, sentido e fontes de `gold.ranking_criterio`, travas de `gold.parametro_ranking`, regras do semáforo e fluxo bronze → silver → gold com a contagem de linhas da última exportação (P8) |
+
 - **Fonte principal: API REST do Supabase**, lida com `requests`:
-  `GET {SUPABASE_URL}/rest/v1/{tabela}` com os headers `apikey: <chave anônima>` (o gateway exige uma chave de consumidor), `Authorization: Bearer <token do papel web_leitor>` e `Accept-Profile: gold`. Sem o token de leitura, a chave anônima sozinha recebe 401.
+  `GET {SUPABASE_URL}/rest/v1/{tabela}?select=*&order=<coluna>.asc&limit=1000&offset=<n>` com os headers `apikey: <chave anônima>`
+  (o gateway exige uma chave de consumidor), `Authorization: Bearer <token do papel web_leitor>` e `Accept-Profile: gold`.
+  Sem o token de leitura, a chave anônima sozinha recebe 401.
   - A API expõe **só o schema `gold`**, com papel somente leitura e RLS (seção 3.4).
-  - Chaves e headers ficam em `st.secrets` e só existem no servidor do Streamlit; nunca chegam ao navegador do visitante.
-  - Consultas com `st.cache_data` (validade de 1 hora) e paginação se a tabela passar do limite de linhas da API.
-- **Fallback: snapshot da gold no repositório.** Se a API não responder (timeout de 10 s ou erro), o app lê os JSON da gold
-  em `site/dados/` (os mesmos usados pelo site, formato colunar `{colunas, linhas}`, contrato em `site/dados/README.md`) e
-  mostra o aviso **"dados de <data do snapshot>"** (campo `gerado_em` de `site/dados/meta.json`).
+  - Segredos lidos de `st.secrets` (Streamlit Cloud) ou, fora dele, das mesmas variáveis no `.env`; só existem no servidor do
+    Streamlit e nunca chegam ao navegador do visitante. Valor com marcador `<...>` conta como ausente.
+  - Paginação de 1000 em 1000 linhas (limite da API; `indicadores_municipio` tem 5.571), timeout de 10 s e 2 tentativas por chamada.
+  - Cache com `st.cache_data(ttl=600)`: a gold é lida no máximo a cada 10 minutos; trocar de página não chama a API.
+- **Fallback: snapshot da gold no repositório.** Se faltar segredo ou qualquer tabela falhar (timeout, erro HTTP, resposta vazia),
+  o app lê **todas** as tabelas dos JSON da gold em `site/dados/` (os mesmos do site, formato colunar `{colunas, linhas}`,
+  contrato em `site/dados/README.md`) e mostra no topo de toda página o aviso **"Dados de <data>"** (campo `gerado_em` de
+  `site/dados/meta.json`) com o motivo. A mensagem nunca exibe o endereço da API.
+- **Mapa:** pontos nas coordenadas da gold (`latitude`/`longitude` de `gold.ranking_expansao`; na cópia antiga, `site/dados/territorio.json`)
+  sobre as divisas das UFs desenhadas a partir da malha do IBGE (`site/dados/malha/ufs.topo.json`), sem servidor de mapas externo.
+- **Tema** em `.streamlit/config.toml`: fundo escuro, verde-limão (`#c4f03b`) só como cor de marca (botões, links, item ativo,
+  selo "Recomendada"), escala azul como cor de dado nos gráficos e tabelas, laranja para destacar as recomendadas no mapa e
+  verde/amarelo/vermelho só para o semáforo.
+- **Rodar:** `streamlit run src/app/app.py` a partir da raiz do repositório.
 
 ### 9.2 Segurança do acesso público
 

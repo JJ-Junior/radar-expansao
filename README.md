@@ -9,7 +9,8 @@
 > | 3 · Camada bronze (ingestão em Python) | ✅ concluída: 13 recursos carregados no banco do projeto; incremental sem duplicar |
 > | 4 · Camada silver (modelo estrela) | ✅ concluída: 5 dimensões, 2 fatos, 12 testes de qualidade passando |
 > | 5 · Camada gold (ranking, contexto macro, semáforo) | ✅ concluída: tabelas de consumo + parâmetros do ranking + coordenadas e estimativas do simulador de região (P9), 19 testes de qualidade passando |
-> | 6 · n8n · 7 · Streamlit | ⏳ próximas etapas |
+> | 6 · n8n | ⏳ próxima etapa |
+> | 7 · Dashboard Streamlit | ✅ app com 5 páginas lendo a gold pela API REST, com cópia de contingência; publicação no Streamlit Cloud em andamento |
 > | Extra · Site de apoio | ✅ publicado em https://radar-expansao.lovelearning.com.br |
 
 Sistema que cruza dados oficiais do **IBGE** e do **Banco Central** para responder a uma pergunta de negócio:
@@ -70,8 +71,44 @@ Guia passo a passo, com pré-requisitos, geração de segredos, SQL inicial, bac
 
 ## 5. Dashboard
 
-- **Link do app publicado:** em breve
-- **Prints:** _(a preencher — imagens em `docs/img/`)_
+- **Link do app publicado:** em breve (Streamlit Cloud)
+- **Prints:** _(a preencher com o app publicado — imagens em `docs/img/`)_
+
+Feito para o diretor de expansão entender **em 30 segundos** quais cidades priorizar e por quê. Código em
+[`src/app/`](src/app/); tema em [`.streamlit/config.toml`](.streamlit/config.toml) (escuro, verde-limão como cor de marca e
+escala azul como cor de dado, igual ao site de apoio).
+
+| Página | O que mostra | Perguntas do `prd.md` |
+|---|---|---|
+| **Visão geral** | semáforo do momento econômico com a justificativa, as 5 unidades recomendadas (nota, posição, população e 2 pontos fortes), por que cidades bem colocadas ficaram fora, mapa das 687 cidades (tamanho = população, cor = nota) e números de contexto | P7, P8 |
+| **Ranking** | tabela filtrável por região, UF, faixa de população e nome, com as notas de cada critério, gráfico do top 10 do recorte e download em CSV | P2, P4, P5 |
+| **Município** | nota final, posições (Brasil, região, UF), nota e peso de cada critério, indicadores com percentil no universo e medianas, alertas de dados incompletos e de verificar concorrência | P1, P3, P8 |
+| **Momento econômico** | Selic, IPCA (mês e 12 meses) e dólar no tempo + linha do tempo do semáforo mês a mês | P6, P7 |
+| **Como o ranking é calculado** | critérios, pesos, sentido e fontes (lidos da gold), regras do cálculo e da lista recomendada, regras do semáforo e o caminho bronze → silver → gold | P8 |
+
+**De onde vêm os dados.** O app só lê e apresenta: o ranking, as notas, a lista recomendada e o semáforo vêm prontos da
+camada gold. A leitura é pela API REST do Supabase, com papel somente leitura, guardada em cache por 10 minutos
+([`src/app/dados.py`](src/app/dados.py)). Se faltar segredo ou a API não responder, o app usa a cópia da gold em
+`site/dados/*.json` (a mesma do site de apoio) e mostra no topo o aviso **"Dados de <data>"**.
+
+**Rodar no computador** (na raiz do repositório, com o ambiente virtual ativo):
+
+```powershell
+pip install -r requirements.txt
+streamlit run src/app/app.py
+```
+
+Sem segredos, o app abre com a cópia da gold. Para ler a API, preencha `SUPABASE_URL`, `SUPABASE_ANON_KEY` e
+`SUPABASE_CHAVE_LEITURA` no `.env` ou em `.streamlit/secrets.toml` (modelo em
+[`.streamlit/secrets.toml.example`](.streamlit/secrets.toml.example)).
+
+**Publicar no Streamlit Cloud** ([share.streamlit.io](https://share.streamlit.io)):
+
+1. **Create app** → *Deploy a public app from GitHub*.
+2. Repositório `JJ-Junior/radar-expansao`, branch `junior`, arquivo principal `src/app/app.py`.
+3. **Advanced settings** → Python 3.12 e, em **Secrets**, as três linhas do modelo com os valores reais:
+   `SUPABASE_URL`, `SUPABASE_ANON_KEY` e `SUPABASE_CHAVE_LEITURA`.
+4. **Deploy**. Sem o aviso "Dados de …" no topo, o app está lendo a API ao vivo.
 
 ## 6. Como rodar o projeto
 
@@ -134,7 +171,9 @@ notas de 0 a 100 por percentil, peso redistribuído quando falta dado, espaço c
 e as **5 unidades recomendadas com renda acima da mediana do universo e no máximo uma cidade por região imediata**. Ao final, o terminal mostra os testes,
 as 5 recomendadas, o top 10 e o semáforo do momento econômico.
 
-**Passos seguintes** — automação no n8n e dashboard: _(a preencher quando as etapas forem concluídas)_.
+**Passo 6 — dashboard:** `streamlit run src/app/app.py` (detalhes e publicação na seção 5).
+
+**Passo seguinte** — automação no n8n: _(a preencher quando a etapa for concluída)_.
 
 ## 7. Estrutura do repositório
 

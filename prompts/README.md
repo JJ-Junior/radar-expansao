@@ -69,4 +69,5 @@ O que muda no próximo pedido (e, se for regra, o que entrou no agents.md).
 | 5 | [01-ranking-e-semaforo.md](etapa-5-gold/01-ranking-e-semaforo.md) | Camada gold: ranking, recomendação das 5 unidades e semáforo |
 | 5 | [02-trava-renda-minima.md](etapa-5-gold/02-trava-renda-minima.md) | Trava de renda mínima nas unidades recomendadas |
 | 5 | [03-simulador-de-regiao.md](etapa-5-gold/03-simulador-de-regiao.md) | Coordenadas e estimativas para o simulador de região (P9) |
+| 7 | [01-dashboard.md](etapa-7-streamlit/01-dashboard.md) | Dashboard Streamlit lendo a camada gold, com cópia de contingência |
 | extra | [01-site-estatico.md](extra-site-de-apoio/01-site-estatico.md) | Site de apoio estático no GitHub Pages |
