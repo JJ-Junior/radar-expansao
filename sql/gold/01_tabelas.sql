@@ -52,20 +52,20 @@ COMMENT ON TABLE gold.ranking_criterio IS
 
 INSERT INTO gold.ranking_criterio (criterio, grupo, descricao, fonte, peso, sentido, ordem, versao_pesos) VALUES
     ('mercado', 'mercado', 'Tamanho de mercado: populacao estimada mais recente',
-     'IBGE 6579', 0.250, 'maior_melhor', 1, 'prd-v0.3'),
+     'IBGE 6579', 0.250, 'maior_melhor', 1, 'prd-v0.4'),
     ('poder_compra', 'poder_compra', 'Poder de compra: renda domiciliar per capita media (Censo 2022)',
-     'IBGE 10295', 0.250, 'maior_melhor', 2, 'prd-v0.3'),
+     'IBGE 10295', 0.250, 'maior_melhor', 2, 'prd-v0.4'),
     ('espaco_competitivo', 'espaco_competitivo',
      'Espaco competitivo: academias (CNAE 93.13-1) por 10 mil habitantes, limitado aos percentis 5% e 95%',
-     'IBGE 9418 / 6579', 0.200, 'menor_melhor', 3, 'prd-v0.3'),
+     'IBGE 9418 / 6579', 0.200, 'menor_melhor', 3, 'prd-v0.4'),
     ('crescimento', 'crescimento', 'Crescimento: taxa anual da populacao desde o Censo 2022',
-     'IBGE 4714 / 6579', 0.150, 'maior_melhor', 4, 'prd-v0.3'),
+     'IBGE 4714 / 6579', 0.150, 'maior_melhor', 4, 'prd-v0.4'),
     ('riqueza_nivel', 'riqueza', 'Riqueza local (nivel): PIB per capita do ultimo ano',
-     'IBGE 5938 / 6579', 0.050, 'maior_melhor', 5, 'prd-v0.3'),
+     'IBGE 5938 / 6579', 0.050, 'maior_melhor', 5, 'prd-v0.4'),
     ('riqueza_tendencia', 'riqueza', 'Riqueza local (tendencia): taxa media anual (CAGR) do PIB per capita em 5 anos',
-     'IBGE 5938 / 6579', 0.050, 'maior_melhor', 6, 'prd-v0.3'),
+     'IBGE 5938 / 6579', 0.050, 'maior_melhor', 6, 'prd-v0.4'),
     ('mercado_formal', 'mercado_formal', 'Mercado formal: salario medio mensal',
-     'IBGE 9509', 0.050, 'maior_melhor', 7, 'prd-v0.3')
+     'IBGE 9509', 0.050, 'maior_melhor', 7, 'prd-v0.4')
 ON CONFLICT (criterio) DO UPDATE SET
     grupo = EXCLUDED.grupo, descricao = EXCLUDED.descricao, fonte = EXCLUDED.fonte, peso = EXCLUDED.peso,
     sentido = EXCLUDED.sentido, ordem = EXCLUDED.ordem, versao_pesos = EXCLUDED.versao_pesos;
