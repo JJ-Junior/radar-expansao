@@ -1,0 +1,54 @@
+# =============================================================================
+# Radar de Expansao - n8n autohospedado via Docker
+# =============================================================================
+# Uso (numa pasta propria, com o .env ao lado, criado a partir do .env.example):
+#   docker network create radar        # se ainda nao existir (mesma rede do Supabase)
+#   docker compose up -d
+# Acesso: http://localhost:5678 pelo tunel SSH (porta publicada so em 127.0.0.1).
+# Dentro da rede "radar", o banco e alcancado em supabase-db:5432.
+# =============================================================================
+
+name: radar-n8n
+
+services:
+  n8n:
+    image: docker.n8n.io/n8nio/n8n:${N8N_VERSAO:?defina N8N_VERSAO no .env (versao fixa)}
+    container_name: radar-n8n
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:5678:5678"
+    environment:
+      # fuso do container e da agenda (Schedule Trigger)
+      TZ: America/Sao_Paulo
+      GENERIC_TIMEZONE: America/Sao_Paulo
+      # chave que cifra as credenciais salvas no n8n: guardar fora do servidor tambem
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?defina N8N_ENCRYPTION_KEY no .env}
+      # limpeza automatica do historico de execucoes (7 dias)
+      EXECUTIONS_DATA_PRUNE: "true"
+      EXECUTIONS_DATA_MAX_AGE: "168"
+      EXECUTIONS_DATA_PRUNE_MAX_COUNT: "2000"
+      # respostas grandes vao para disco, nao para a memoria
+      N8N_DEFAULT_BINARY_DATA_MODE: filesystem
+      N8N_DIAGNOSTICS_ENABLED: "false"
+      N8N_PERSONALIZATION_ENABLED: "false"
+      # so quando o n8n for acessado por um proxy/tunel com dominio proprio
+      N8N_HOST: ${N8N_HOST:-localhost}
+      N8N_PROTOCOL: ${N8N_PROTOCOL:-http}
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      N8N_PROXY_HOPS: ${N8N_PROXY_HOPS:-0}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    mem_limit: 768m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks: [radar]
+
+volumes:
+  n8n_data:
+
+networks:
+  radar:
+    external: true

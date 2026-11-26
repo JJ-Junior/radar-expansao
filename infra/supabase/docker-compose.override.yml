@@ -1,0 +1,94 @@
+# =============================================================================
+# Radar de Expansao - override do Supabase autohospedado (perfil enxuto)
+# =============================================================================
+# Uso: copie este arquivo para a pasta onde esta o docker-compose.yml OFICIAL do
+# Supabase (pasta docker/ do repositorio oficial, numa versao fixa) e suba so os
+# servicos do perfil enxuto:
+#
+#   docker network create radar            # uma vez; rede compartilhada com o n8n
+#   docker compose up -d db auth rest meta kong studio
+#
+# O que este override muda em relacao ao oficial:
+#   - tira as dependencias de analytics/vector (que ficam desligados);
+#   - publica portas SO em 127.0.0.1 (nada exposto na rede ou na internet);
+#   - limita memoria e roda logs com rotacao;
+#   - liga db e kong na rede "radar" (onde ficam o n8n e o container de ETL).
+# Requer Docker Compose 2.24+ (tags !reset e !override).
+# ⏳ validar apos a instalacao: nomes de servicos e o "command" do db contra a
+#    versao oficial escolhida (podem mudar entre versoes do Supabase).
+# =============================================================================
+
+x-logs: &logs
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  db:
+    <<: *logs
+    depends_on: !reset {}
+    mem_limit: 768m
+    # mantem os parametros do oficial e acrescenta os ajustes de memoria
+    command: !override
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - log_min_messages=fatal
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - max_connections=50
+    environment:
+      TZ: America/Sao_Paulo
+      PGTZ: America/Sao_Paulo
+    ports: !override
+      - "127.0.0.1:5432:5432"
+    networks: [default, radar]
+
+  auth:
+    <<: *logs
+    depends_on: !override
+      db:
+        condition: service_healthy
+    mem_limit: 128m
+
+  rest:
+    <<: *logs
+    depends_on: !override
+      db:
+        condition: service_healthy
+    mem_limit: 128m
+    # PGRST_DB_SCHEMAS=gold vem do .env: a API REST expoe SO o schema gold
+
+  meta:
+    <<: *logs
+    depends_on: !override
+      db:
+        condition: service_healthy
+    mem_limit: 192m
+
+  kong:
+    <<: *logs
+    depends_on: !reset {}
+    mem_limit: 256m
+    environment:
+      KONG_NGINX_WORKER_PROCESSES: "1"
+    ports: !override
+      - "127.0.0.1:8000:8000"
+    networks: [default, radar]
+
+  studio:
+    <<: *logs
+    depends_on: !override
+      meta:
+        condition: service_started
+    mem_limit: 384m
+    environment:
+      NEXT_PUBLIC_ENABLE_LOGS: "false"
+
+networks:
+  radar:
+    external: true
