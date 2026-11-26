@@ -1,8 +1,8 @@
 {
-  "gerado_em": "2026-11-26T16:12:31-03:00",
+  "gerado_em": "2026-11-26T16:24:29-03:00",
   "fonte": "gold",
   "eh_previa": false,
-  "versao_pesos": "prd-v0.3",
+  "versao_pesos": "prd-v0.4",
   "populacao_minima_universo": 50000,
   "periodos": {
     "populacao": 2026,
