@@ -1,0 +1,54 @@
+# Publica o site de apoio (pasta site/) no GitHub Pages.
+# Roda a cada push na branch junior que mexa no site, ou manualmente (aba Actions > Run workflow).
+# Pré-requisitos no repositório (uma vez só): ver site/README.md, seção "Publicar no GitHub Pages".
+
+name: Site de apoio (GitHub Pages)
+
+on:
+  push:
+    branches: [junior]
+    paths:
+      - "site/**"
+      - ".github/workflows/site.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# um deploy por vez; não cancela um deploy que já começou
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Baixa o repositório
+        uses: actions/checkout@v4
+
+      - name: Confere os arquivos de dados do site
+        run: |
+          for arquivo in meta indicadores_municipio ranking_expansao ranking_criterio contexto_macro momento_expansao; do
+            python3 -c "import json; json.load(open('site/dados/${arquivo}.json', encoding='utf-8'))"
+            echo "ok: site/dados/${arquivo}.json"
+          done
+          python3 -c "import json; t = json.load(open('site/dados/malha/municipios.topo.json')); assert len(t['objects']['BRMU']['geometries']) > 5500"
+          echo "ok: site/dados/malha/municipios.topo.json"
+
+      - name: Configura o Pages
+        uses: actions/configure-pages@v5
+
+      - name: Empacota a pasta site/
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Publica
+        id: deploy
+        uses: actions/deploy-pages@v4
