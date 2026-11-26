@@ -75,6 +75,13 @@ testes (ordem, teste, esperado, obtido) AS (
     UNION ALL
     SELECT 12, 'meses com IPCA divergente entre IBGE e BCB', 0,
            (SELECT count(*) FROM ipca_comparado)
+    UNION ALL
+    SELECT 13, 'municipios sem coordenada (centroide)', 0,
+           (SELECT count(*) FROM silver.dim_municipio WHERE latitude IS NULL OR longitude IS NULL)
+    UNION ALL
+    SELECT 14, 'coordenadas fora do retangulo do Brasil', 0,   -- lat -34 a 6; lon -74,5 a -28 (inclui ilhas)
+           (SELECT count(*) FROM silver.dim_municipio
+             WHERE latitude NOT BETWEEN -34 AND 6 OR longitude NOT BETWEEN -74.5 AND -28)
 )
 SELECT ordem, teste, esperado, obtido, esperado = obtido AS ok
 FROM testes

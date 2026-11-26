@@ -88,6 +88,24 @@ BEGIN
     GET DIAGNOSTICS v_linhas = ROW_COUNT;
     tabela := 'silver.dim_municipio'; linhas_gravadas := v_linhas; RETURN NEXT;
 
+    -- 3b. Centroides (metadados da API de Malhas: centroide.latitude / longitude) -
+    UPDATE silver.dim_municipio AS d
+       SET latitude = c.latitude, longitude = c.longitude,
+           coordenada_bronze_id = c.resposta_id, atualizado_em = now()
+      FROM (
+            SELECT (e ->> 'id')::integer                            AS municipio_id,
+                   round((e -> 'centroide' ->> 'latitude')::numeric, 6)  AS latitude,
+                   round((e -> 'centroide' ->> 'longitude')::numeric, 6) AS longitude,
+                   v.resposta_id
+              FROM tmp_vigente AS v, jsonb_array_elements(v.payload) AS e
+             WHERE v.recurso = 'ibge_malha_municipios'
+           ) AS c
+     WHERE c.municipio_id = d.municipio_id
+       AND (d.latitude, d.longitude, d.coordenada_bronze_id)
+           IS DISTINCT FROM (c.latitude, c.longitude, c.resposta_id);
+    GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    tabela := 'silver.dim_municipio (coordenadas)'; linhas_gravadas := v_linhas; RETURN NEXT;
+
     -- 4. Fatos municipais: achata variavel -> resultados -> series -> serie{periodo: valor}
     INSERT INTO silver.fato_indicador_municipal AS f
         (municipio_id, indicador_id, ano, valor, flag_valor, bronze_id)

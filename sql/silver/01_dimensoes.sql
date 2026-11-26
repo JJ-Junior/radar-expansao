@@ -43,6 +43,13 @@ CREATE TABLE IF NOT EXISTS silver.dim_municipio (
 CREATE INDEX IF NOT EXISTS ix_dim_municipio_uf ON silver.dim_municipio (uf_id);
 CREATE INDEX IF NOT EXISTS ix_dim_municipio_imediata ON silver.dim_municipio (regiao_imediata_id);
 
+-- Centroide do municipio (API de Malhas v4 do IBGE), base do simulador de regiao.
+-- Colunas acrescentadas depois da primeira versao da tabela (bancos ja existentes).
+ALTER TABLE silver.dim_municipio
+    ADD COLUMN IF NOT EXISTS latitude              numeric(9,6),   -- graus decimais (sul negativo)
+    ADD COLUMN IF NOT EXISTS longitude             numeric(9,6),   -- graus decimais (oeste negativo)
+    ADD COLUMN IF NOT EXISTS coordenada_bronze_id  bigint;         -- resposta da malha na bronze
+
 -- Calendario gerado (nao vem da bronze): 2000-01-01 a 2030-12-31
 CREATE TABLE IF NOT EXISTS silver.dim_calendario (
     data              date      PRIMARY KEY,
