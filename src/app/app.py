@@ -13,7 +13,7 @@
 # =============================================================================
 #
 # OBJETIVO: abrir o dashboard do Radar: configura a pagina, monta o menu com as
-#           5 paginas e avisa na tela de onde vieram os dados (API ou copia).
+#           6 paginas e avisa na tela de onde vieram os dados (API ou copia).
 # ENTRADA:  camada gold (via src/app/dados.py)
 # SAIDA:    paginas web do dashboard; nao grava nada
 #
@@ -41,6 +41,9 @@
 
 # ============================== CONFIG ==============================
 TITULO_APP = "Radar de Expansão"
+MARCA = "RADAR DE EXPANSÃO"
+SQUAD = "SQUAD DROP DATABASE"
+TITULO_ABA = f"{MARCA} · {SQUAD}"
 ICONE_APP = ":material/radar:"
 SITE_DE_APOIO = "https://radar-expansao.lovelearning.com.br"
 REPOSITORIO = "https://github.com/JJ-Junior/radar-expansao"
@@ -52,7 +55,7 @@ import dados
 import formato as fmt
 
 st.set_page_config(
-    page_title=TITULO_APP,
+    page_title=TITULO_ABA,
     page_icon=ICONE_APP,
     layout="wide",
     menu_items={
@@ -66,11 +69,17 @@ paginas = [
     st.Page("paginas/visao_geral.py", title="Visão geral", icon=":material/radar:", default=True),
     st.Page("paginas/ranking.py", title="Ranking", icon=":material/leaderboard:"),
     st.Page("paginas/municipio.py", title="Município", icon=":material/location_city:"),
+    st.Page("paginas/simulador.py", title="Simulador de região", icon=":material/travel_explore:"),
     st.Page("paginas/contexto_macro.py", title="Momento econômico", icon=":material/monitoring:"),
     st.Page("paginas/metodologia.py", title="Como o ranking é calculado",
             icon=":material/menu_book:"),
 ]
 pagina = st.navigation(paginas, position="top")
+# Depois do menu: a aba mostra a marca, e nao o nome da pagina.
+st.set_page_config(page_title=TITULO_ABA)
+
+# Cabecalho de todas as paginas: marca em destaque, squad em destaque secundario.
+st.markdown(f"#### :primary[{MARCA}] :gray[· {SQUAD}]")
 
 # De onde vieram os dados: aviso visivel quando a API nao respondeu.
 gold = dados.carregar_gold()
