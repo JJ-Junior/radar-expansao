@@ -246,7 +246,7 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
     }
     desenharLista(regiao);
     desenharResumo(regiao);
-    atualizarEndereco();
+    if (compartilhar) atualizarEndereco();
   }
 
   // ------------------------------------------------------------ lista, resumo e avisos
@@ -302,6 +302,8 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
   }
 
   // ------------------------------------------------------------ endereço compartilhável
+  // o endereço só ganha ?centro=&raio= quando a simulação é do usuário (mexeu nos controles ou abriu um link)
+  let compartilhar = false;
   function atualizarEndereco() {
     const p = new URLSearchParams(location.search);
     p.set("centro", centro);
@@ -324,15 +326,16 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
   const nomeCentro = () => { const m = estado.porId.get(centro); return `${m.municipio_nome} (${m.uf_sigla})`; };
   campo.addEventListener("change", () => {
     const id = porTexto.get(normalizar(campo.value));
-    if (id) { centro = id; aplicar(); }
+    if (id) { centro = id; compartilhar = true; aplicar(); }
     campo.value = nomeCentro();
   });
   controleRaio.min = RAIO_MIN; controleRaio.max = RAIO_MAX; controleRaio.step = 10;
-  controleRaio.addEventListener("input", () => { raio = Number(controleRaio.value); saidaRaio.textContent = `${raio} km`; aplicar({ animar: false }); });
+  controleRaio.addEventListener("input", () => { compartilhar = true; raio = Number(controleRaio.value); saidaRaio.textContent = `${raio} km`; aplicar({ animar: false }); });
   controleRaio.addEventListener("change", () => aplicar());
   incluirPequenas.addEventListener("change", () => aplicar());
   el("sim-copiar").addEventListener("click", async (e) => {
     const b = e.currentTarget;
+    compartilhar = true; atualizarEndereco();
     try { await navigator.clipboard.writeText(location.href); b.textContent = "Link copiado"; } catch { b.textContent = "Copie o endereço da barra"; }
     setTimeout(() => { b.textContent = "Copiar link da simulação"; }, 2500);
   });
@@ -402,6 +405,7 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
   }
 
   const veioDoEndereco = lerEndereco();
+  compartilhar = veioDoEndereco;
   campo.value = nomeCentro();
   controleRaio.value = raio;
   saidaRaio.textContent = `${raio} km`;
