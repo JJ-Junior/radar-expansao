@@ -9,7 +9,7 @@
 -- Leitura das tabelas de consumo
 GRANT USAGE ON SCHEMA gold TO web_leitor;
 GRANT SELECT ON gold.indicadores_municipio, gold.ranking_expansao, gold.ranking_criterio,
-                gold.parametro_ranking, gold.contexto_macro, gold.momento_expansao
+                gold.parametro_ranking, gold.contexto_macro, gold.momento_expansao, gold.momento_atual
    TO web_leitor;
 
 -- RLS como defesa extra: leitura so para web_leitor (o servidor ja aplica isso
@@ -19,7 +19,7 @@ DECLARE
     t text;
 BEGIN
     FOREACH t IN ARRAY ARRAY['indicadores_municipio', 'ranking_expansao', 'ranking_criterio',
-                             'parametro_ranking', 'contexto_macro', 'momento_expansao'] LOOP
+                             'parametro_ranking', 'contexto_macro', 'momento_expansao', 'momento_atual'] LOOP
         EXECUTE format('ALTER TABLE gold.%I ENABLE ROW LEVEL SECURITY', t);
         IF NOT EXISTS (SELECT 1 FROM pg_policies
                         WHERE schemaname = 'gold' AND tablename = t AND 'web_leitor' = ANY (roles)) THEN
@@ -32,6 +32,10 @@ $$;
 -- Fora da API: testes, rastreio e a funcao que recalcula a gold
 REVOKE ALL ON gold.vw_testes_qualidade, gold.vw_rastreio_exemplo FROM PUBLIC, web_leitor;
 REVOKE EXECUTE ON FUNCTION gold.atualizar(integer) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION gold.sinal_juros(numeric, numeric), gold.sinal_inflacao(numeric, boolean, numeric),
+                           gold.sinal_cambio(numeric, boolean, numeric), gold.pontos_sinal(text),
+                           gold.recomendacao(integer)
+   FROM PUBLIC;
 
 -- Avisa a API REST para recarregar o cache de schema (sem efeito onde ela nao existe)
 NOTIFY pgrst, 'reload schema';

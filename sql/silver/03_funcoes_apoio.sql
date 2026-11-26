@@ -41,3 +41,13 @@ LANGUAGE sql STABLE AS $$
     WHERE p_origem = 'qualquer' OR r.origem_carga = p_origem
     ORDER BY r.recurso, r.lote, r.ingerido_em DESC
 $$;
+
+-- Numero no formato brasileiro para textos prontos (ex.: 13.75 -> '13,75').
+-- Usada nas justificativas do semaforo da gold; fica fora do schema exposto pela API.
+CREATE OR REPLACE FUNCTION silver.numero_br(p_valor numeric, p_casas integer DEFAULT 2)
+RETURNS text
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT replace(to_char(round(p_valor, p_casas),
+                           'FM999999990' || CASE WHEN p_casas > 0 THEN '.' || repeat('0', p_casas) ELSE '' END),
+                   '.', ',')
+$$;

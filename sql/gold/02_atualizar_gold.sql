@@ -8,6 +8,42 @@
 -- Rodar como etl_radar. Idempotente.
 -- =============================================================================
 
+-- Regras do semaforo (prd.md, secao 5), reaproveitadas no historico e no momento atual.
+-- Ficam fora da API REST (04_permissoes.sql revoga o EXECUTE).
+CREATE OR REPLACE FUNCTION gold.sinal_juros(p_var_pp numeric, p_limiar numeric)
+RETURNS text LANGUAGE sql IMMUTABLE AS $$
+    SELECT CASE WHEN p_var_pp <= -p_limiar THEN 'verde' WHEN p_var_pp > p_limiar THEN 'vermelho' ELSE 'amarelo' END
+$$;
+
+CREATE OR REPLACE FUNCTION gold.sinal_inflacao(p_ipca_12m numeric, p_desacelerando boolean, p_teto numeric)
+RETURNS text LANGUAGE sql IMMUTABLE AS $$
+    SELECT CASE WHEN p_ipca_12m <= p_teto AND p_desacelerando THEN 'verde'
+                WHEN p_ipca_12m >  p_teto AND NOT p_desacelerando THEN 'vermelho' ELSE 'amarelo' END
+$$;
+
+-- cambio: pela variacao em 12 meses; com alerta de alta de curto prazo nunca e verde
+-- (amarelo; vermelho se a variacao em 12 meses tambem for de alta)
+CREATE OR REPLACE FUNCTION gold.sinal_cambio(p_var_12m numeric, p_alerta boolean, p_limiar numeric)
+RETURNS text LANGUAGE sql IMMUTABLE AS $$
+    SELECT CASE WHEN p_alerta AND p_var_12m > 0 THEN 'vermelho'
+                WHEN p_alerta                    THEN 'amarelo'
+                WHEN p_var_12m <= 0              THEN 'verde'
+                WHEN p_var_12m >  p_limiar       THEN 'vermelho'
+                ELSE 'amarelo' END
+$$;
+
+CREATE OR REPLACE FUNCTION gold.pontos_sinal(p_sinal text)
+RETURNS smallint LANGUAGE sql IMMUTABLE AS $$
+    SELECT (CASE p_sinal WHEN 'verde' THEN 1 WHEN 'vermelho' THEN -1 ELSE 0 END)::smallint
+$$;
+
+CREATE OR REPLACE FUNCTION gold.recomendacao(p_pontuacao integer)
+RETURNS text LANGUAGE sql IMMUTABLE AS $$
+    SELECT CASE WHEN p_pontuacao >= 2 THEN 'Expandir agora'
+                WHEN p_pontuacao >= 0 THEN 'Expandir com cautela'
+                ELSE 'Esperar' END
+$$;
+
 CREATE OR REPLACE FUNCTION gold.atualizar(p_populacao_minima integer DEFAULT 50000)
 RETURNS TABLE (tabela text, linhas_gravadas bigint)
 LANGUAGE plpgsql AS $$
@@ -17,10 +53,7 @@ DECLARE
     c_percentil_inferior     constant numeric := 0.05;  -- limites do espaco competitivo
     c_percentil_superior     constant numeric := 0.95;
     -- quantidade de recomendadas e trava de renda ficam em gold.parametro_ranking
-    c_selic_pp               constant numeric := 0.5;   -- semaforo: variacao da Selic em 12 meses (p.p.)
-    c_teto_ipca              constant numeric := 4.5;   -- semaforo: teto do IPCA em 12 meses (%)
-    c_dolar_pct              constant numeric := 10;    -- semaforo: alta do dolar em 12 meses (%)
-    c_meses_tendencia_ipca   constant integer := 3;     -- semaforo: IPCA 12m comparado com N meses antes
+    -- limiares e janela do semaforo tambem ficam em gold.parametro_ranking
     -- ====================================================================
     v_ano_pop      smallint;
     v_ano_pib      smallint;
@@ -38,6 +71,15 @@ DECLARE
     v_ano_projecao     integer;
     v_faixas           integer;
     v_cortes_renda     numeric[];
+    v_janela           integer;
+    v_alerta_pct       numeric;
+    v_selic_pp         numeric;
+    v_teto_ipca        numeric;
+    v_dolar_pct        numeric;
+    v_meses_ipca       integer;
+    v_ref_cambio       date;
+    v_ref_juros        date;
+    v_ref_inflacao     date;
     v_imediatas    integer[] := '{}';
     v_cand         record;
 BEGIN
@@ -280,83 +322,209 @@ BEGIN
     -- 3. gold.contexto_macro (P6) ----------------------------------------------
     TRUNCATE gold.contexto_macro;
     INSERT INTO gold.contexto_macro
-        (mes, mes_parcial, selic_meta, selic_var_12m_pp, dolar_medio, dolar_var_12m_pct, ipca_mensal, ipca_12m)
+        (mes, mes_parcial, selic_meta, selic_ultima_data, selic_var_12m_pp,
+         dolar_medio, dolar_ultimo, dolar_ultimo_data, dolar_var_12m_pct, dolar_var_1m_pct,
+         ipca_mensal, ipca_12m)
     WITH macro AS (
         SELECT indicador_id, data, date_trunc('month', data)::date AS mes, valor
           FROM silver.fato_indicador_macro WHERE valor IS NOT NULL
     ),
     selic AS (   -- meta vigente no ultimo dia com dado no mes
-        SELECT DISTINCT ON (mes) mes, valor FROM macro
+        SELECT DISTINCT ON (mes) mes, data, valor FROM macro
          WHERE indicador_id = 'selic_meta' ORDER BY mes, data DESC
     ),
     dolar AS (SELECT mes, avg(valor) AS valor FROM macro WHERE indicador_id = 'dolar_venda' GROUP BY mes),
+    dolar_ultimo AS (   -- ultimo fechamento do mes
+        SELECT DISTINCT ON (mes) mes, data, valor FROM macro
+         WHERE indicador_id = 'dolar_venda' ORDER BY mes, data DESC
+    ),
     ipca AS (SELECT mes, valor FROM macro WHERE indicador_id = 'ipca_mensal'),
     ipca12 AS (SELECT mes, valor FROM macro WHERE indicador_id = 'ipca_12m'),
     meses AS (SELECT DISTINCT mes FROM macro WHERE indicador_id IN ('selic_meta', 'dolar_venda', 'ipca_mensal', 'ipca_12m'))
     SELECT m.mes,
            m.mes = date_trunc('month', current_date)::date,
-           s.valor, s.valor - s12.valor,
-           round(d.valor, 4), round((d.valor / nullif(d12.valor, 0) - 1) * 100, 2),
+           s.valor, s.data, s.valor - s12.valor,
+           round(d.valor, 4), du.valor, du.data,
+           round((d.valor / nullif(d12.valor, 0) - 1) * 100, 2),
+           round((d.valor / nullif(d1.valor, 0) - 1) * 100, 2),
            i.valor, i12.valor
       FROM meses AS m
-      LEFT JOIN selic  AS s   ON s.mes = m.mes
-      LEFT JOIN selic  AS s12 ON s12.mes = (m.mes - interval '12 months')::date
-      LEFT JOIN dolar  AS d   ON d.mes = m.mes
-      LEFT JOIN dolar  AS d12 ON d12.mes = (m.mes - interval '12 months')::date
-      LEFT JOIN ipca   AS i   ON i.mes = m.mes
-      LEFT JOIN ipca12 AS i12 ON i12.mes = m.mes;
+      LEFT JOIN selic        AS s   ON s.mes = m.mes
+      LEFT JOIN selic        AS s12 ON s12.mes = (m.mes - interval '12 months')::date
+      LEFT JOIN dolar        AS d   ON d.mes = m.mes
+      LEFT JOIN dolar        AS d12 ON d12.mes = (m.mes - interval '12 months')::date
+      LEFT JOIN dolar        AS d1  ON d1.mes = (m.mes - interval '1 month')::date
+      LEFT JOIN dolar_ultimo AS du  ON du.mes = m.mes
+      LEFT JOIN ipca         AS i   ON i.mes = m.mes
+      LEFT JOIN ipca12       AS i12 ON i12.mes = m.mes;
     GET DIAGNOSTICS v_linhas = ROW_COUNT;
     tabela := 'gold.contexto_macro'; linhas_gravadas := v_linhas; RETURN NEXT;
 
-    -- 4. gold.momento_expansao (P7): semaforo so nos meses com os tres sinais ---
+    -- Parametros do semaforo (gold.parametro_ranking) ----------------------------
+    SELECT max(valor) FILTER (WHERE parametro = 'semaforo_janela_dias'),
+           max(valor) FILTER (WHERE parametro = 'semaforo_alerta_cambio_30d_pct'),
+           max(valor) FILTER (WHERE parametro = 'semaforo_limiar_selic_pp'),
+           max(valor) FILTER (WHERE parametro = 'semaforo_teto_ipca_pct'),
+           max(valor) FILTER (WHERE parametro = 'semaforo_limiar_dolar_12m_pct'),
+           max(valor) FILTER (WHERE parametro = 'semaforo_meses_tendencia_ipca')
+      INTO v_janela, v_alerta_pct, v_selic_pp, v_teto_ipca, v_dolar_pct, v_meses_ipca
+      FROM gold.parametro_ranking;
+    v_janela := coalesce(v_janela, 30);
+    v_alerta_pct := coalesce(v_alerta_pct, 5);
+    v_selic_pp := coalesce(v_selic_pp, 0.5);
+    v_teto_ipca := coalesce(v_teto_ipca, 4.5);
+    v_dolar_pct := coalesce(v_dolar_pct, 10);
+    v_meses_ipca := coalesce(v_meses_ipca, 3);
+
+    -- 4. gold.momento_expansao (P7): historico mensal (meses fechados com IPCA) ----
+    --    cambio e juros pela media/meta do mes; alerta de curto prazo pela media do
+    --    mes contra a do mes anterior (mesma ideia da janela movel, em meses)
     TRUNCATE gold.momento_expansao;
     INSERT INTO gold.momento_expansao
-        (mes, sinal_juros, sinal_inflacao, sinal_cambio, pontuacao, recomendacao, justificativa)
+        (mes, sinal_juros, sinal_inflacao, sinal_cambio, pontuacao, recomendacao, justificativa,
+         mes_parcial, ref_juros, ref_cambio, ref_inflacao)
     WITH base AS (
-        SELECT c.mes, c.selic_meta, c.selic_var_12m_pp, c.dolar_medio, c.dolar_var_12m_pct, c.ipca_12m,
-               c.ipca_12m < a.ipca_12m AS desacelerando
+        SELECT c.mes, c.selic_meta, c.selic_ultima_data, c.selic_var_12m_pp, c.dolar_medio, c.dolar_ultimo_data,
+               c.dolar_var_12m_pct, coalesce(c.dolar_var_1m_pct > v_alerta_pct, false) AS alerta,
+               c.ipca_12m, c.ipca_12m < a.ipca_12m AS desacelerando
           FROM gold.contexto_macro AS c
           JOIN gold.contexto_macro AS a
-            ON a.mes = (c.mes - make_interval(months => c_meses_tendencia_ipca))::date
+            ON a.mes = (c.mes - make_interval(months => v_meses_ipca))::date
          WHERE c.selic_var_12m_pp IS NOT NULL AND c.dolar_var_12m_pct IS NOT NULL
            AND c.ipca_12m IS NOT NULL AND a.ipca_12m IS NOT NULL
+           AND NOT c.mes_parcial
     ),
     sinais AS (
         SELECT b.*,
-               CASE WHEN b.selic_var_12m_pp <= -c_selic_pp THEN 'verde'
-                    WHEN b.selic_var_12m_pp >  c_selic_pp  THEN 'vermelho' ELSE 'amarelo' END AS s_juros,
-               CASE WHEN b.ipca_12m <= c_teto_ipca AND b.desacelerando     THEN 'verde'
-                    WHEN b.ipca_12m >  c_teto_ipca AND NOT b.desacelerando THEN 'vermelho' ELSE 'amarelo' END AS s_inflacao,
-               CASE WHEN b.dolar_var_12m_pct <= 0          THEN 'verde'
-                    WHEN b.dolar_var_12m_pct >  c_dolar_pct THEN 'vermelho' ELSE 'amarelo' END AS s_cambio
+               gold.sinal_juros(b.selic_var_12m_pp, v_selic_pp) AS s_juros,
+               gold.sinal_inflacao(b.ipca_12m, b.desacelerando, v_teto_ipca) AS s_inflacao,
+               gold.sinal_cambio(b.dolar_var_12m_pct, b.alerta, v_dolar_pct) AS s_cambio
           FROM base AS b
     ),
     pontos AS (
-        SELECT s.*,
-               (CASE s.s_juros    WHEN 'verde' THEN 1 WHEN 'vermelho' THEN -1 ELSE 0 END
-              + CASE s.s_inflacao WHEN 'verde' THEN 1 WHEN 'vermelho' THEN -1 ELSE 0 END
-              + CASE s.s_cambio   WHEN 'verde' THEN 1 WHEN 'vermelho' THEN -1 ELSE 0 END)::smallint AS pontuacao
+        SELECT s.*, gold.pontos_sinal(s.s_juros) + gold.pontos_sinal(s.s_inflacao)
+                    + gold.pontos_sinal(s.s_cambio) AS pontuacao
           FROM sinais AS s
     )
-    SELECT p.mes, p.s_juros, p.s_inflacao, p.s_cambio, p.pontuacao,
-           CASE WHEN p.pontuacao >= 2 THEN 'Expandir agora'
-                WHEN p.pontuacao >= 0 THEN 'Expandir com cautela'
-                ELSE 'Esperar' END,
+    SELECT p.mes, p.s_juros, p.s_inflacao, p.s_cambio, p.pontuacao, gold.recomendacao(p.pontuacao),
            format('Juros: Selic em %s%% a.a., %s de %s p.p. em 12 meses (%s). '
                   'Inflação: IPCA de %s%% em 12 meses, %s do teto de %s%% e %s (%s). '
-                  'Câmbio: dólar médio de R$ %s, %s de %s%% em 12 meses (%s).',
-                  replace(to_char(p.selic_meta, 'FM990.00'), '.', ','),
+                  'Câmbio: dólar médio de R$ %s no mês, %s de %s%% em 12 meses%s (%s).',
+                  silver.numero_br(p.selic_meta, 2),
                   CASE WHEN p.selic_var_12m_pp < 0 THEN 'queda' WHEN p.selic_var_12m_pp > 0 THEN 'alta' ELSE 'variação' END,
-                  replace(to_char(abs(p.selic_var_12m_pp), 'FM990.00'), '.', ','), p.s_juros,
-                  replace(to_char(p.ipca_12m, 'FM990.00'), '.', ','),
-                  CASE WHEN p.ipca_12m > c_teto_ipca THEN 'acima' ELSE 'dentro' END,
-                  replace(to_char(c_teto_ipca, 'FM990.0'), '.', ','),
+                  silver.numero_br(abs(p.selic_var_12m_pp), 2), p.s_juros,
+                  silver.numero_br(p.ipca_12m, 2),
+                  CASE WHEN p.ipca_12m > v_teto_ipca THEN 'acima' ELSE 'dentro' END,
+                  silver.numero_br(v_teto_ipca, 1),
                   CASE WHEN p.desacelerando THEN 'desacelerando' ELSE 'sem desacelerar' END, p.s_inflacao,
-                  replace(to_char(p.dolar_medio, 'FM990.00'), '.', ','),
+                  silver.numero_br(p.dolar_medio, 2),
                   CASE WHEN p.dolar_var_12m_pct < 0 THEN 'queda' WHEN p.dolar_var_12m_pct > 0 THEN 'alta' ELSE 'variação' END,
-                  replace(to_char(abs(p.dolar_var_12m_pct), 'FM990.0'), '.', ','), p.s_cambio)
+                  silver.numero_br(abs(p.dolar_var_12m_pct), 1),
+                  CASE WHEN p.alerta THEN format(' e alta de mais de %s%% sobre o mês anterior', silver.numero_br(v_alerta_pct, 0)) ELSE '' END,
+                  p.s_cambio),
+           false, p.selic_ultima_data, p.dolar_ultimo_data, p.mes
       FROM pontos AS p;
+
+    -- 5. gold.momento_atual (P7): janela movel ate o ultimo fechamento ------------
+    SELECT max(data) INTO v_ref_cambio
+      FROM silver.fato_indicador_macro WHERE indicador_id = 'dolar_venda' AND valor IS NOT NULL;
+    SELECT max(data) INTO v_ref_juros
+      FROM silver.fato_indicador_macro WHERE indicador_id = 'selic_meta' AND valor IS NOT NULL;
+    SELECT max(data) INTO v_ref_inflacao
+      FROM silver.fato_indicador_macro WHERE indicador_id = 'ipca_12m' AND valor IS NOT NULL;
+
+    TRUNCATE gold.momento_atual;
+    INSERT INTO gold.momento_atual
+        (mes, janela_dias, ref_juros, ref_cambio, ref_inflacao,
+         selic_meta, selic_meta_12m_antes, selic_var_12m_pp,
+         dolar_ultimo, dolar_media_janela, dolar_media_janela_12m_antes, dolar_var_12m_pct,
+         dolar_media_janela_anterior, dolar_var_janela_pct, alerta_cambio_curto_prazo,
+         ipca_12m, ipca_12m_meses_antes, ipca_desacelerando,
+         sinal_juros, sinal_inflacao, sinal_cambio, pontuacao, recomendacao, justificativa)
+    WITH dolar AS (
+        SELECT data, valor FROM silver.fato_indicador_macro WHERE indicador_id = 'dolar_venda' AND valor IS NOT NULL
+    ),
+    valores AS (
+        SELECT
+            (SELECT valor FROM silver.fato_indicador_macro
+              WHERE indicador_id = 'selic_meta' AND data = v_ref_juros)                       AS selic_meta,
+            (SELECT valor FROM silver.fato_indicador_macro
+              WHERE indicador_id = 'selic_meta' AND valor IS NOT NULL
+                AND data <= (v_ref_juros - interval '1 year')::date
+              ORDER BY data DESC LIMIT 1)                                                     AS selic_12m,
+            (SELECT valor FROM dolar WHERE data = v_ref_cambio)                               AS dolar_ultimo,
+            (SELECT avg(valor) FROM dolar
+              WHERE data >  v_ref_cambio - v_janela
+                AND data <= v_ref_cambio)                                                     AS media_janela,
+            (SELECT avg(valor) FROM dolar
+              WHERE data >  (v_ref_cambio - interval '1 year')::date - v_janela
+                AND data <= (v_ref_cambio - interval '1 year')::date)                         AS media_12m,
+            (SELECT avg(valor) FROM dolar
+              WHERE data >  v_ref_cambio - 2 * v_janela
+                AND data <= v_ref_cambio - v_janela)                                          AS media_anterior,
+            (SELECT valor FROM silver.fato_indicador_macro
+              WHERE indicador_id = 'ipca_12m' AND data = v_ref_inflacao)                      AS ipca_12m,
+            (SELECT valor FROM silver.fato_indicador_macro
+              WHERE indicador_id = 'ipca_12m'
+                AND data = (v_ref_inflacao - make_interval(months => v_meses_ipca))::date)    AS ipca_antes
+    ),
+    calc AS (
+        SELECT v.*,
+               v.selic_meta - v.selic_12m                                         AS selic_var,
+               round((v.media_janela / nullif(v.media_12m, 0) - 1) * 100, 2)      AS var_12m,
+               round((v.media_janela / nullif(v.media_anterior, 0) - 1) * 100, 2) AS var_janela,
+               v.ipca_12m < v.ipca_antes                                          AS desacelerando
+          FROM valores AS v
+    ),
+    sinais AS (
+        SELECT c.*,
+               coalesce(c.var_janela > v_alerta_pct, false)                                     AS alerta,
+               gold.sinal_juros(c.selic_var, v_selic_pp)                                        AS s_juros,
+               gold.sinal_inflacao(c.ipca_12m, c.desacelerando, v_teto_ipca)                    AS s_inflacao,
+               gold.sinal_cambio(c.var_12m, coalesce(c.var_janela > v_alerta_pct, false), v_dolar_pct) AS s_cambio
+          FROM calc AS c
+    )
+    SELECT date_trunc('month', v_ref_cambio)::date, v_janela, v_ref_juros, v_ref_cambio, v_ref_inflacao,
+           s.selic_meta, s.selic_12m, s.selic_var,
+           s.dolar_ultimo, round(s.media_janela, 4), round(s.media_12m, 4), s.var_12m,
+           round(s.media_anterior, 4), s.var_janela, s.alerta,
+           s.ipca_12m, s.ipca_antes, s.desacelerando,
+           s.s_juros, s.s_inflacao, s.s_cambio,
+           gold.pontos_sinal(s.s_juros) + gold.pontos_sinal(s.s_inflacao) + gold.pontos_sinal(s.s_cambio),
+           gold.recomendacao(gold.pontos_sinal(s.s_juros) + gold.pontos_sinal(s.s_inflacao) + gold.pontos_sinal(s.s_cambio)),
+           format('Juros: meta da Selic de %s%% a.a. em %s, %s de %s p.p. em 12 meses (%s). '
+                  'Inflação: IPCA de %s%% em 12 meses até %s, %s do teto de %s%% e %s (%s). '
+                  'Câmbio: dólar médio de R$ %s nos %s dias até %s (último fechamento R$ %s), %s de %s%% em 12 meses '
+                  'e %s de %s%% sobre os %s dias anteriores%s (%s).',
+                  silver.numero_br(s.selic_meta, 2), to_char(v_ref_juros, 'DD/MM/YYYY'),
+                  CASE WHEN s.selic_var < 0 THEN 'queda' WHEN s.selic_var > 0 THEN 'alta' ELSE 'variação' END,
+                  silver.numero_br(abs(s.selic_var), 2), s.s_juros,
+                  silver.numero_br(s.ipca_12m, 2), to_char(v_ref_inflacao, 'MM/YYYY'),
+                  CASE WHEN s.ipca_12m > v_teto_ipca THEN 'acima' ELSE 'dentro' END,
+                  silver.numero_br(v_teto_ipca, 1),
+                  CASE WHEN s.desacelerando THEN 'desacelerando' ELSE 'sem desacelerar' END, s.s_inflacao,
+                  silver.numero_br(s.media_janela, 2), v_janela, to_char(v_ref_cambio, 'DD/MM/YYYY'),
+                  silver.numero_br(s.dolar_ultimo, 2),
+                  CASE WHEN s.var_12m < 0 THEN 'queda' WHEN s.var_12m > 0 THEN 'alta' ELSE 'variação' END,
+                  silver.numero_br(abs(s.var_12m), 1),
+                  CASE WHEN s.var_janela < 0 THEN 'queda' WHEN s.var_janela > 0 THEN 'alta' ELSE 'variação' END,
+                  silver.numero_br(abs(s.var_janela), 1), v_janela,
+                  CASE WHEN s.alerta THEN ' — alerta de alta de curto prazo' ELSE '' END,
+                  s.s_cambio)
+      FROM sinais AS s;
     GET DIAGNOSTICS v_linhas = ROW_COUNT;
+    tabela := 'gold.momento_atual'; linhas_gravadas := v_linhas; RETURN NEXT;
+
+    -- o mes do momento atual entra no historico, marcado como parcial
+    INSERT INTO gold.momento_expansao
+        (mes, sinal_juros, sinal_inflacao, sinal_cambio, pontuacao, recomendacao, justificativa,
+         mes_parcial, ref_juros, ref_cambio, ref_inflacao)
+    SELECT a.mes, a.sinal_juros, a.sinal_inflacao, a.sinal_cambio, a.pontuacao, a.recomendacao, a.justificativa,
+           a.mes = date_trunc('month', current_date)::date, a.ref_juros, a.ref_cambio, a.ref_inflacao
+      FROM gold.momento_atual AS a
+     WHERE NOT EXISTS (SELECT 1 FROM gold.momento_expansao AS m WHERE m.mes = a.mes);
+
+    SELECT count(*) INTO v_linhas FROM gold.momento_expansao;
     tabela := 'gold.momento_expansao'; linhas_gravadas := v_linhas; RETURN NEXT;
 
     DROP TABLE IF EXISTS tmp_pop, tmp_universo, tmp_valor, tmp_nota, tmp_referencia;

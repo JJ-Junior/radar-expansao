@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS gold.parametro_ranking (
     versao_pesos  text          NOT NULL
 );
 COMMENT ON TABLE gold.parametro_ranking IS
-    'P8: parametros da lista das 5 unidades recomendadas (quantidade e trava de renda minima); lidos por gold.atualizar().';
+    'P7, P8, P9: parametros do ranking, das recomendadas, das estimativas e do semaforo; lidos por gold.atualizar().';
 
 INSERT INTO gold.parametro_ranking (parametro, valor, descricao, versao_pesos) VALUES
     ('unidades_recomendadas', 5,
@@ -89,7 +89,19 @@ INSERT INTO gold.parametro_ranking (parametro, valor, descricao, versao_pesos) V
     ('ano_projecao_populacao', 2028,
      'Estimativa: ano da populacao projetada (populacao atual x (1 + crescimento anual) ^ anos ate la)', 'prd-v0.5'),
     ('faixas_renda_referencia', 5,
-     'Estimativa: faixas de renda (quintis do universo) usadas na densidade de referencia de academias', 'prd-v0.5')
+     'Estimativa: faixas de renda (quintis do universo) usadas na densidade de referencia de academias', 'prd-v0.5'),
+    ('semaforo_janela_dias', 30,
+     'Semaforo: janela movel (dias corridos) para cambio e juros, ate o ultimo fechamento do BCB', 'prd-v0.6'),
+    ('semaforo_alerta_cambio_30d_pct', 5,
+     'Semaforo: alta da media do dolar nos ultimos 30 dias contra os 30 dias anteriores que impede o sinal verde (%)', 'prd-v0.6'),
+    ('semaforo_limiar_selic_pp', 0.5,
+     'Semaforo: variacao da meta da Selic em 12 meses que muda o sinal de juros (pontos percentuais)', 'prd-v0.6'),
+    ('semaforo_teto_ipca_pct', 4.5,
+     'Semaforo: teto do IPCA acumulado em 12 meses (%)', 'prd-v0.6'),
+    ('semaforo_limiar_dolar_12m_pct', 10,
+     'Semaforo: alta da media do dolar em 12 meses acima da qual o sinal de cambio e vermelho (%)', 'prd-v0.6'),
+    ('semaforo_meses_tendencia_ipca', 3,
+     'Semaforo: IPCA 12m comparado com o de N meses antes para dizer se esta desacelerando', 'prd-v0.6')
 ON CONFLICT (parametro) DO UPDATE SET
     valor = EXCLUDED.valor, descricao = EXCLUDED.descricao, versao_pesos = EXCLUDED.versao_pesos;
 
@@ -146,6 +158,51 @@ ALTER TABLE gold.indicadores_municipio
 ALTER TABLE gold.ranking_expansao
     ADD COLUMN IF NOT EXISTS latitude   numeric(9,6),
     ADD COLUMN IF NOT EXISTS longitude  numeric(9,6);
+
+-- P6, P7: ultimo fechamento diario e referencias do semaforo -------------------
+ALTER TABLE gold.contexto_macro
+    ADD COLUMN IF NOT EXISTS selic_ultima_data    date,          -- dia da meta usada no mes
+    ADD COLUMN IF NOT EXISTS dolar_ultimo         numeric(8,4),  -- ultimo fechamento do dolar no mes
+    ADD COLUMN IF NOT EXISTS dolar_ultimo_data    date,
+    ADD COLUMN IF NOT EXISTS dolar_var_1m_pct     numeric(7,2);  -- media do mes x media do mes anterior (%)
+
+ALTER TABLE gold.momento_expansao
+    ADD COLUMN IF NOT EXISTS mes_parcial   boolean NOT NULL DEFAULT false,  -- mes corrente, calculado pela janela movel
+    ADD COLUMN IF NOT EXISTS ref_juros     date,      -- dia da meta da Selic usada
+    ADD COLUMN IF NOT EXISTS ref_cambio    date,      -- ultimo fechamento do dolar usado
+    ADD COLUMN IF NOT EXISTS ref_inflacao  date;      -- mes do IPCA usado
+
+-- P7: o momento atual (uma linha), com as datas e os valores de cada sinal ------
+CREATE TABLE IF NOT EXISTS gold.momento_atual (
+    momento_id                    smallint      PRIMARY KEY DEFAULT 1 CHECK (momento_id = 1),
+    mes                           date          NOT NULL,     -- mes do ultimo fechamento do dolar
+    janela_dias                   smallint      NOT NULL,
+    ref_juros                     date          NOT NULL,     -- dia da meta da Selic usada
+    ref_cambio                    date          NOT NULL,     -- ultimo fechamento do dolar
+    ref_inflacao                  date          NOT NULL,     -- mes do IPCA usado (ultimo publicado)
+    selic_meta                    numeric(6,2),
+    selic_meta_12m_antes          numeric(6,2),
+    selic_var_12m_pp              numeric(6,2),
+    dolar_ultimo                  numeric(8,4),
+    dolar_media_janela            numeric(8,4),               -- media dos ultimos N dias ate ref_cambio
+    dolar_media_janela_12m_antes  numeric(8,4),               -- mesma janela 12 meses antes
+    dolar_var_12m_pct             numeric(7,2),
+    dolar_media_janela_anterior   numeric(8,4),               -- os N dias anteriores a janela
+    dolar_var_janela_pct          numeric(7,2),               -- variacao de curto prazo
+    alerta_cambio_curto_prazo     boolean       NOT NULL,
+    ipca_12m                      numeric(6,2),
+    ipca_12m_meses_antes          numeric(6,2),
+    ipca_desacelerando            boolean,
+    sinal_juros                   text          NOT NULL CHECK (sinal_juros IN ('verde', 'amarelo', 'vermelho')),
+    sinal_inflacao                text          NOT NULL CHECK (sinal_inflacao IN ('verde', 'amarelo', 'vermelho')),
+    sinal_cambio                  text          NOT NULL CHECK (sinal_cambio IN ('verde', 'amarelo', 'vermelho')),
+    pontuacao                     smallint      NOT NULL,
+    recomendacao                  text          NOT NULL,
+    justificativa                 text          NOT NULL,
+    atualizado_em                 timestamptz   NOT NULL DEFAULT now()
+);
+COMMENT ON TABLE gold.momento_atual IS
+    'P7: semaforo do momento atual - cambio e juros pela janela movel ate o ultimo fechamento, inflacao pelo ultimo IPCA.';
 
 COMMENT ON TABLE gold.indicadores_municipio IS
     'P1, P3, P4, P9: indicadores de cada municipio, coordenadas e estimativas (populacao projetada e lacuna de academias).';

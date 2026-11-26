@@ -105,11 +105,11 @@ def imprimir_resumo_gold(conn) -> None:
         print("\nTop 10 do ranking")
         for posicao, nome, uf, nota in cur.fetchall():
             print(f"  {posicao:>2}. {nome}/{uf} - {nota}")
-        cur.execute("""SELECT to_char(mes, 'MM/YYYY'), recomendacao, justificativa
-                         FROM gold.momento_expansao ORDER BY mes DESC LIMIT 1""")
+        cur.execute("""SELECT to_char(ref_cambio, 'DD/MM/YYYY'), recomendacao, justificativa
+                         FROM gold.momento_atual""")
         linha = cur.fetchone()
         if linha:
-            print(f"\nMomento ({linha[0]}): {linha[1]}\n  {linha[2]}")
+            print(f"\nMomento atual (ultimo fechamento {linha[0]}): {linha[1]}\n  {linha[2]}")
 
 
 def main() -> None:
