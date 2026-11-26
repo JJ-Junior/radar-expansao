@@ -35,6 +35,9 @@ DECLARE
     v_escolhidas   integer := 0;
     v_qtd_recomendadas integer;
     v_renda_minima     numeric;
+    v_ano_projecao     integer;
+    v_faixas           integer;
+    v_cortes_renda     numeric[];
     v_imediatas    integer[] := '{}';
     v_cand         record;
 BEGIN
@@ -75,7 +78,7 @@ BEGIN
          populacao, populacao_ano, populacao_censo_2022, crescimento_pop_aa,
          pib_mil_reais, pib_ano, pib_per_capita, pib_per_capita_tendencia, tendencia_ano_inicial,
          renda_dom_per_capita, renda_ano, academias_qtd, academias_ano, academias_por_10mil_hab,
-         salario_medio, salario_ano)
+         salario_medio, salario_ano, latitude, longitude)
     SELECT m.municipio_id, m.municipio_nome, u.uf_sigla, r.regiao_sigla,
            m.regiao_imediata_id, m.regiao_imediata_nome,
            round(pop_atual.pop)::integer, v_ano_pop, round(censo.valor)::integer,
@@ -92,7 +95,8 @@ BEGIN
            v_ano_acad,
            round(CASE WHEN acad.flag_valor = 'zero_absoluto' THEN 0 ELSE acad.valor END
                  * 10000 / pop_acad.pop, 3),
-           sal.valor, v_ano_sal
+           sal.valor, v_ano_sal,
+           m.latitude, m.longitude
       FROM silver.dim_municipio AS m
       JOIN silver.dim_uf AS u ON u.uf_id = m.uf_id
       JOIN silver.dim_regiao AS r ON r.regiao_id = m.regiao_id
@@ -129,6 +133,49 @@ BEGIN
       INTO v_p_inf, v_p_sup
       FROM tmp_universo WHERE academias_por_10mil_hab IS NOT NULL;
 
+    -- Estimativas do simulador de regiao (P9), para TODOS os municipios ------------
+    --   faixa de renda: quintis da renda domiciliar per capita do universo;
+    --   densidade de referencia: mediana de academias/10 mil hab. (limitada a P5-P95)
+    --   das cidades do universo da mesma faixa;
+    --   lacuna = (referencia - densidade atual limitada a P5-P95) x populacao / 10 mil;
+    --   populacao projetada = populacao atual x (1 + crescimento anual) ^ (ano - ano atual).
+    SELECT max(valor) FILTER (WHERE parametro = 'ano_projecao_populacao'),
+           max(valor) FILTER (WHERE parametro = 'faixas_renda_referencia')
+      INTO v_ano_projecao, v_faixas
+      FROM gold.parametro_ranking;
+    v_ano_projecao := coalesce(v_ano_projecao, v_ano_pop + 2);
+    v_faixas := coalesce(v_faixas, 5);
+
+    SELECT percentile_cont(ARRAY(SELECT g::numeric / v_faixas FROM generate_series(1, v_faixas - 1) AS g))
+           WITHIN GROUP (ORDER BY renda_dom_per_capita)
+      INTO v_cortes_renda
+      FROM tmp_universo WHERE renda_dom_per_capita IS NOT NULL;
+
+    DROP TABLE IF EXISTS tmp_referencia;
+    CREATE TEMP TABLE tmp_referencia AS
+        SELECT width_bucket(renda_dom_per_capita, v_cortes_renda) + 1 AS faixa_renda,
+               percentile_cont(0.5) WITHIN GROUP (
+                   ORDER BY least(greatest(academias_por_10mil_hab, v_p_inf), v_p_sup)) AS densidade_referencia
+          FROM tmp_universo
+         WHERE renda_dom_per_capita IS NOT NULL AND academias_por_10mil_hab IS NOT NULL
+         GROUP BY 1;
+
+    UPDATE gold.indicadores_municipio AS i
+       SET faixa_renda = f.faixa_renda,
+           densidade_referencia = round(ref.densidade_referencia::numeric, 3),
+           lacuna_academias = round((ref.densidade_referencia
+                                     - least(greatest(i.academias_por_10mil_hab, v_p_inf), v_p_sup))
+                                    * i.populacao / 10000.0),
+           ano_projecao = v_ano_projecao,
+           populacao_projetada = round(i.populacao * power(1 + i.crescimento_pop_aa, v_ano_projecao - i.populacao_ano)),
+           estimativa = CASE WHEN i.crescimento_pop_aa IS NOT NULL OR i.academias_por_10mil_hab IS NOT NULL THEN
+               'Estimativa simples, nao e previsao garantida: populacao projetada pela taxa anual desde o Censo 2022; '
+               || 'lacuna = (densidade de referencia da faixa de renda - densidade atual) x populacao / 10 mil.' END
+      FROM (SELECT municipio_id, width_bucket(renda_dom_per_capita, v_cortes_renda) + 1 AS faixa_renda
+              FROM gold.indicadores_municipio WHERE renda_dom_per_capita IS NOT NULL) AS f
+      LEFT JOIN tmp_referencia AS ref ON ref.faixa_renda = f.faixa_renda
+     WHERE f.municipio_id = i.municipio_id;
+
     -- valor de cada componente por municipio (formato longo)
     DROP TABLE IF EXISTS tmp_valor;
     CREATE TEMP TABLE tmp_valor AS
@@ -164,12 +211,13 @@ BEGIN
     TRUNCATE gold.ranking_expansao;
     INSERT INTO gold.ranking_expansao
         (municipio_id, municipio_nome, uf_sigla, regiao_sigla, regiao_imediata_id, regiao_imediata_nome,
+         latitude, longitude,
          populacao, nota_mercado, nota_poder_compra, nota_espaco_competitivo, nota_crescimento,
          nota_riqueza_nivel, nota_riqueza_tendencia, nota_riqueza, nota_mercado_formal,
          nota_final, posicao_brasil, posicao_regiao, posicao_uf,
          dados_incompletos, criterios_ausentes, peso_considerado, verificar_concorrencia, versao_pesos)
     SELECT u.municipio_id, u.municipio_nome, u.uf_sigla, u.regiao_sigla,
-           u.regiao_imediata_id, u.regiao_imediata_nome, u.populacao,
+           u.regiao_imediata_id, u.regiao_imediata_nome, u.latitude, u.longitude, u.populacao,
            n.nota_mercado, n.nota_poder_compra, n.nota_espaco_competitivo, n.nota_crescimento,
            n.nota_riqueza_nivel, n.nota_riqueza_tendencia, n.nota_riqueza, n.nota_mercado_formal,
            n.nota_final,
@@ -311,7 +359,7 @@ BEGIN
     GET DIAGNOSTICS v_linhas = ROW_COUNT;
     tabela := 'gold.momento_expansao'; linhas_gravadas := v_linhas; RETURN NEXT;
 
-    DROP TABLE IF EXISTS tmp_pop, tmp_universo, tmp_valor, tmp_nota;
+    DROP TABLE IF EXISTS tmp_pop, tmp_universo, tmp_valor, tmp_nota, tmp_referencia;
 END
 $$;
 

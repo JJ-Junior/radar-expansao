@@ -85,7 +85,11 @@ INSERT INTO gold.parametro_ranking (parametro, valor, descricao, versao_pesos) V
      'Quantidade de cidades na lista de unidades recomendadas (no maximo uma por regiao imediata)', 'prd-v0.4'),
     ('nota_minima_poder_compra', 50,
      'Trava de renda: so entra na lista de recomendadas quem tem nota de poder de compra >= este valor (percentil 50 do universo)',
-     'prd-v0.4')
+     'prd-v0.4'),
+    ('ano_projecao_populacao', 2028,
+     'Estimativa: ano da populacao projetada (populacao atual x (1 + crescimento anual) ^ anos ate la)', 'prd-v0.5'),
+    ('faixas_renda_referencia', 5,
+     'Estimativa: faixas de renda (quintis do universo) usadas na densidade de referencia de academias', 'prd-v0.5')
 ON CONFLICT (parametro) DO UPDATE SET
     valor = EXCLUDED.valor, descricao = EXCLUDED.descricao, versao_pesos = EXCLUDED.versao_pesos;
 
@@ -126,6 +130,25 @@ COMMENT ON TABLE gold.ranking_expansao IS
 -- coluna criada depois da primeira versao da tabela (bancos ja existentes)
 ALTER TABLE gold.ranking_expansao
     ADD COLUMN IF NOT EXISTS elegivel_recomendacao boolean NOT NULL DEFAULT false;
+
+-- P9 (simulador de regiao): coordenadas e estimativas -------------------------
+-- Colunas acrescentadas depois da primeira versao das tabelas (bancos ja existentes).
+ALTER TABLE gold.indicadores_municipio
+    ADD COLUMN IF NOT EXISTS latitude              numeric(9,6),   -- centroide (API de Malhas do IBGE)
+    ADD COLUMN IF NOT EXISTS longitude             numeric(9,6),
+    ADD COLUMN IF NOT EXISTS faixa_renda           smallint,       -- 1 (renda mais baixa) a 5: quintis da renda do universo
+    ADD COLUMN IF NOT EXISTS populacao_projetada   integer,        -- ESTIMATIVA para ano_projecao
+    ADD COLUMN IF NOT EXISTS ano_projecao          smallint,
+    ADD COLUMN IF NOT EXISTS densidade_referencia  numeric(8,3),   -- mediana de academias/10 mil hab. da faixa de renda
+    ADD COLUMN IF NOT EXISTS lacuna_academias      integer,        -- ESTIMATIVA: + espaco para novas; - saturado
+    ADD COLUMN IF NOT EXISTS estimativa            text;           -- aviso: estimativa simples, nao previsao garantida
+
+ALTER TABLE gold.ranking_expansao
+    ADD COLUMN IF NOT EXISTS latitude   numeric(9,6),
+    ADD COLUMN IF NOT EXISTS longitude  numeric(9,6);
+
+COMMENT ON TABLE gold.indicadores_municipio IS
+    'P1, P3, P4, P9: indicadores de cada municipio, coordenadas e estimativas (populacao projetada e lacuna de academias).';
 
 -- P6: evolucao mensal do cenario economico ------------------------------------
 CREATE TABLE IF NOT EXISTS gold.contexto_macro (

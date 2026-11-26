@@ -127,6 +127,28 @@ testes (ordem, teste, esperado, obtido) AS (
              WHERE r.recomendado_top5
                AND NOT coalesce(r.nota_poder_compra >= (SELECT valor FROM gold.parametro_ranking
                                                          WHERE parametro = 'nota_minima_poder_compra'), false))
+    UNION ALL
+    SELECT 15, 'municipios da gold com coordenada',
+           (SELECT count(*)::text FROM gold.indicadores_municipio),
+           (SELECT count(*)::text FROM gold.indicadores_municipio WHERE latitude IS NOT NULL AND longitude IS NOT NULL)
+    UNION ALL
+    SELECT 16, 'coordenadas fora do retangulo do Brasil', '0',   -- lat -34 a 6; lon -74,5 a -28
+           (SELECT count(*)::text FROM gold.indicadores_municipio
+             WHERE latitude NOT BETWEEN -34 AND 6 OR longitude NOT BETWEEN -74.5 AND -28)
+    UNION ALL
+    SELECT 17, 'faixas de renda com densidade de referencia',
+           (SELECT valor::int::text FROM gold.parametro_ranking WHERE parametro = 'faixas_renda_referencia'),
+           (SELECT count(DISTINCT faixa_renda)::text FROM gold.indicadores_municipio
+             WHERE densidade_referencia IS NOT NULL)
+    UNION ALL
+    SELECT 18, 'municipios com populacao, renda e academias sem lacuna estimada', '0',
+           (SELECT count(*)::text FROM gold.indicadores_municipio
+             WHERE populacao IS NOT NULL AND renda_dom_per_capita IS NOT NULL
+               AND academias_por_10mil_hab IS NOT NULL AND lacuna_academias IS NULL)
+    UNION ALL
+    SELECT 19, 'municipios do ranking com coordenada',
+           (SELECT count(*)::text FROM gold.ranking_expansao),
+           (SELECT count(*)::text FROM gold.ranking_expansao WHERE latitude IS NOT NULL AND longitude IS NOT NULL)
 )
 SELECT ordem, teste, esperado, obtido, esperado IS NOT DISTINCT FROM obtido AS ok
   FROM testes
