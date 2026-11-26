@@ -1,8 +1,8 @@
 # Contrato dos dados do site (`site/dados/`)
 
 O site de apoio não conecta no banco: ele lê arquivos JSON estáticos desta pasta. Os arquivos são gerados por
-[`src/exportacao/exportar_site.py`](../../src/exportacao/exportar_site.py) e a malha por
-[`src/exportacao/baixar_malha.py`](../../src/exportacao/baixar_malha.py).
+[`src/exportacao/exportar_site.py`](../../src/exportacao/exportar_site.py); as malhas e o território por
+[`src/exportacao/baixar_territorio.py`](../../src/exportacao/baixar_territorio.py).
 
 Cada arquivo de dados espelha **uma tabela da camada gold** do [`spec.md`](../../spec.md) (seção 3.3), com os
 **mesmos nomes de colunas**. Assim, quem conhece a gold entende o site, e o site não tem regra de cálculo própria:
@@ -54,7 +54,11 @@ Para ler em JavaScript: `linhas.map(l => Object.fromEntries(colunas.map((c, j) =
 | `ranking_criterio.json` | `gold.ranking_criterio` | 6 critérios | P8 |
 | `contexto_macro.json` | `gold.contexto_macro` | 1 por mês | P6 |
 | `momento_expansao.json` | `gold.momento_expansao` | 1 por mês com os 3 sinais | P7 |
-| `malha/municipios.topo.json` | API de Malhas v3 do IBGE (não é tabela da gold) | 5.570 polígonos | mapa |
+| `territorio.json` | IBGE Localidades + Malhas (referência, não é tabela da gold) | todos os municípios (~5.571) | mapa por regiões |
+| `malha/regioes.topo.json` | API de Malhas v3 do IBGE | 5 polígonos | mapa |
+| `malha/ufs.topo.json` | idem | 27 polígonos | mapa e radar do topo |
+| `malha/intermediarias.topo.json` | idem | 133 polígonos | mapa |
+| `malha/imediatas.topo.json` | idem | 510 polígonos | mapa |
 
 ### `meta.json`
 
@@ -89,7 +93,7 @@ Exemplo:
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| `municipio_id` | inteiro | Código IBGE de 7 dígitos (chave; casa com `codarea` da malha) |
+| `municipio_id` | inteiro | Código IBGE de 7 dígitos (chave; casa com `territorio.json`) |
 | `municipio_nome` | texto | Nome oficial |
 | `uf_sigla` | texto (2) | Sigla da UF |
 | `regiao_sigla` | texto (1–2) | `N`, `NE`, `SE`, `S`, `CO` |
@@ -173,19 +177,40 @@ O mês corrente pode aparecer com Selic e dólar parciais e IPCA `null` (o IPCA 
 
 O site usa a **última linha** como semáforo atual e as anteriores como histórico.
 
-### `malha/municipios.topo.json`
+### `territorio.json` — hierarquia do IBGE e ponto de cada município
+
+Mesmo formato colunar (`"tabela": "ibge.territorio"`). Não vem da gold: é referência territorial do IBGE, igual para
+qualquer versão do ranking. Serve para agrupar as cidades por região intermediária e imediata e para pôr cada uma no mapa.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `municipio_id` | inteiro | Código IBGE de 7 dígitos |
+| `regiao_imediata_id`, `regiao_imediata_nome` | inteiro, texto | Região geográfica imediata (510 no país) |
+| `regiao_intermediaria_id`, `regiao_intermediaria_nome` | inteiro, texto | Região geográfica intermediária (133 no país) |
+| `longitude`, `latitude` | número \| null | Centro do município (centroide do polígono, ponderado pela área), 4 casas. `null` para município sem polígono na malha (ex.: criado depois dela) |
+
+UF e região saem do próprio código: `uf_id = municipio_id ÷ 100000`, `regiao_id = municipio_id ÷ 1000000` (divisão inteira).
+
+### `malha/*.topo.json` — malhas do IBGE
 
 TopoJSON baixado da [API de Malhas v3 do IBGE](https://servicodados.ibge.gov.br/api/docs/malhas?versao=3)
-(`/api/v3/malhas/paises/BR?formato=application/json&qualidade=minima&intrarregiao=municipio`), salvo como veio.
-Objeto `BRMU`, uma geometria por município, propriedade `codarea` (texto de 7 dígitos = `municipio_id`).
-As divisas das UFs são derivadas no navegador (`topojson.mesh` comparando os 2 primeiros dígitos de `codarea`).
-A malha muda raramente: rode `baixar_malha.py` só quando o IBGE publicar uma nova divisão territorial.
+(`/api/v3/malhas/paises/BR?formato=application/json&qualidade=minima&intrarregiao=<camada>`), salvo como veio.
+
+| Arquivo | `intrarregiao` | Objeto | `codarea` |
+|---|---|---|---|
+| `regioes.topo.json` | `regiao` | `BRGR` | 1 dígito (1 = Norte … 5 = Centro-Oeste) |
+| `ufs.topo.json` | `UF` | `BRUF` | 2 dígitos (código da UF) |
+| `intermediarias.topo.json` | `regiao-intermediaria` | `BRIN` | 4 dígitos (`regiao_intermediaria_id`) |
+| `imediatas.topo.json` | `regiao-imediata` | `BRIM` | 6 dígitos (`regiao_imediata_id`) |
+
+A malha de municípios (1,4 MB) é baixada só em memória, para calcular os pontos do `territorio.json`; o site não a usa.
+As malhas mudam raramente: rode `baixar_territorio.py` só quando o IBGE publicar uma nova divisão territorial.
 
 ## Como gerar
 
 ```powershell
 # na raiz do repositório, com o ambiente virtual ativo
-python src/exportacao/baixar_malha.py      # uma vez
+python src/exportacao/baixar_territorio.py # uma vez (malhas + territorio.json)
 python src/exportacao/exportar_site.py     # a cada atualização da gold (ou da prévia)
 ```
 
