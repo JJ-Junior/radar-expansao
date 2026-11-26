@@ -4,26 +4,30 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Radar de Expansão · onde abrir a próxima academia</title>
-  <meta name="description" content="Ranking de municípios para uma rede de academias, com dados abertos do IBGE e do Banco Central: onde abrir a próxima unidade e se o momento econômico favorece expandir.">
+  <meta name="description" content="Vitrine de expansão para uma rede de academias: o momento econômico, o mapa do Brasil por regiões e as cidades mais prontas para uma nova unidade, com dados abertos do IBGE e do Banco Central.">
   <meta property="og:title" content="Radar de Expansão">
-  <meta property="og:description" content="Onde abrir a próxima academia — e quando. Ranking de municípios com dados do IBGE e do Banco Central.">
+  <meta property="og:description" content="Abra onde o Brasil está pronto. Ranking de cidades para uma rede de academias, com dados do IBGE e do Banco Central.">
   <meta property="og:type" content="website">
-  <meta name="theme-color" content="#0d1013">
+  <meta name="theme-color" content="#0b0d0f">
   <link rel="icon" href="img/radar.svg" type="image/svg+xml">
 
-  <!-- Tema salvo antes de pintar a página (evita piscar claro/escuro) -->
+  <!-- Tema salvo antes de pintar a página (evita piscar) -->
   <script>
     try { const t = localStorage.getItem("radar-tema"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+    document.documentElement.classList.add("js");
   </script>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="css/estilo.css">
 
   <!-- Bibliotecas por CDN, versões fixas -->
   <script defer src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
@@ -43,288 +47,265 @@
         <span class="marca__nome">Radar<span> de Expansão</span></span>
       </a>
       <nav class="topo__nav" aria-label="Seções">
-        <a href="#mapa">Mapa</a>
-        <a href="#ranking">Ranking</a>
-        <a href="#momento">Momento</a>
-        <a href="#metodologia">Metodologia</a>
-        <a href="#arquitetura">Arquitetura</a>
+        <a href="#agora">Quando</a>
+        <a href="#mapa">Onde</a>
+        <a href="#top">Top cidades</a>
+        <a href="#ideal">Critérios</a>
+        <a href="#arquitetura">Dados</a>
       </nav>
       <button class="botao-tema" type="button" id="botao-tema" aria-label="Alternar tema claro e escuro">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" fill="currentColor"/></svg>
       </button>
     </div>
+    <div class="previa" id="aviso-previa" role="note" hidden>
+      <span class="previa__tag">Prévia</span>
+      <span>Ranking calculado após a camada gold<span class="previa__longo"> · números reais, direto das APIs do IBGE e do Banco Central</span></span>
+    </div>
   </header>
-
-  <div class="aviso-previa" id="aviso-previa" role="note" hidden>
-    <strong>Prévia — ranking calculado após a camada gold.</strong>
-    <span>Os números vêm direto das APIs do IBGE e do Banco Central, com as regras do projeto. A versão oficial será a da camada gold.</span>
-  </div>
 
   <main id="conteudo">
 
-    <!-- 1. HERO ------------------------------------------------------------------>
+    <!-- HERO ---------------------------------------------------------------------->
     <section class="hero" id="inicio" aria-labelledby="titulo-hero">
-      <div class="largura">
-        <p class="sobretitulo">Rede de academias · dados abertos do IBGE e do Banco Central</p>
-        <h1 class="hero__titulo" id="titulo-hero">Onde abrir a próxima academia <em>— e quando.</em></h1>
-        <p class="hero__lede" id="hero-lede">Seis critérios do IBGE dão nota a cada cidade com 50 mil habitantes ou mais. Juros, inflação e dólar dizem se é hora de abrir ou de segurar o caixa.</p>
+      <canvas class="hero__radar" id="hero-radar" aria-hidden="true"></canvas>
+      <div class="largura hero__grade">
+        <div class="hero__texto">
+          <p class="rotulo">Radar de Expansão · rede de academias</p>
+          <h1 class="hero__titulo" id="titulo-hero">
+            <span class="linha"><span>Abra onde</span></span>
+            <span class="linha"><span>o Brasil</span></span>
+            <span class="linha"><span>está <span class="destaque">pronto.</span></span></span>
+          </h1>
+          <p class="hero__lede" id="hero-lede">Seis critérios do IBGE varrem as cidades com 50 mil habitantes ou mais. Juros, inflação e dólar dizem se a hora é agora.</p>
 
-        <dl class="kpis" id="kpis" aria-live="polite">
-          <div class="kpi"><dt>Municípios avaliados</dt><dd class="kpi__valor" data-kpi="universo">—</dd><dd class="kpi__nota" data-kpi="universo-nota">carregando…</dd></div>
-          <div class="kpi"><dt>1º do ranking</dt><dd class="kpi__valor" data-kpi="topo">—</dd><dd class="kpi__nota" data-kpi="topo-nota"></dd></div>
-          <div class="kpi"><dt>Momento econômico</dt><dd class="kpi__valor" data-kpi="momento">—</dd><dd class="kpi__nota" data-kpi="momento-nota"></dd></div>
-          <div class="kpi"><dt>Dados atualizados em</dt><dd class="kpi__valor" data-kpi="data">—</dd><dd class="kpi__nota" data-kpi="data-nota"></dd></div>
+          <div class="busca" id="busca">
+            <label class="busca__rotulo" for="busca-campo">Buscar uma cidade</label>
+            <div class="busca__caixa">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input id="busca-campo" type="search" autocomplete="off" spellcheck="false"
+                     placeholder="Ex.: Campinas, Recife, Sinop" role="combobox" aria-expanded="false"
+                     aria-controls="busca-lista" aria-autocomplete="list">
+            </div>
+            <ul class="busca__lista" id="busca-lista" role="listbox" aria-label="Cidades encontradas" hidden></ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="largura">
+        <dl class="kpis" id="kpis">
+          <div class="kpi"><dt>Cidades avaliadas</dt><dd class="kpi__valor"><span data-kpi="universo">—</span></dd><dd class="kpi__nota" data-kpi="universo-nota"></dd></div>
+          <div class="kpi"><dt>1ª do ranking</dt><dd class="kpi__valor" data-kpi="topo">—</dd><dd class="kpi__nota" data-kpi="topo-nota"></dd></div>
+          <div class="kpi"><dt>Momento</dt><dd class="kpi__valor kpi__valor--texto" data-kpi="momento">—</dd><dd class="kpi__nota" data-kpi="momento-nota"></dd></div>
+          <div class="kpi"><dt>Dados de</dt><dd class="kpi__valor" data-kpi="data">—</dd><dd class="kpi__nota" data-kpi="data-nota"></dd></div>
         </dl>
-
-        <div class="busca" id="busca">
-          <label class="busca__rotulo" for="busca-campo">Buscar minha cidade</label>
-          <div class="busca__caixa">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="m15.5 15.5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            <input id="busca-campo" type="search" autocomplete="off" spellcheck="false"
-                   placeholder="Digite o nome do município" role="combobox" aria-expanded="false"
-                   aria-controls="busca-lista" aria-autocomplete="list">
-          </div>
-          <ul class="busca__lista" id="busca-lista" role="listbox" aria-label="Municípios encontrados" hidden></ul>
-        </div>
       </div>
     </section>
 
-    <!-- 2. MAPA ------------------------------------------------------------------>
-    <section class="secao" id="mapa" aria-labelledby="titulo-mapa">
+    <!-- LETREIRO ----------------------------------------------------------------------->
+    <div class="letreiro" aria-label="Indicadores do momento" role="region">
+      <div class="letreiro__trilho" id="letreiro"></div>
+    </div>
+
+    <!-- 01 QUANDO ---------------------------------------------------------------------->
+    <section class="secao" id="agora" aria-labelledby="titulo-agora">
       <div class="largura">
-        <header class="secao__cabecalho">
-          <p class="secao__numero">01</p>
-          <h2 id="titulo-mapa">O mapa do potencial</h2>
-          <p class="secao__lede">Cada polígono é um município. Troque o indicador nas abas; passe o mouse para ver o valor e clique para abrir a ficha.</p>
+        <header class="secao__cabecalho" data-revela>
+          <p class="rotulo"><span class="rotulo__num">01</span> Quando</p>
+          <h2 id="titulo-agora">Por que agora?</h2>
+          <p class="secao__lede">A academia é o primeiro gasto que o aluno corta. Antes de escolher a cidade, o Radar olha juros, inflação e câmbio — e diz se é hora de abrir ou de segurar o caixa.</p>
         </header>
-
-        <div class="abas" role="tablist" aria-label="Indicador do mapa" id="abas-mapa"></div>
-
-        <div class="mapa">
-          <div class="mapa__tela" id="mapa-tela">
-            <canvas id="mapa-canvas" role="img" aria-label="Mapa dos municípios do Brasil colorido pelo indicador escolhido"></canvas>
-            <div class="mapa__dica" id="mapa-dica" role="tooltip" hidden></div>
-            <div class="mapa__carregando" id="mapa-carregando">Carregando a malha dos municípios…</div>
-            <div class="mapa__zoom">
-              <label for="mapa-uf" class="visualmente-oculto">Aproximar o mapa em um estado</label>
-              <select id="mapa-uf"><option value="">Brasil inteiro</option></select>
-            </div>
-          </div>
-          <aside class="mapa__lado">
-            <h3 id="mapa-indicador-titulo">—</h3>
-            <p class="mapa__explica" id="mapa-indicador-explica"></p>
-            <div class="legenda" id="mapa-legenda" aria-label="Legenda do mapa"></div>
-            <h4 class="mapa__destaques-titulo" id="mapa-destaques-titulo">Maiores valores</h4>
-            <ol class="lista-destaques" id="mapa-destaques"></ol>
-          </aside>
-        </div>
-        <p class="fonte-nota" id="mapa-fonte">Malha: IBGE, API de Malhas v3.</p>
-      </div>
-    </section>
-
-    <!-- 3. FICHA DO MUNICÍPIO ------------------------------------------------------>
-    <section class="secao secao--destaque" id="ficha" aria-labelledby="ficha-nome" aria-live="polite">
-      <div class="largura">
-        <header class="secao__cabecalho">
-          <p class="secao__numero">02</p>
-          <p class="sobretitulo" id="ficha-sobre">Ficha do município</p>
-          <h2 id="ficha-nome">Escolha um município</h2>
-          <p class="secao__lede" id="ficha-resumo">Use a busca, clique no mapa ou numa linha do ranking.</p>
-        </header>
-        <div class="ficha" id="ficha-corpo" hidden>
-          <div class="ficha__placar">
-            <div class="ficha__nota">
-              <span class="ficha__nota-rotulo">Nota final</span>
-              <span class="ficha__nota-valor" id="ficha-nota">—</span>
-              <span class="ficha__nota-escala">de 0 a 100</span>
-            </div>
-            <ul class="ficha__posicoes" id="ficha-posicoes"></ul>
-            <button class="botao botao--fantasma" type="button" id="ficha-copiar">Copiar link desta ficha</button>
-          </div>
-          <div class="ficha__criterios">
-            <h3>Nota por critério <span class="discreto">(percentil no universo do ranking)</span></h3>
-            <ul class="barras-criterio" id="ficha-criterios"></ul>
-          </div>
-          <div class="ficha__indicadores">
-            <h3>Indicadores <span class="discreto">(comparados aos municípios do Brasil)</span></h3>
-            <dl class="indicadores" id="ficha-indicadores"></dl>
-          </div>
-          <div class="ficha__parecidos">
-            <h3>Municípios parecidos</h3>
-            <p class="discreto">Perfil mais próximo em população, renda, academias por habitante, crescimento, PIB per capita e salário.</p>
-            <ul class="parecidos" id="ficha-parecidos"></ul>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 4. RANKING ----------------------------------------------------------------->
-    <section class="secao" id="ranking" aria-labelledby="titulo-ranking">
-      <div class="largura">
-        <header class="secao__cabecalho">
-          <p class="secao__numero">03</p>
-          <h2 id="titulo-ranking">Ranking por região e estado</h2>
-          <p class="secao__lede">Os municípios com maior nota final no recorte escolhido. A posição entre parênteses é a do Brasil.</p>
-        </header>
-        <p class="selo-previa" data-previa hidden>Prévia — ranking calculado após a camada gold</p>
-
-        <div class="filtros" role="group" aria-label="Filtros do ranking">
-          <div class="segmentado" id="filtro-regiao" role="radiogroup" aria-label="Região"></div>
-          <label class="campo">
-            <span>Estado</span>
-            <select id="filtro-uf"><option value="">Todos</option></select>
-          </label>
-          <label class="campo">
-            <span>Mostrar</span>
-            <select id="filtro-qtd">
-              <option value="10">10</option>
-              <option value="20" selected>20</option>
-              <option value="50">50</option>
-            </select>
-          </label>
-        </div>
-
-        <div class="tabela-rolagem">
-          <table class="tabela-ranking" id="tabela-ranking">
-            <caption class="visualmente-oculto">Ranking de municípios pela nota final</caption>
-            <thead>
-              <tr>
-                <th scope="col" class="num">#</th>
-                <th scope="col">Município</th>
-                <th scope="col" class="num ocultar-celular">População</th>
-                <th scope="col" class="col-nota">Nota final</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-
-        <h3 class="subtitulo">Os três melhores de cada estado</h3>
-        <div class="grade-uf" id="grade-uf"></div>
-      </div>
-    </section>
-
-    <!-- 5. MOMENTO ECONÔMICO -------------------------------------------------------->
-    <section class="secao" id="momento" aria-labelledby="titulo-momento">
-      <div class="largura">
-        <header class="secao__cabecalho">
-          <p class="secao__numero">04</p>
-          <h2 id="titulo-momento">Momento econômico</h2>
-          <p class="secao__lede">Vale igual para todas as cidades e fica fora da nota: juros, inflação e câmbio dizem se é hora de expandir.</p>
-        </header>
-        <p class="selo-previa" data-previa hidden>Prévia — semáforo calculado após a camada gold</p>
 
         <div class="semaforo" id="semaforo">
-          <div class="semaforo__principal">
-            <p class="sobretitulo" id="semaforo-mes">—</p>
+          <div class="semaforo__principal" data-revela>
+            <p class="rotulo" id="semaforo-mes">—</p>
             <p class="semaforo__recomendacao" id="semaforo-recomendacao">—</p>
             <p class="semaforo__justificativa" id="semaforo-justificativa"></p>
           </div>
           <ul class="semaforo__sinais" id="semaforo-sinais"></ul>
         </div>
 
-        <h3 class="subtitulo">A recomendação mês a mês</h3>
-        <div class="historico" id="historico-momento" role="img"></div>
-        <div class="legenda legenda--linha" id="historico-legenda"></div>
+        <div class="historico-bloco" data-revela>
+          <h3 class="subtitulo">A recomendação, mês a mês</h3>
+          <div class="historico" id="historico-momento" role="img"></div>
+          <div class="legenda" id="historico-legenda"></div>
+        </div>
 
-        <h3 class="subtitulo">Os três sinais no tempo</h3>
         <div class="graficos-macro" id="graficos-macro"></div>
-        <p class="fonte-nota">Fontes: Banco Central do Brasil, SGS (séries 432 e 10813); IBGE, agregado 7060 (IPCA).</p>
+        <p class="fonte-nota">Banco Central do Brasil, SGS 432 (meta da Selic) e 10813 (dólar) · IBGE, agregado 7060 (IPCA).</p>
       </div>
     </section>
 
-    <!-- 6. METODOLOGIA --------------------------------------------------------------->
-    <section class="secao" id="metodologia" aria-labelledby="titulo-metodologia">
+    <!-- 02 ONDE: MAPA POR REGIÕES ---------------------------------------------------------->
+    <section class="secao secao--mapa" id="mapa" aria-labelledby="titulo-mapa">
       <div class="largura">
-        <header class="secao__cabecalho">
-          <p class="secao__numero">05</p>
-          <h2 id="titulo-metodologia">Como o ranking é calculado</h2>
-          <p class="secao__lede">Seis critérios, cada um vira uma nota de 0 a 100 pelo percentil do município no universo. A nota final é a média ponderada.</p>
+        <header class="secao__cabecalho" data-revela>
+          <p class="rotulo"><span class="rotulo__num">02</span> Onde</p>
+          <h2 id="titulo-mapa">Do Brasil à região imediata</h2>
+          <p class="secao__lede">Role para o Radar aproximar: região, estado, região intermediária e região imediata do IBGE. Cada ponto laranja é uma cidade avaliada; o tamanho é a população.</p>
         </header>
+      </div>
 
-        <div class="metodo">
-          <div>
-            <h3 class="subtitulo subtitulo--sem-margem">Pesos</h3>
-            <ul class="pesos" id="lista-pesos"></ul>
-          </div>
-          <div class="como-ler">
-            <h3 class="subtitulo subtitulo--sem-margem">Como ler a nota</h3>
-            <ol>
-              <li><strong>Universo:</strong> só entram municípios com <span data-meta="pop-minima">50 mil</span> habitantes ou mais. Abaixo disso, o público pagante de uma unidade de médio porte é pequeno demais.</li>
-              <li><strong>Percentil:</strong> nota 80 em poder de compra quer dizer que a renda do município é maior que a de 80% das cidades do universo.</li>
-              <li><strong>Sentido:</strong> no espaço competitivo, a escala é invertida — menos academias por habitante dá nota maior.</li>
-              <li><strong>Dado faltante:</strong> o critério recebe nota neutra 50 e o município aparece com o aviso “dados incompletos”.</li>
-              <li><strong>Momento:</strong> o semáforo econômico não entra na nota; ele diz <em>quando</em>, a nota diz <em>onde</em>.</li>
-            </ol>
+      <div class="largura historia">
+        <div class="historia__mapa">
+          <div class="mapa" id="mapa-area">
+            <svg id="mapa-svg" role="img" aria-labelledby="mapa-descricao"></svg>
+            <p class="visualmente-oculto" id="mapa-descricao">Mapa do Brasil por regiões do IBGE, colorido pela nota média das cidades avaliadas em cada recorte.</p>
+            <div class="mapa__dica" id="mapa-dica" role="tooltip" hidden></div>
+            <div class="mapa__carregando" id="mapa-carregando">Carregando as malhas do IBGE…</div>
+            <nav class="mapa__trilha" id="mapa-trilha" aria-label="Recorte do mapa"></nav>
+            <div class="mapa__legenda" id="mapa-legenda"></div>
           </div>
         </div>
+        <div class="historia__passos" id="mapa-passos">
+          <!-- os passos da história são gerados a partir dos dados (mapa-regioes.js) -->
+          <div class="passo passo--explorar" id="explorar" data-passo="explorar">
+            <div class="passo__cartao">
+              <p class="passo__nivel">Sua vez</p>
+              <h3>Explore por conta própria</h3>
+              <p>Clique numa área do mapa para descer um nível; use a trilha no topo do mapa para subir. Clique numa cidade para abrir a ficha.</p>
+              <div class="explorar__resumo" id="explorar-resumo" aria-live="polite"></div>
+              <ol class="lista-top" id="explorar-lista"></ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-        <div class="tabela-rolagem">
-          <table class="tabela-criterios" id="tabela-criterios">
-            <caption class="visualmente-oculto">Critérios do ranking, fontes e sentido</caption>
-            <thead><tr><th scope="col">Critério</th><th scope="col">O que mede</th><th scope="col">Fonte</th><th scope="col">Sentido</th><th scope="col" class="num">Peso</th></tr></thead>
-            <tbody></tbody>
-          </table>
+    <!-- 03 TOP CIDADES ---------------------------------------------------------------------->
+    <section class="secao secao--top" id="top" aria-labelledby="titulo-top">
+      <div class="top__fixo">
+        <div class="largura top__cabecalho">
+          <header class="secao__cabecalho">
+            <p class="rotulo"><span class="rotulo__num">03</span> Top cidades</p>
+            <h2 id="titulo-top">As mais prontas</h2>
+          </header>
+          <div class="segmentado" id="top-filtro" role="radiogroup" aria-label="Região das cidades"></div>
+        </div>
+        <div class="top__janela">
+          <ol class="top__trilho" id="top-trilho"></ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 FICHA ----------------------------------------------------------------------------->
+    <section class="secao secao--invertida" id="ficha" aria-labelledby="ficha-nome">
+      <div class="largura">
+        <header class="ficha__cabecalho">
+          <div>
+            <p class="rotulo" id="ficha-sobre"><span class="rotulo__num">04</span> Ficha da cidade</p>
+            <h2 id="ficha-nome">Escolha uma cidade</h2>
+            <p class="secao__lede" id="ficha-resumo">Use a busca, clique num ponto do mapa ou num card.</p>
+          </div>
+          <button class="botao botao--fantasma" type="button" id="ficha-copiar">Copiar link da ficha</button>
+        </header>
+
+        <div class="ficha" id="ficha-corpo" hidden aria-live="polite">
+          <div class="ficha__radar">
+            <div id="ficha-grafico"></div>
+          </div>
+          <div class="ficha__placar">
+            <div class="ficha__nota">
+              <span class="rotulo">Nota final</span>
+              <span class="ficha__nota-valor" id="ficha-nota">—</span>
+              <span class="discreto">de 0 a 100</span>
+            </div>
+            <ul class="ficha__posicoes" id="ficha-posicoes"></ul>
+            <ul class="barras-criterio" id="ficha-criterios"></ul>
+          </div>
+          <div class="ficha__indicadores">
+            <h3 class="subtitulo subtitulo--p">Indicadores <span class="discreto">· comparados às cidades do Brasil</span></h3>
+            <dl class="indicadores" id="ficha-indicadores"></dl>
+            <h3 class="subtitulo subtitulo--p">Cidades com perfil parecido</h3>
+            <ul class="parecidos" id="ficha-parecidos"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 05 A CIDADE IDEAL ------------------------------------------------------------------>
+    <section class="secao secao--ideal" id="ideal" aria-labelledby="titulo-ideal">
+      <div class="largura ideal">
+        <header class="secao__cabecalho" data-revela>
+          <p class="rotulo"><span class="rotulo__num">05</span> Critérios</p>
+          <h2 id="titulo-ideal">O perfil que o Radar procura</h2>
+          <p class="secao__lede">Cada setor é um critério; o tamanho do setor é o peso na nota final. Gente <em>e</em> renda são a base; pouca concorrência e crescimento fazem a diferença.</p>
+        </header>
+        <div class="ideal__grade">
+          <div class="ideal__radar" id="ideal-radar"></div>
+          <ol class="ideal__lista" id="ideal-lista"></ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- 06 COMO CALCULAMOS ------------------------------------------------------------------>
+    <section class="secao" id="metodo" aria-labelledby="titulo-metodo">
+      <div class="largura">
+        <header class="secao__cabecalho" data-revela>
+          <p class="rotulo"><span class="rotulo__num">06</span> Método</p>
+          <h2 id="titulo-metodo">Como o ranking é calculado</h2>
+        </header>
+
+        <pre class="formula" id="formula" data-revela aria-label="Fórmula da nota final"></pre>
+
+        <div class="cartoes-regra">
+          <article class="cartao-regra" data-revela><span class="cartao-regra__num">A</span><h3>Universo</h3><p>Só entram cidades com <b data-meta="pop-minima">50.000</b> habitantes ou mais. Abaixo disso, o público pagante de uma unidade de médio porte é pequeno demais.</p></article>
+          <article class="cartao-regra" data-revela><span class="cartao-regra__num">B</span><h3>Percentil</h3><p>Nota 80 em poder de compra quer dizer renda maior que a de 80% das cidades do universo. Todas as notas vão de 0 a 100.</p></article>
+          <article class="cartao-regra" data-revela><span class="cartao-regra__num">C</span><h3>Sentido</h3><p>No espaço competitivo a escala é invertida: menos academias por habitante dá nota maior.</p></article>
+          <article class="cartao-regra" data-revela><span class="cartao-regra__num">D</span><h3>Dado faltante</h3><p>O critério recebe nota neutra 50 e a cidade aparece com o aviso “dados incompletos”.</p></article>
         </div>
 
         <div class="duas-colunas">
-          <div>
-            <h3 class="subtitulo">Regras do semáforo</h3>
+          <details class="painel" data-revela open>
+            <summary>Regras do semáforo</summary>
             <div class="tabela-rolagem">
-            <table class="tabela-simples">
-              <caption class="visualmente-oculto">Regras de cada sinal do semáforo</caption>
-              <thead><tr><th scope="col">Sinal</th><th scope="col">Favorável</th><th scope="col">Neutro</th><th scope="col">Desfavorável</th></tr></thead>
-              <tbody>
-                <tr><th scope="row">Juros</th><td>Selic caiu 0,5 p.p. ou mais em 12 meses</td><td>variação entre −0,5 e +0,5 p.p.</td><td>Selic subiu mais de 0,5 p.p.</td></tr>
-                <tr><th scope="row">Inflação</th><td>IPCA 12 meses ≤ 4,5% e desacelerando</td><td>só uma das duas condições</td><td>IPCA 12 meses &gt; 4,5% e acelerando</td></tr>
-                <tr><th scope="row">Câmbio</th><td>dólar igual ou abaixo de 12 meses antes</td><td>alta de até 10%</td><td>alta acima de 10%</td></tr>
-              </tbody>
-            </table>
+              <table class="tabela">
+                <caption class="visualmente-oculto">Regras de cada sinal do semáforo</caption>
+                <thead><tr><th scope="col">Sinal</th><th scope="col">Favorável (+1)</th><th scope="col">Neutro (0)</th><th scope="col">Desfavorável (−1)</th></tr></thead>
+                <tbody>
+                  <tr><th scope="row">Juros</th><td>Selic caiu 0,5 p.p. ou mais em 12 meses</td><td>entre −0,5 e +0,5 p.p.</td><td>subiu mais de 0,5 p.p.</td></tr>
+                  <tr><th scope="row">Inflação</th><td>IPCA 12m ≤ 4,5% e desacelerando</td><td>só uma das duas</td><td>&gt; 4,5% e acelerando</td></tr>
+                  <tr><th scope="row">Câmbio</th><td>dólar igual ou abaixo de 12 meses antes</td><td>alta de até 10%</td><td>alta acima de 10%</td></tr>
+                </tbody>
+              </table>
             </div>
-            <p class="discreto">Favorável soma +1, neutro 0, desfavorável −1. Total +2 ou mais: <strong>expandir agora</strong>; 0 ou +1: <strong>expandir com cautela</strong>; −1 ou menos: <strong>esperar</strong>. Inflação “acelerando” compara com 3 meses antes.</p>
-          </div>
-          <div>
-            <h3 class="subtitulo">Limitações</h3>
+            <p class="discreto">Soma +2 ou mais: <b>expandir agora</b> · 0 ou +1: <b>expandir com cautela</b> · −1 ou menos: <b>esperar</b>. “Acelerando” compara com 3 meses antes.</p>
+          </details>
+          <details class="painel" data-revela open>
+            <summary>Limitações</summary>
             <ul class="lista-limites">
-              <li>O Radar indica a <strong>cidade</strong>, não o bairro nem o ponto comercial.</li>
-              <li>Academias contadas são empresas formais da CNAE 93.13-1; estúdios registrados em outra atividade e academias informais não entram, nem a concorrência por marca.</li>
+              <li>O Radar indica a <b>cidade</b>, não o bairro nem o ponto comercial.</li>
+              <li>Academias contadas são empresas formais da CNAE 93.13-1; estúdios registrados em outra atividade e a concorrência por marca não entram.</li>
               <li>A renda vem do Censo 2022 e o PIB municipal sai com cerca de dois anos de atraso.</li>
               <li>A população de 2023 não existe na fonte; ela é interpolada só para o PIB per capita daquele ano.</li>
               <li>O semáforo olha o passado recente; não é previsão econômica.</li>
               <li>Aluguel, fluxo de pessoas e viabilidade financeira de cada unidade ficam fora do escopo.</li>
             </ul>
-          </div>
+          </details>
         </div>
       </div>
     </section>
 
-    <!-- 7. ARQUITETURA ----------------------------------------------------------------->
-    <section class="secao" id="arquitetura" aria-labelledby="titulo-arquitetura">
+    <!-- 07 ARQUITETURA ---------------------------------------------------------------------->
+    <section class="secao secao--arquitetura" id="arquitetura" aria-labelledby="titulo-arquitetura">
       <div class="largura">
-        <header class="secao__cabecalho">
-          <p class="secao__numero">06</p>
+        <header class="secao__cabecalho" data-revela>
+          <p class="rotulo"><span class="rotulo__num">07</span> Dados</p>
           <h2 id="titulo-arquitetura">Do dado bruto ao ranking</h2>
-          <p class="secao__lede">Um Lakehouse em três camadas no Postgres do Supabase, atualizado toda semana pelo n8n.</p>
+          <p class="secao__lede">Um Lakehouse em três camadas no Postgres do Supabase autohospedado, atualizado toda semana pelo n8n.</p>
         </header>
-        <ol class="fluxo" id="fluxo"></ol>
-        <p class="discreto" id="fluxo-nota"></p>
+        <ol class="camadas" id="camadas"></ol>
+        <p class="discreto" id="camadas-nota"></p>
       </div>
     </section>
 
-    <!-- 8. LINKS ------------------------------------------------------------------------>
-    <section class="secao secao--links" aria-label="Dashboard e repositório">
-      <div class="largura chamadas">
-        <div class="chamada chamada--principal">
-          <p class="sobretitulo">Dashboard interativo</p>
-          <h2>O Radar completo, com filtros e ficha de cada cidade</h2>
-          <p>Feito em Streamlit, lê direto a camada gold.</p>
-          <span class="botao botao--desativado" aria-disabled="true">Em breve</span>
-        </div>
-        <div class="chamada">
-          <p class="sobretitulo">Código aberto</p>
-          <h2>Pipeline, SQL e documentação</h2>
-          <p>PRD, especificação técnica, scripts de ingestão e este site.</p>
-          <a class="botao" href="https://github.com/JJ-Junior/radar-expansao" rel="noopener">Ver o repositório</a>
+    <!-- CHAMADA FINAL ---------------------------------------------------------------------->
+    <section class="chamada" id="dashboard" aria-labelledby="titulo-chamada">
+      <div class="largura chamada__grade">
+        <h2 class="chamada__titulo" id="titulo-chamada">Veja o Radar completo</h2>
+        <div class="chamada__acoes">
+          <p>Dashboard em Streamlit, lendo direto a camada gold, com filtros e a ficha de cada cidade.</p>
+          <span class="botao botao--escuro botao--desativado" aria-disabled="true">Dashboard · em breve</span>
+          <a class="botao botao--escuro" href="https://github.com/JJ-Junior/radar-expansao" rel="noopener">Ver o repositório</a>
         </div>
       </div>
     </section>
@@ -339,18 +320,18 @@
       <div>
         <h2 class="rodape__titulo">Fontes</h2>
         <ul>
-          <li><a href="https://servicodados.ibge.gov.br/api/docs" rel="noopener">IBGE — APIs de Localidades, Agregados e Malhas</a></li>
+          <li><a href="https://servicodados.ibge.gov.br/api/docs" rel="noopener">IBGE — Localidades, Agregados e Malhas</a></li>
           <li><a href="https://dadosabertos.bcb.gov.br/" rel="noopener">Banco Central do Brasil — SGS</a></li>
         </ul>
       </div>
       <div>
         <h2 class="rodape__titulo">Feito com</h2>
-        <p>Python, Supabase (Postgres), n8n, Streamlit. Site em HTML, CSS e JavaScript com D3 e TopoJSON.</p>
+        <p>Python, Supabase, n8n, Streamlit. Site em HTML, CSS e JavaScript com D3, TopoJSON, GSAP e Lenis.</p>
         <p class="discreto" id="rodape-gerado"></p>
       </div>
     </div>
   </footer>
 
-  <noscript><p class="aviso-previa">Este site precisa de JavaScript para carregar os dados.</p></noscript>
+  <noscript><p class="previa">Este site precisa de JavaScript para carregar os dados.</p></noscript>
 </body>
 </html>

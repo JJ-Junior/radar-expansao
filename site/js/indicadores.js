@@ -1,7 +1,7 @@
-// Definição dos indicadores (abas do mapa e ficha) e dos critérios do ranking.
+// Rótulos de regiões e UFs, critérios do ranking, indicadores da ficha e ícones do semáforo.
 // Nenhum cálculo de nota acontece aqui: o site só lê as colunas da gold.
 
-import { compacto, decimal, fracaoAoAno, inteiro, reais } from "./formato.js";
+import { decimal, fracaoAoAno, inteiro, reais } from "./formato.js";
 
 export const REGIOES = [
   { sigla: "N", nome: "Norte" },
@@ -18,41 +18,6 @@ export const NOMES_UF = {
   RJ: "Rio de Janeiro", RN: "Rio Grande do Norte", RO: "Rondônia", RR: "Roraima", RS: "Rio Grande do Sul",
   SC: "Santa Catarina", SE: "Sergipe", SP: "São Paulo", TO: "Tocantins",
 };
-
-/** Abas do mapa. `escala`: "sequencial" (um tom) ou "divergente" (negativo x positivo). */
-export const INDICADORES_MAPA = [
-  {
-    chave: "nota", rotulo: "Nota do ranking", titulo: "Nota final do ranking",
-    valor: (m) => m.ranking?.nota_final ?? null, formato: (v) => decimal(v, 1), escala: "sequencial",
-    explica: "Média ponderada das seis notas, de 0 a 100. Só municípios com 50 mil habitantes ou mais entram no ranking; os demais ficam em cinza.",
-    semDado: "Fora do universo do ranking", destaques: "Maiores notas",
-  },
-  {
-    chave: "populacao", rotulo: "População", titulo: "População estimada",
-    valor: (m) => m.populacao, formato: compacto, escala: "sequencial",
-    explica: "Estimativa mais recente do IBGE. Tamanho de mercado pesa 25% na nota.",
-    semDado: "Sem dado", destaques: "Mais populosos",
-  },
-  {
-    chave: "renda", rotulo: "Renda per capita", titulo: "Renda domiciliar per capita",
-    valor: (m) => m.renda_dom_per_capita, formato: reais, escala: "sequencial",
-    explica: "Rendimento médio mensal por morador, Censo 2022. Poder de compra pesa 25% na nota.",
-    semDado: "Sem dado", destaques: "Maior renda",
-  },
-  {
-    chave: "academias", rotulo: "Academias por 10 mil hab.", titulo: "Academias por 10 mil habitantes",
-    valor: (m) => m.academias_por_10mil_hab, formato: (v) => decimal(v, 2), escala: "sequencial",
-    explica: "Empresas de condicionamento físico (CNAE 93.13-1) por 10 mil habitantes. Mais escuro = mais concorrência; no ranking, menos academias dá nota maior (peso 20%).",
-    semDado: "Sem dado", destaques: "Mais academias por habitante",
-  },
-  {
-    chave: "crescimento", rotulo: "Crescimento", titulo: "Crescimento da população",
-    valor: (m) => m.crescimento_pop_aa, formato: (v) => fracaoAoAno(v), escala: "divergente",
-    explica: "Crescimento anual composto desde o Censo 2022. Vermelho perdeu população, azul ganhou. Pesa 15% na nota.",
-    semDado: "Sem dado", destaques: "Que mais crescem",
-    limites: [-0.01, -0.0025, 0.0025, 0.01, 0.02],
-  },
-];
 
 /** Critérios na ordem do prd.md; o peso vem de ranking_criterio.json. */
 export const CRITERIOS = [
