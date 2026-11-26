@@ -26,7 +26,7 @@ Vitrine de expansão para o diretor da rede de academias, numa página só, cont
 | Scroll suave | [Lenis](https://github.com/darkroomengineering/lenis) 1.1.13 |
 | Fontes | Big Shoulders Display (títulos), Archivo (texto) e JetBrains Mono (rótulos), pelo Google Fonts |
 | Dados | JSONs estáticos em `dados/`, exportados da camada gold — contrato em [`dados/README.md`](dados/README.md) |
-| Hospedagem | GitHub Pages, publicado pelo workflow `.github/workflows/site.yml` |
+| Hospedagem | Servidor autohospedado do projeto (nginx em Docker, exposto por túnel), que atualiza a partir da branch `junior` |
 
 Todas as bibliotecas vêm por CDN, com versão fixa. Não há foto nem vídeo: o visual é feito de tipografia, cor e arte com os próprios dados (canvas e SVG).
 O navegador nunca fala com o banco, então nenhuma credencial vai para o site.
@@ -81,31 +81,20 @@ O `exportar_site.py` lê as tabelas `gold.*` com as credenciais do `.env` (o mes
 Ele também conta as linhas de cada camada para a seção "Dados" e confere a soma dos pesos, as notas entre 0 e 100 e a
 quantidade de cidades recomendadas antes de gravar. O site não calcula nota nem escolhe as recomendadas: só lê a gold.
 
-## Publicar no GitHub Pages
+## Publicação
 
-O workflow [`.github/workflows/site.yml`](../.github/workflows/site.yml) confere os arquivos de dados e publica a pasta `site/`.
-Ele roda a cada push na branch `junior` que altere o site, ou manualmente em **Actions → Site de apoio (GitHub Pages) → Run workflow**.
+O site está no ar em **https://radar-expansao.lovelearning.com.br**.
 
-O site está no ar em **https://jj-junior.github.io/radar-expansao/**.
+Ele é servido pelo servidor autohospedado do projeto: um nginx em Docker, exposto à internet por um túnel, que serve a
+pasta `site/` direto de um clone do repositório. Esse clone faz `git pull` da branch `junior` **a cada 10 minutos**,
+então não há passo de build nem de deploy:
 
-Se o passo "Publica" falhar com *"No artifacts named github-pages were found"* (corrida logo após o upload; o workflow
-já espera 10 s para evitar), **não use "Re-run"**: ele duplica o artefato e falha de novo. Dispare uma execução nova:
+1. rode `exportar_site.py` (se os dados mudaram) e confira o site localmente;
+2. faça commit e push em `site/` na branch `junior`;
+3. em até 10 minutos a versão nova está no ar (confira, por exemplo, o `gerado_em` de `dados/meta.json`).
 
-```powershell
-gh workflow run site.yml --ref junior
-```
-
-Configuração do repositório (já feita; registrada para quem montar um repositório novo):
-
-1. **Settings → Pages → Build and deployment → Source:** escolher **GitHub Actions**.
-2. **Settings → Environments → `github-pages` → Deployment branches and tags:** adicionar a regra para a branch **`junior`**.
-   - Por padrão o ambiente só aceita deploy da branch principal, e o workflow falha com *"Branch junior is not allowed to deploy to github-pages due to environment protection rules"*.
-   - O ambiente `github-pages` aparece depois do passo 1; se não aparecer, rode o workflow uma vez.
-
-Endereço depois do deploy: `https://jj-junior.github.io/radar-expansao/`.
-
-Quando o trabalho for para a `main`, basta trocar `branches: [junior]` por `branches: [main]` no workflow
-(a `main` já é aceita pelo ambiente).
+Como os caminhos do site são todos relativos (`css/`, `js/`, `dados/`), a mesma pasta funciona na raiz do domínio,
+numa subpasta ou no servidor local de teste.
 
 ## Movimento, acessibilidade e desempenho
 
