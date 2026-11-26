@@ -1,6 +1,7 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
-> **RASCUNHO v0.5 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> **RASCUNHO v0.6 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> v0.6: regras da gold alinhadas ao prd v0.3 (redistribuição de peso, uma cidade por região imediata no top 5, limites P5/P95 no espaço competitivo, CAGR da tendência).
 > v0.5: silver implementada (seções 3.2 e 4); `dim_indicador` com agregado/variável/série; `dim_municipio` com regiões imediata e intermediária.
 > v0.4: bronze implementada (seção 3.1 reflete o DDL de `sql/bronze/`); lote do IPCA por ano; app envia a chave anônima + token de leitura.
 > v0.3: container de ETL disparado pelo n8n (cenário A); trava contra execução simultânea; fuso America/Sao_Paulo;
@@ -349,7 +350,7 @@ CREATE TABLE gold.indicadores_municipio (
     pib_mil_reais             numeric,           -- PIB do último ano disponível
     pib_ano                   smallint,
     pib_per_capita            numeric(12,2),     -- R$ por habitante, mesmo ano do PIB
-    pib_per_capita_tendencia  numeric(7,4),      -- CAGR do PIB per capita (5 anos até pib_ano)
+    pib_per_capita_tendencia  numeric(7,4),      -- CAGR do PIB per capita: 1º → último ano da janela de 5 anos (2019 → 2023)
     renda_dom_per_capita      numeric(10,2),     -- R$/mês, Censo 2022
     academias_qtd             integer,           -- empresas CNAE 93.13-1, último ano
     academias_ano             smallint,
@@ -369,12 +370,20 @@ CREATE TABLE gold.ranking_expansao (
     nota_poder_compra         numeric(5,2),
     nota_espaco_competitivo   numeric(5,2),
     nota_crescimento          numeric(5,2),
-    nota_riqueza              numeric(5,2),
+    nota_riqueza_nivel        numeric(5,2),      -- PIB per capita do último ano
+    nota_riqueza_tendencia    numeric(5,2),      -- CAGR do PIB per capita na janela de 5 anos
     nota_mercado_formal       numeric(5,2),
     nota_final                numeric(5,2) NOT NULL,
     posicao_brasil            integer  NOT NULL,
     posicao_uf                integer  NOT NULL,
-    dados_incompletos         boolean  NOT NULL DEFAULT false,  -- algum critério recebeu nota neutra
+    dados_incompletos         boolean  NOT NULL DEFAULT false,  -- faltou algum critério (peso redistribuído)
+    criterios_ausentes        text[],                           -- quais critérios faltaram
+    peso_considerado          numeric(4,3) NOT NULL,            -- soma dos pesos disponíveis (1.000 = completo)
+    verificar_concorrencia    boolean  NOT NULL DEFAULT false,  -- zero academias registradas: checar no local
+    regiao_imediata_id        integer  NOT NULL,
+    regiao_imediata_nome      text     NOT NULL,
+    recomendado_top5          boolean  NOT NULL DEFAULT false,  -- está na lista das 5 unidades recomendadas (P8)
+    ordem_recomendacao        smallint,                         -- 1 a 5 na lista recomendada
     versao_pesos              text     NOT NULL,
     calculado_em              timestamptz NOT NULL DEFAULT now()
 );
@@ -492,16 +501,32 @@ toda linha rastreável até a bronze · nenhuma data futura nos fatos macro · I
 - **Crescimento:** `(pop_último_ano / pop_censo_2022)^(1/(último_ano − 2022)) − 1`.
   Não usar 2021 como base: as estimativas até 2021 eram projetadas a partir do Censo 2010 e ficaram acima do Censo 2022
   (Brasil: 213,3 mi estimados em 2021 × 203,1 mi recenseados em 2022), o que distorceria o crescimento.
-- **PIB per capita** = `pib_mil_reais × 1000 / populacao` do mesmo ano. **Tendência** = CAGR do PIB per capita nos 5 anos até o último ano do PIB.
+- **PIB per capita** = `pib_mil_reais × 1000 / populacao` do mesmo ano.
+- **Tendência** = CAGR do PIB per capita entre o 1º e o último ano de uma janela de 5 anos do PIB (hoje 2019 → 2023):
+  `(pib_pc_último / pib_pc_primeiro)^(1/4) − 1`. A janela atravessa a pandemia (2020); a taxa média do período não é distorcida
+  pela queda e pela retomada de anos isolados, por isso não se usa a variação ano a ano. Sem PIB em algum dos dois anos → nulo.
   Como o ranking usa percentil, deflacionar pelo IPCA não muda a ordem (a inflação é a mesma para todos os municípios).
 - **Academias por 10 mil hab.** = `academias_qtd / populacao_do_mesmo_ano × 10000`; `zero_absoluto` = 0 academias.
 
 ### 5.3 `gold.ranking_expansao`
 - **Universo:** municípios com população estimada ≥ 50 mil (687 municípios na estimativa de 2026). Limite no `CONFIG`.
-- **Nota de cada critério:** percentil no universo × 100 (`percent_rank()`), invertido quando "menor é melhor".
-- **Nota final:** soma ponderada das notas pelos pesos do `prd.md` (gravados em `gold.ranking_criterio`).
-- **Dado faltante:** o critério recebe nota neutra 50 e `dados_incompletos = true`.
-- **Posições:** `posicao_brasil` e `posicao_uf` por `nota_final` decrescente.
+- **Componentes e pesos** (`gold.ranking_criterio`, iguais ao `prd.md`): mercado 0,25 · poder de compra 0,25 · espaço competitivo 0,20 ·
+  crescimento 0,15 · riqueza (nível) 0,05 · riqueza (tendência) 0,05 · mercado formal 0,05.
+- **Nota de cada componente:** percentil no universo × 100, com empates recebendo o percentil da **posição média** do empate:
+  `nota = 100 × (posição_média − 1) / (n − 1)`, onde `posição_média = rank() + (tamanho_do_empate − 1) / 2` em ordem crescente.
+  Quando "menor é melhor", `nota = 100 − nota`. Componentes sem dado ficam fora do cálculo (não entram em `n`).
+- **Espaço competitivo:** antes da nota, `academias_por_10mil_hab` é limitado aos percentis 5% e 95% do universo
+  (`percentile_cont(0.05)` e `(0.95)`; abaixo do P5 vira P5, acima do P95 vira P95). Todas as cidades no limite inferior empatam
+  e recebem a mesma nota — a "nota do limite", menor que 100. Cidade com 0 academias recebe essa nota e `verificar_concorrencia = true`.
+- **Dado faltante:** o peso do componente sem dado é redistribuído proporcionalmente:
+  `nota_final = Σ(peso × nota dos disponíveis) / Σ(pesos disponíveis)`; `peso_considerado` guarda o denominador,
+  `criterios_ausentes` lista o que faltou e `dados_incompletos = true`.
+- **Posições:** `posicao_brasil` e `posicao_uf` por `nota_final` decrescente (desempate pela maior população).
+- **5 unidades recomendadas (P8):** percorre o ranking em ordem de `posicao_brasil` e escolhe a cidade se a sua
+  `regiao_imediata_id` ainda não foi escolhida, até completar 5 (`recomendado_top5`, `ordem_recomendacao`).
+  O ranking completo não é filtrado.
+- **Testes da gold:** soma dos pesos = 1; `peso_considerado` entre 0 e 1; notas entre 0 e 100; todos os municípios do universo
+  com nota; exatamente 5 recomendados, em 5 regiões imediatas diferentes.
 - A gold é **recalculada inteira** a cada execução (são poucos milhares de linhas).
 
 ---

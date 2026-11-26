@@ -1,7 +1,9 @@
 # prd.md — Radar de Expansão · Rede de academias
 
 > ⚠️ **RASCUNHO**
-> Versão 0.2 (26/11/2026). Cliente confirmado pelo squad: rede de academias. Critérios e pesos ainda em revisão; qualquer mudança é registrada aqui antes de ir para o código.
+> Versão 0.3 (26/11/2026). Cliente confirmado pelo squad: rede de academias. Critérios e pesos ainda em revisão; qualquer mudança é registrada aqui antes de ir para o código.
+> v0.3: dado faltante com redistribuição de peso; recomendação com no máximo uma cidade por região imediata; espaço competitivo
+> com limites nos percentis 5% e 95%; tendência do PIB per capita como taxa média anual (CAGR).
 
 ---
 
@@ -34,14 +36,15 @@ esteiras em boa parte importados, unidades de médio porte. Quer abrir **5 novas
 | P5 | Onde há **poucas academias por habitante** em cidades com bom poder de compra (espaço para entrar)? | `gold.ranking_expansao` · nota de espaço competitivo |
 | P6 | A Selic subiu ou caiu nos últimos 12 meses? A inflação (IPCA) está acelerando? O dólar subiu? | `gold.contexto_macro` |
 | P7 | **Fator quando:** o momento econômico favorece **expandir agora, com cautela ou esperar**? | `gold.momento_expansao` · semáforo no topo do dashboard |
-| P8 | Se a rede abrir 5 unidades no próximo ano, quais municípios são os melhores candidatos — e por quê? | `gold.ranking_expansao` + `gold.ranking_criterio` · página "Como o ranking é calculado" |
+| P8 | Se a rede abrir 5 unidades no próximo ano, quais municípios são os melhores candidatos (no máximo um por região imediata) — e por quê? | `gold.ranking_expansao` + `gold.ranking_criterio` · página "Como o ranking é calculado" |
 
 ## 4. Critérios do ranking ("fator onde")
 
 **Universo:** municípios com **50 mil habitantes ou mais** (687 municípios na estimativa de 2026). Abaixo disso, o público
 pagante de uma unidade de médio porte é pequeno demais.
 
-**Como cada critério vira nota:** percentil do município dentro do universo, de 0 a 100. A nota final é a média ponderada pelos pesos abaixo.
+**Como cada critério vira nota:** percentil do município dentro do universo, de 0 a 100 (municípios empatados recebem o mesmo
+percentil, o da posição média do empate). A nota final é a média ponderada pelos pesos abaixo.
 
 | Critério | O que mede | Fonte (IBGE) | Sentido | Peso |
 |---|---|---|---|---|
@@ -49,7 +52,7 @@ pagante de uma unidade de médio porte é pequeno demais.
 | **Poder de compra** | Renda domiciliar per capita média | Censo 2022 (10295) | maior é melhor | **25%** |
 | **Espaço competitivo** | Academias (CNAE 93.13-1) por 10 mil habitantes | Cadastro Central de Empresas (9418) | **menor é melhor** | **20%** |
 | **Crescimento** | Crescimento anual da população desde o Censo 2022 | Censo 2022 (4714) + estimativas (6579) | maior é melhor | **15%** |
-| **Riqueza local** | PIB per capita: nível (5%) + tendência dos últimos 5 anos (5%) | PIB dos Municípios (5938) ÷ população | maior é melhor | **10%** |
+| **Riqueza local** | PIB per capita: nível no último ano (5%) + tendência = taxa média anual (CAGR) na janela de 5 anos (5%) | PIB dos Municípios (5938) ÷ população | maior é melhor | **10%** |
 | **Mercado formal** | Salário médio mensal dos empregos formais | Cadastro Central de Empresas (9509) | maior é melhor | **5%** |
 
 **Por que esses pesos**
@@ -60,9 +63,34 @@ pagante de uma unidade de médio porte é pequeno demais.
 - **Crescimento (15%)** mostra demanda nova — famílias que chegam e ainda não têm academia. Nunca pesa sozinho: crescer sem renda é armadilha.
   A base é o Censo 2022 porque as estimativas anteriores foram projetadas do Censo 2010 e superestimavam a população.
 - **Riqueza local (10%)** inclui a **tendência** do PIB per capita: se a população cresce mais que a economia, a cidade está empobrecendo.
+  A tendência é o **crescimento médio anual composto (CAGR)** entre o primeiro e o último ano de uma janela de 5 anos do PIB
+  (hoje 2019 → 2023). A janela atravessa a pandemia (2020), quando muitos municípios caíram e depois se recuperaram; por isso
+  usamos a **taxa média do período**, que não é distorcida pelo tombo e pela retomada de anos isolados, e não a variação ano a ano.
 - **Mercado formal (5%)** é um ajuste fino: salário formal mais alto indica renda mais estável para uma mensalidade recorrente.
 
-**Dado faltante:** o critério recebe nota neutra (50) e o município fica marcado como "dados incompletos" no dashboard.
+### 4.1 Regras de cálculo
+
+**Dado faltante — redistribuição do peso.** Se um município não tem dado para um critério, o peso desse critério é
+**redistribuído proporcionalmente** entre os critérios que ele tem: a nota final é a soma de `peso × nota` dos critérios
+disponíveis dividida pela soma dos pesos disponíveis. Exemplo: sem dado de salário médio (5%), os outros critérios passam a valer
+95% e são reescalados para somar 100%. O município fica marcado como **"dados incompletos"** no dashboard, com a lista do que faltou.
+Assim a falta de dado não ajuda nem prejudica artificialmente a cidade (uma nota neutra de 50 puxaria para o meio cidades
+muito boas ou muito ruins).
+
+**Espaço competitivo — limites nos percentis 5% e 95%.** Antes de calcular a nota inversa, academias por 10 mil habitantes são
+**limitadas aos percentis 5% e 95% do universo** (*winsorização*): valores abaixo do P5 viram o P5 e acima do P95 viram o P95.
+Isso evita que poucos valores extremos achatem a nota de todas as outras cidades.
+Uma cidade do universo com **zero academias** recebe a nota do limite (a mesma de quem está no P5), **não 100 automático**, e
+ganha a marca **"verificar concorrência"**: zero empresas na CNAE 93.13-1 pode ser falta de mercado, academias registradas em outra
+atividade ou estúdios informais, e precisa de checagem local antes de virar recomendação.
+
+### 4.2 Recomendação das 5 unidades (P8)
+
+A lista **"5 unidades recomendadas"** segue a ordem da nota final, com uma regra a mais: **no máximo uma cidade por região
+imediata do IBGE**. Regiões imediatas agrupam os municípios que dividem o mesmo polo de comércio e serviços; duas unidades na
+mesma região disputariam o mesmo público (canibalização). Quando a próxima cidade do ranking cai numa região imediata já escolhida,
+ela é pulada e a lista segue para a seguinte. O **ranking completo continua com todas as cidades** — a regra vale só para a lista
+das 5 recomendadas.
 
 ## 5. Momento econômico ("fator quando")
 
@@ -88,6 +116,10 @@ O squad usa estas perguntas para checar se o ranking faz sentido para **este** c
    a cidade média; o dashboard permite comparar as duas lado a lado.
 3. **Como explicar o ranking a um diretor que decide no feeling?** Cada município mostra a nota de cada critério (0 a 100) e uma frase
    que resume os pontos fortes e fracos; a página de metodologia mostra pesos e fontes.
+4. **Cidade grande sem nenhuma academia registrada é a melhor oportunidade?** Não automaticamente: recebe a nota do limite e a marca
+   "verificar concorrência", para o diretor confirmar no local antes de decidir.
+5. **As 5 recomendações podem ser cidades vizinhas?** Não: no máximo uma por região imediata, para as unidades não disputarem
+   o mesmo público.
 
 ## 7. Escopo
 
@@ -129,4 +161,5 @@ Fase 2 do projeto: início em 18/11/2026, **entrega em 20/12/2026**.
 - [ ] O dashboard publicado responde às perguntas P1 a P8.
 - [ ] Em 30 segundos, o diretor de expansão identifica as 5 cidades candidatas e o motivo de cada uma.
 - [ ] O semáforo mostra a recomendação do momento e explica o porquê.
-- [ ] Checagens automáticas: soma dos pesos = 100%, todos os municípios do universo com nota, nenhuma nota fora de 0–100.
+- [ ] Checagens automáticas: soma dos pesos = 100% (também depois da redistribuição em cada município), todos os municípios do
+      universo com nota, nenhuma nota fora de 0–100, as 5 recomendadas em regiões imediatas diferentes.
