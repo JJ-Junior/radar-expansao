@@ -130,11 +130,20 @@ export function desenharCamadas({ estado }) {
     ? "As contagens de linhas aparecem quando a carga no Supabase estiver rodando. * Linhas da prévia exportada para este site, calculada direto das APIs com as regras da gold."
     : "Linhas contadas no banco no momento da exportação dos dados do site.";
 
-  // as camadas chegam "empilhadas" e se separam com o scroll
+  // as camadas se constroem uma sobre a outra: cada uma entra UMA vez, já no lugar final do layout
+  // (translate curto + opacidade, ~350 ms, cascata de 70 ms) e o conector até a anterior se desenha junto.
+  // Sem scrub e sem 3D: nunca volta ao subir a página e nunca cruza o texto de outra camada.
   if (movimentoLigado()) {
-    window.gsap.from("#camadas .camada", {
-      rotationX: 38, y: (i) => -i * 70, opacity: 0.25, transformPerspective: 1200, ease: "none", stagger: 0.08,
-      scrollTrigger: { trigger: "#camadas", start: "top 85%", end: "top 30%", scrub: 0.6 },
+    const { gsap, ScrollTrigger } = window;
+    const camadas = [...document.querySelectorAll("#camadas .camada")];
+    gsap.set(camadas, { y: 20, opacity: 0 });
+    ScrollTrigger.batch(camadas, {
+      start: "top 90%",
+      once: true,
+      onEnter: (lote) => {
+        gsap.to(lote, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out", stagger: 0.07, overwrite: true });
+        lote.forEach((el) => el.classList.add("entrou"));
+      },
     });
   }
 }

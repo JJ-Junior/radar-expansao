@@ -306,7 +306,7 @@ button, select, input { font: inherit; color: inherit; }
 
 .historia__passos { padding-bottom: 20vh; }
 .passo { min-height: 78vh; display: flex; align-items: center; }
-.passo__cartao { background: var(--superficie); border: 1px solid transparent; border-radius: var(--raio); padding: 24px 24px; opacity: .35; transition: opacity .4s, border-color .4s, transform .4s; }
+.passo__cartao { background: var(--superficie); border: 1px solid transparent; border-radius: var(--raio); padding: 24px 24px; opacity: .55; transition: opacity .4s, border-color .4s, transform .4s; }
 .passo.ativo .passo__cartao { opacity: 1; border-color: var(--limao); }
 .passo__nivel { font-family: var(--mono); font-size: .7rem; letter-spacing: .14em; text-transform: uppercase; color: var(--limao-texto); }
 .passo h3 { font-family: var(--display); font-weight: 900; font-size: clamp(2rem, 3.4vw, 2.8rem); text-transform: uppercase; margin: 8px 0 12px; line-height: .95; }
@@ -531,7 +531,7 @@ button, select, input { font: inherit; color: inherit; }
 .lista-limites { margin: 0; padding-left: 1.1em; display: grid; gap: 8px; color: var(--tinta-2); font-size: .93rem; }
 
 /* ---------------------------------------------------------------- 07 arquitetura (camadas empilhadas) */
-.camadas { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 16px; perspective: 1400px; }
+.camadas { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 16px; }
 .camada { display: grid; grid-template-columns: 170px minmax(0, 1fr) minmax(0, 1.2fr); gap: 16px 32px; align-items: start; background: var(--superficie); border-left: 4px solid var(--cor-camada, var(--limao)); border-radius: var(--raio); padding: 24px 24px; transform-origin: center top; }
 .camada__nome { font-family: var(--display); font-weight: 900; font-size: 2.4rem; text-transform: uppercase; line-height: .9; }
 .camada__nome small { display: block; font-family: var(--mono); font-size: .66rem; font-weight: 400; letter-spacing: .12em; color: var(--tinta-3); margin-bottom: 8px; }
@@ -539,6 +539,10 @@ button, select, input { font: inherit; color: inherit; }
 .camada ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(210px, 100%), 1fr)); gap: 4px 16px; font-family: var(--mono); font-size: .74rem; }
 .camada li { display: flex; justify-content: space-between; gap: 8px; border-bottom: 1px dashed var(--linha); padding: 4px 0; }
 .camada li span { color: var(--tinta-3); }
+.camada { position: relative; }
+.camada + .camada::before { content: ""; position: absolute; left: 32px; top: -16px; width: 2px; height: 16px; background: var(--cor-camada); transform-origin: top; }
+.movimento .camada + .camada:not(.entrou)::before { transform: scaleY(0); }
+.movimento .camada + .camada::before { transition: transform .3s ease-out .15s; }
 .camada--fonte { --cor-camada: var(--tinta-3); }
 .camada--bronze { --cor-camada: #b07a43; }
 .camada--silver { --cor-camada: #9aa3ad; }
