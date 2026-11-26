@@ -78,7 +78,7 @@ Comandos de carga, transformação e do dashboard: _(a preencher quando os scrip
 | `src/app/` | Dashboard Streamlit |
 | `n8n/` | Workflow de automação exportado (sem credenciais) |
 | `site/` | Site de apoio (documentação + vitrine de dados) |
-| `docs/responsabilidades.md` | Frentes de trabalho, donos e prazos do squad |
+| `docs/responsabilidades.md` | Frentes de trabalho, tarefas e prazos do squad |
 | `docs/img/` | Prints do dashboard e da execução do n8n |
 
 ## 7. Fontes de dados
@@ -102,4 +102,4 @@ o que foi pedido, o que o assistente de IA entregou e o que o squad precisou aju
 - Rodrigo Oliveira (Rodrigo Cesar Silva De Oliveira)
 - Rodrigo Vincensi
 
-Frentes, donos, prazos e forma de trabalho do squad: [`docs/responsabilidades.md`](docs/responsabilidades.md).
+Frentes, tarefas, prazos e forma de trabalho do squad: [`docs/responsabilidades.md`](docs/responsabilidades.md).
