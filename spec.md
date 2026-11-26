@@ -1,6 +1,8 @@
 # spec.md — Especificação Técnica do Radar de Expansão
 
-> **RASCUNHO v0.10 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> **RASCUNHO v0.11 (26/11/2026)** — itens marcados com ⏳ dependem de decisão do squad.
+> v0.11: simulador de região (P9): centroides dos municípios (API de Malhas v4), coordenadas na silver e na gold, estimativas de
+> população projetada e lacuna de academias (seções 2.1, 3.2, 3.3, 5.4 e 9.4).
 > v0.10: site publicado só no servidor autohospedado, atualizado a partir da branch `junior` a cada 10 minutos.
 > v0.9: acesso público só ao site e à API de leitura (sem proxy de acesso); site servido do servidor autohospedado.
 > v0.8: trava de renda mínima nas 5 recomendadas (`gold.parametro_ranking`, coluna `elegivel_recomendacao`, teste 14).
@@ -85,8 +87,13 @@ flowchart LR
 | Regiões | `/regioes` | `silver.dim_regiao` (5 linhas) |
 | Estados | `/estados` | `silver.dim_uf` (27 linhas) |
 | Municípios | `/municipios?view=nivelado` | `silver.dim_municipio` (5.571 linhas). JSON plano, sem aninhamento |
+| Centroides | `https://servicodados.ibge.gov.br/api/v4/malhas/paises/BR/metadados?intrarregiao=municipio` | `latitude`/`longitude` da `dim_municipio`: 5.571 municípios numa chamada (~1,7 MB, < 1 s), `centroide` em graus decimais (número) |
 
 Armadilha conhecida: Boa Esperança do Norte-MT (`5101837`, município recente) vem com `microrregiao` nulo e não aparece em séries anteriores à sua criação.
+
+Validação da malha (chamada real em 26/11/2026): a **v3** (`/api/v3/malhas/paises/BR/metadados?intrarregiao=municipio`) devolve 5.570
+municípios e não tem o 5101837; os parâmetros de período dão HTTP 500. A **v4** devolve os 5.571, todos com `centroide`;
+192 centroides diferem da v3 (malha mais recente). Por isso a ingestão usa a v4 (recurso `ibge_malha_municipios`, lote `snapshot`).
 
 ### 2.2 IBGE — Agregados v3 (`https://servicodados.ibge.gov.br/api/v3/agregados`)
 
@@ -269,6 +276,8 @@ CREATE TABLE silver.dim_municipio (
     regiao_imediata_id        integer,  regiao_imediata_nome      text,   -- usada pelo prd
     mesorregiao_id            integer,  mesorregiao_nome          text,
     microrregiao_id           integer,  microrregiao_nome         text,   -- pode ser nulo
+    latitude                  numeric(9,6), longitude numeric(9,6),          -- centroide (API de Malhas v4)
+    coordenada_bronze_id      bigint,                                        -- resposta da malha na bronze
     bronze_id                 bigint   NOT NULL,
     atualizado_em             timestamptz NOT NULL DEFAULT now()
 );
@@ -348,10 +357,10 @@ Cada tabela responde a perguntas do `prd.md`, anotadas no comentário da tabela 
 
 | Tabela | Pergunta | Grão | Colunas principais |
 |---|---|---|---|
-| `gold.indicadores_municipio` | P1, P3, P4 | 1 linha por município (5.571) | `populacao`/`populacao_ano`, `populacao_censo_2022`, `crescimento_pop_aa`, `pib_mil_reais`/`pib_ano`, `pib_per_capita`, `pib_per_capita_tendencia`/`tendencia_ano_inicial`, `renda_dom_per_capita`/`renda_ano`, `academias_qtd`/`academias_ano`, `academias_por_10mil_hab`, `salario_medio`/`salario_ano`, `regiao_imediata_id`/`_nome` |
-| `gold.ranking_expansao` | P2, P5, P8 | 1 linha por município do universo (≥ 50 mil hab.; 687) | `nota_mercado`, `nota_poder_compra`, `nota_espaco_competitivo`, `nota_crescimento`, `nota_riqueza_nivel`, `nota_riqueza_tendencia`, `nota_riqueza` (média ponderada das duas), `nota_mercado_formal`, `nota_final`, `posicao_brasil`, `posicao_regiao`, `posicao_uf`, `dados_incompletos`, `criterios_ausentes`, `peso_considerado`, `verificar_concorrencia`, `elegivel_recomendacao`, `recomendado_top5`, `ordem_recomendacao`, `regiao_imediata_id`/`_nome`, `versao_pesos` |
+| `gold.indicadores_municipio` | P1, P3, P4, P9 | 1 linha por município (5.571) | `latitude`, `longitude`, `faixa_renda`, `populacao_projetada`/`ano_projecao`, `densidade_referencia`, `lacuna_academias`, `estimativa` (aviso), `populacao`/`populacao_ano`, `populacao_censo_2022`, `crescimento_pop_aa`, `pib_mil_reais`/`pib_ano`, `pib_per_capita`, `pib_per_capita_tendencia`/`tendencia_ano_inicial`, `renda_dom_per_capita`/`renda_ano`, `academias_qtd`/`academias_ano`, `academias_por_10mil_hab`, `salario_medio`/`salario_ano`, `regiao_imediata_id`/`_nome` |
+| `gold.ranking_expansao` | P2, P5, P8 | 1 linha por município do universo (≥ 50 mil hab.; 687) | `nota_mercado`, `nota_poder_compra`, `nota_espaco_competitivo`, `nota_crescimento`, `nota_riqueza_nivel`, `nota_riqueza_tendencia`, `nota_riqueza` (média ponderada das duas), `nota_mercado_formal`, `nota_final`, `posicao_brasil`, `posicao_regiao`, `posicao_uf`, `dados_incompletos`, `criterios_ausentes`, `peso_considerado`, `verificar_concorrencia`, `elegivel_recomendacao`, `recomendado_top5`, `ordem_recomendacao`, `regiao_imediata_id`/`_nome`, `latitude`, `longitude`, `versao_pesos` |
 | `gold.ranking_criterio` | P8 | 1 linha por componente (7) | `criterio` (a nota fica em `nota_<criterio>`), `grupo` (critério do prd: `riqueza` agrupa nível e tendência), `descricao`, `fonte`, `peso`, `sentido`, `ordem`, `versao_pesos` |
-| `gold.parametro_ranking` | P8 | 1 linha por parâmetro | `unidades_recomendadas` (5) e `nota_minima_poder_compra` (50): lugar único para ajustar a lista recomendada |
+| `gold.parametro_ranking` | P8, P9 | 1 linha por parâmetro | `unidades_recomendadas` (5), `nota_minima_poder_compra` (50), `ano_projecao_populacao` (2028) e `faixas_renda_referencia` (5): lugar único das premissas |
 | `gold.contexto_macro` | P6 | 1 linha por mês | `mes`, `mes_parcial`, `selic_meta`, `selic_var_12m_pp`, `dolar_medio`, `dolar_var_12m_pct`, `ipca_mensal`, `ipca_12m` |
 | `gold.momento_expansao` | P7 | 1 linha por mês com os três sinais | `sinal_juros`, `sinal_inflacao`, `sinal_cambio` (`verde`/`amarelo`/`vermelho`), `pontuacao`, `recomendacao`, `justificativa` |
 
@@ -494,6 +503,20 @@ toda linha rastreável até a bronze · nenhuma data futura nos fatos macro · I
   `--camadas gold` roda só a gold. No cenário B, o n8n aciona o mesmo job (ou `SELECT * FROM gold.atualizar()`).
 
 ---
+
+### 5.4 Estimativas do simulador (P9) — em `gold.indicadores_municipio`, para todos os municípios
+
+- **Faixa de renda:** cortes nos quintis (`percentile_cont` 0,2/0,4/0,6/0,8) da renda domiciliar per capita do **universo**;
+  cada município (de qualquer porte) recebe a faixa 1 a 5 por `width_bucket`. Número de faixas em `parametro_ranking`.
+- **Densidade de referência:** mediana das academias por 10 mil hab. das cidades **do universo** na mesma faixa, com a densidade
+  limitada a P5–P95 (os mesmos limites do espaço competitivo).
+- **Lacuna de academias:** `round((densidade_referencia − densidade_atual_limitada_P5_P95) × populacao / 10000)`.
+  Positiva = espaço estimado para novas academias; negativa = saturada.
+- **População projetada:** `round(populacao × (1 + crescimento_pop_aa) ^ (ano_projecao − populacao_ano))`; ano em `parametro_ranking`.
+- **Aviso:** a coluna `estimativa` leva o texto "Estimativa simples, não é previsão garantida…" em toda linha com estimativa.
+- Sem renda (município criado depois do Censo 2022) → sem faixa, referência e lacuna; sem crescimento → sem projeção.
+- Testes 15 a 19 da gold: 5.571 municípios com coordenada, nenhuma fora do retângulo do Brasil (lat −34 a 6; lon −74,5 a −28),
+  as 5 faixas com referência, nenhum município com dados completos sem lacuna, ranking inteiro com coordenada.
 
 ## 6. Limite da API do IBGE e estratégia de lotes
 
@@ -704,6 +727,18 @@ nos *Secrets* do Streamlit, nunca no repositório.
   branch `junior` do repositório a cada 10 minutos. É o único endereço do site.
 - **Dados:** JSON exportados da gold por `src/exportacao/exportar_site.py`, um arquivo por tabela, com os mesmos nomes de colunas.
 - Para abrir localmente: `python -m http.server 8000 --directory site`.
+
+### 9.4 Simulador de região (P9)
+
+- **Entrada do usuário:** uma cidade de referência e um raio em km.
+- **Cálculo da distância no app e no site**, a partir das coordenadas da gold (`latitude`, `longitude`), pela fórmula de
+  **haversine** (raio da Terra = 6.371 km):
+  `d = 2 · 6371 · asin( √( sen²(Δφ/2) + cos φ₁ · cos φ₂ · sen²(Δλ/2) ) )`, com φ = latitude e λ = longitude em radianos.
+  A gold **não** guarda pares de distância (seriam ~15,5 milhões de pares para 5.571 municípios).
+- **Saída:** cidades do ranking (`gold.ranking_expansao`) dentro do raio, ordenadas por `nota_final`, com `lacuna_academias`,
+  `populacao_projetada` e o aviso de `estimativa` (de `gold.indicadores_municipio`); opcionalmente, a soma das lacunas
+  positivas de todos os municípios do raio, incluindo os menores que 50 mil habitantes.
+- Distância em linha reta entre centroides: serve para comparar regiões, não para estimar tempo de deslocamento.
 
 ## 10. Stack e como rodar
 

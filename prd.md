@@ -1,7 +1,8 @@
 # prd.md — Radar de Expansão · Rede de academias
 
 > ⚠️ **RASCUNHO**
-> Versão 0.4 (26/11/2026). Cliente confirmado pelo squad: rede de academias. Critérios e pesos ainda em revisão; qualquer mudança é registrada aqui antes de ir para o código.
+> Versão 0.5 (26/11/2026). Cliente confirmado pelo squad: rede de academias. Critérios e pesos ainda em revisão; qualquer mudança é registrada aqui antes de ir para o código.
+> v0.5: simulador de região (P9) com coordenadas dos municípios e estimativas de população e de espaço para novas academias.
 > v0.4: trava de renda mínima na lista das 5 unidades recomendadas (nota de poder de compra ≥ 50).
 > v0.3: dado faltante com redistribuição de peso; recomendação com no máximo uma cidade por região imediata; espaço competitivo
 > com limites nos percentis 5% e 95%; tendência do PIB per capita como taxa média anual (CAGR).
@@ -38,6 +39,7 @@ esteiras em boa parte importados, unidades de médio porte. Quer abrir **5 novas
 | P6 | A Selic subiu ou caiu nos últimos 12 meses? A inflação (IPCA) está acelerando? O dólar subiu? | `gold.contexto_macro` |
 | P7 | **Fator quando:** o momento econômico favorece **expandir agora, com cautela ou esperar**? | `gold.momento_expansao` · semáforo no topo do dashboard |
 | P8 | Se a rede abrir 5 unidades no próximo ano, quais municípios são os melhores candidatos (renda acima da mediana do universo e no máximo um por região imediata) — e por quê? | `gold.ranking_expansao` + `gold.ranking_criterio` · página "Como o ranking é calculado" |
+| P9 | Num raio de X km de uma cidade, quais são as melhores candidatas e quanto espaço há para novas academias? | `gold.ranking_expansao` + `gold.indicadores_municipio` (coordenadas e estimativas) · simulador de região |
 
 ## 4. Critérios do ranking ("fator onde")
 
@@ -101,6 +103,27 @@ para a seguinte. O **ranking completo não muda** — as duas regras valem só p
 continua na sua posição (com a indicação de que não é elegível para a recomendação). Os dois valores (quantidade de cidades e
 nota mínima de poder de compra) ficam num único lugar, a tabela de parâmetros do ranking, e aparecem na página de metodologia.
 
+### 4.3 Simulador de região e estimativas (P9)
+
+O diretor escolhe uma cidade de referência e um raio (por exemplo, 100 km). O simulador mostra as cidades do ranking dentro
+desse raio, ordenadas pela nota final, com a **lacuna de academias** de cada uma. A distância é em linha reta entre os
+centros dos municípios (centroides oficiais do IBGE), não por estrada.
+
+Duas **estimativas simples** apoiam a leitura — não são previsão garantida e aparecem sempre com esse aviso:
+
+| Estimativa | Como é calculada | Para que serve |
+|---|---|---|
+| **População projetada (2028)** | população atual × (1 + crescimento anual desde o Censo 2022) ^ (2028 − ano atual) | ter uma ideia do mercado no horizonte de abertura das unidades |
+| **Densidade de referência** | mediana de academias por 10 mil habitantes das cidades do universo da **mesma faixa de renda** (5 faixas = quintis da renda domiciliar per capita do universo), com os mesmos limites 5%–95% do espaço competitivo | comparar a cidade com cidades de poder de compra parecido, e não com a média do país |
+| **Lacuna de academias** | (densidade de referência − densidade atual) × população ÷ 10 mil, arredondada | **positiva** = espaço estimado para novas academias; **negativa** = mercado saturado em relação a cidades parecidas |
+
+**Premissas:** a cidade tende à densidade típica da sua faixa de renda; o crescimento recente da população continua no mesmo
+ritmo até 2028. As premissas (ano da projeção e número de faixas) ficam na tabela de parâmetros do ranking.
+
+**Limitações:** o cadastro conta empresas formais da CNAE 93.13-1 — estúdios registrados em outra atividade e academias
+informais não entram; a lacuna não considera tamanho das academias, preço nem perfil do público; municípios criados depois do
+Censo 2022 ficam sem renda e, portanto, sem faixa, lacuna e projeção; a distância em linha reta subestima o deslocamento real.
+
 ## 5. Momento econômico ("fator quando")
 
 Fica **fora da nota do município** (vale igual para todas as cidades) e aparece como **semáforo** no topo do dashboard.
@@ -138,13 +161,15 @@ O squad usa estas perguntas para checar se o ranking faz sentido para **este** c
 - Indicadores do IBGE (população, Censo 2022, PIB, renda, academias por CNAE, salário médio, IPCA) e do BCB (Selic, dólar).
 - Atualização semanal automática.
 - Dashboard com ranking filtrável por região e estado, ficha do município, momento econômico e explicação do cálculo.
+- Simulador de região: cidades num raio escolhido, com nota e lacuna estimada de academias.
 
 **Fora**
 - Escolha do bairro ou do ponto comercial (o Radar indica a cidade, não o endereço).
 - Preço de aluguel, fluxo de pessoas, dados de cartão ou de redes sociais.
 - Concorrência por marca e academias informais (o dado conta empresas formais da CNAE 93.13-1; estúdios registrados em outra
   atividade não entram).
-- Previsão econômica (o semáforo olha o passado recente, não projeta o futuro).
+- Previsão econômica (o semáforo olha o passado recente, não projeta o futuro) e previsão de demanda: população projetada e
+  lacuna de academias são estimativas simples com premissas declaradas (seção 4.3).
 - Viabilidade financeira de cada unidade (payback, investimento por unidade).
 
 ## 8. Marcos e prazo
@@ -174,3 +199,5 @@ Fase 2 do projeto: início em 18/11/2026, **entrega em 20/12/2026**.
 - [ ] Checagens automáticas: soma dos pesos = 100% (também depois da redistribuição em cada município), todos os municípios do
       universo com nota, nenhuma nota fora de 0–100, as 5 recomendadas em regiões imediatas diferentes e todas com nota
       de poder de compra ≥ 50.
+- [ ] Todos os 5.571 municípios com coordenada dentro do território brasileiro e, quando há dado, com lacuna estimada.
+- [ ] O simulador responde à P9 para qualquer cidade e raio escolhidos pelo diretor.
