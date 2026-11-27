@@ -90,6 +90,7 @@ import streamlit as st
 import acoes
 import dados
 import formato as fmt
+import mapas
 
 
 # ------------------------------------------------------------------ utilitarios
@@ -596,7 +597,8 @@ def caixa_com_margem(lons: list, lats: list) -> tuple[float, float, float, float
     return (min(lons) - margem_lon, max(lons) + margem_lon, min(lats) - margem_lat, max(lats) + margem_lat)
 
 
-with st.container(horizontal=True):
+with st.container(horizontal=True, vertical_alignment="bottom"):
+    fundo = mapas.seletor_de_fundo("bairros_fundo_mapa", mapas.RUAS)
     ver_academias = st.toggle("Academias", value=concorrencia_ok, disabled=not concorrencia_ok,
                               key=f"bairros_ver_academias_{concorrencia_ok}")  # sem concorrencia, fica travado
     ver_setores = st.toggle("Setores do Censo", value=False, key="bairros_ver_setores",
@@ -687,9 +689,13 @@ figura.update_layout(separators=",.", height=ALTURA_MAPA, margin={"l": 0, "r": 0
                      legend={"orientation": "h", "y": 0.01, "x": 0.01, "bgcolor": "rgba(11,13,15,.6)"},
                      hoverlabel={"bgcolor": "#151a1f", "bordercolor": "#262d35", "align": "left",
                                  "font": {"color": "#f2f1ec", "size": 13}, "namelength": -1})
+if fundo == mapas.RUAS and caixa is not None:
+    figura = mapas.em_mapa_de_ruas(figura, caixa, ALTURA_MAPA)
 evento = st.plotly_chart(figura, config={"displaylogo": False, "scrollZoom": True}, on_select="rerun",
-                         selection_mode="points", key=f"bairros_mapa_{municipio_id}_{escala}",
+                         selection_mode="points", key=f"bairros_mapa_{municipio_id}_{escala}_{fundo}",
                          alt=f"Mapa dos bairros de {rotulo(municipio_id)} coloridos pela nota, com o número da posição.")
+if fundo == mapas.RUAS:
+    st.caption(mapas.CREDITO)
 unidade_clicada = acoes.clicado(evento)
 clicou_algo = bool(getattr(evento, "selection", {}) and evento.selection.get("points"))
 escolhida = unidades[unidades["unidade_id"].astype(str) == str(unidade_clicada)] if unidade_clicada else unidades.iloc[0:0]
