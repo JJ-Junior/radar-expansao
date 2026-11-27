@@ -55,9 +55,8 @@ VALIDADE_CACHE_SEGUNDOS = 600
 RAIO_PADRAO_KM, POPULACAO_MINIMA_PADRAO = 1.5, 5000   # se o resumo nao trouxer os parametros
 MAX_OPCOES_BUSCA = 60
 COR_LINHA_ESCOLHIDA = "rgba(196, 240, 59, 0.22)"   # bairro clicado no mapa
-MAX_NUMEROS_MAPA = 40           # bairros do ranking com o numero da posicao no mapa
+MAX_NUMEROS_MAPA = 15           # so o top recebe selo numerado; os demais mostram a posicao no hover
 ALTURA_MAPA = 600
-PROPORCAO_MAPA = 1.5             # largura / altura do mapa (enquadramento inicial)
 FOLGA_MAPA = 0.06                # margem em volta dos bairros
 MARGEM_MINIMA_GRAUS = 0.012      # ~1,3 km de margem minima em volta
 ESCALAS = {"ibge": "Bairros do IBGE", "popular": "Bairros populares"}
@@ -590,21 +589,11 @@ def texto_academia(r) -> str:
     return "<br>".join(linhas)
 
 
-def enquadrar(lons: list, lats: list) -> tuple[list, list]:
-    """Faixa de lon/lat que mostra tudo com folga e tem a proporcao do mapa (largo)."""
-    x0, x1 = np.radians(min(lons)), np.radians(max(lons))
-    y0, y1 = (np.log(np.tan(np.pi / 4 + np.radians(v) / 2)) for v in (min(lats), max(lats)))  # mercator
-    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    margem = np.radians(MARGEM_MINIMA_GRAUS)  # selos e circulos tem raio: nao encostam na borda
-    largura = (x1 - x0) + 2 * max((x1 - x0) * FOLGA_MAPA, margem)
-    altura = (y1 - y0) + 2 * max((y1 - y0) * FOLGA_MAPA, margem)
-    largura, altura = max(largura, altura * PROPORCAO_MAPA), max(altura, largura / PROPORCAO_MAPA)
-
-    def latitude(y):
-        return float(np.degrees(2 * np.arctan(np.exp(y)) - np.pi / 2))
-
-    return ([float(np.degrees(cx - largura / 2)), float(np.degrees(cx + largura / 2))],
-            [latitude(cy - altura / 2), latitude(cy + altura / 2)])
+def caixa_com_margem(lons: list, lats: list) -> tuple[float, float, float, float]:
+    """(lon_min, lon_max, lat_min, lat_max) dos bairros com folga; o Plotly ajusta a proporcao a tela."""
+    margem_lon = max((max(lons) - min(lons)) * FOLGA_MAPA, MARGEM_MINIMA_GRAUS)
+    margem_lat = max((max(lats) - min(lats)) * FOLGA_MAPA, MARGEM_MINIMA_GRAUS)
+    return (min(lons) - margem_lon, max(lons) + margem_lon, min(lats) - margem_lat, max(lats) + margem_lat)
 
 
 with st.container(horizontal=True):
@@ -614,7 +603,8 @@ with st.container(horizontal=True):
                             help="Desenha, só com contorno fino, os setores censitários: a menor área com dados do "
                                  "Censo 2022, de onde vêm população e renda dos bairros. A cor continua sendo a nota "
                                  "do bairro. Passe o mouse num setor para ver o código, a população e a renda dele.")
-st.caption("Passe o mouse (ou toque) num bairro para ver a nota e o que a compõe. O número é a posição no ranking.")
+st.caption(f"Passe o mouse (ou toque) num bairro para ver a nota e o que a compõe. Os {MAX_NUMEROS_MAPA} primeiros "
+           "têm o número da posição no mapa; nos outros, a posição aparece ao passar o mouse.")
 
 unidades["_texto"] = [texto_hover(r) for _, r in unidades.iterrows()]
 unidades["_geo"] = unidades["geojson"].map(geometria) if "geojson" in unidades else None
@@ -657,7 +647,18 @@ if not tabela_setores.empty:  # por cima dos bairros, sem preenchimento: a cor c
         colorscale=[[0, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0)"]], showscale=False,
         marker={"line": {"color": "rgba(242,241,236,.55)", "width": 0.4}},
         text=[texto_setor(r) for _, r in tabela_setores.iterrows()], hovertemplate=dica))
+enquadrados = elegiveis if not elegiveis.empty else unidades  # localidades rurais fora do ranking nao entram no zoom
+lons = enquadrados["lon"].dropna().astype(float).tolist()
+lats = enquadrados["lat"].dropna().astype(float).tolist()
+for g in enquadrados["_geo"].dropna():  # inclui o contorno inteiro dos bairros, nao so o centro
+    for poligono in g["coordinates"]:
+        lons += [p[0] for p in poligono[0]]
+        lats += [p[1] for p in poligono[0]]
+caixa = caixa_com_margem(lons, lats) if lons else None
 academias = res["academia"]
+if caixa is not None and not academias.empty:  # academia longe dos bairros nao abre o zoom
+    academias = academias[academias["lon"].astype(float).between(caixa[0], caixa[1])
+                          & academias["lat"].astype(float).between(caixa[2], caixa[3])]
 if ver_academias and not academias.empty:
     figura.add_trace(go.Scattergeo(
         lon=academias["lon"].astype(float).tolist(), lat=academias["lat"].astype(float).tolist(),
@@ -673,20 +674,14 @@ if not numerados.empty:  # so o numero da posicao, num selo escuro; o nome fica 
         customdata=numerados["unidade_id"].astype(str).tolist(),
         textposition="middle center", textfont={"color": "#f2f1ec", "size": 11},
         marker={"size": 20, "color": "rgba(11,13,15,.78)", "line": {"color": "#f2f1ec", "width": 1}}))
-enquadrados = elegiveis if not elegiveis.empty else unidades  # localidades rurais fora do ranking nao entram no zoom
-lons = enquadrados["lon"].dropna().astype(float).tolist()
-lats = enquadrados["lat"].dropna().astype(float).tolist()
-for g in enquadrados["_geo"].dropna():  # inclui o contorno inteiro dos bairros, nao so o centro
-    for poligono in g["coordinates"]:
-        lons += [p[0] for p in poligono[0]]
-        lats += [p[1] for p in poligono[0]]
-if lons:
-    faixa_lon, faixa_lat = enquadrar(lons, lats)
-    figura.update_geos(lonaxis_range=faixa_lon, lataxis_range=faixa_lat)
+if caixa is not None:
+    figura.add_trace(go.Scattergeo(lon=[caixa[0], caixa[1], caixa[0], caixa[1]],
+                                   lat=[caixa[2], caixa[2], caixa[3], caixa[3]], mode="markers",
+                                   marker={"size": 1, "opacity": 0}, hoverinfo="skip", showlegend=False))
 figura.update_traces(selector={"type": "choropleth"}, selected={"marker": {"opacity": 1}}, unselected={"marker": {"opacity": 1}})
 figura.update_traces(selector={"type": "scattergeo"}, selected={"marker": {"opacity": 1}, "textfont": {"color": "#f2f1ec"}},
                      unselected={"marker": {"opacity": 1}, "textfont": {"color": "#f2f1ec"}})  # o clique nao apaga o mapa
-figura.update_geos(projection_type="mercator", projection_scale=1, visible=False, bgcolor="rgba(0,0,0,0)")
+figura.update_geos(projection_type="mercator", fitbounds="locations", visible=False, bgcolor="rgba(0,0,0,0)")
 figura.update_layout(separators=",.", height=ALTURA_MAPA, margin={"l": 0, "r": 0, "t": 0, "b": 0},
                      paper_bgcolor="rgba(0,0,0,0)", dragmode="pan",
                      legend={"orientation": "h", "y": 0.01, "x": 0.01, "bgcolor": "rgba(11,13,15,.6)"},
