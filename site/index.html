@@ -74,6 +74,9 @@
         <a href="#ideal">Critérios</a>
         <a href="#arquitetura">Dados</a>
       </nav>
+      <a class="topo__dash" href="https://radar-expansao.streamlit.app" target="_blank" rel="noopener" aria-label="Abrir o dashboard (nova aba)">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg><span class="topo__dash-texto">Dashboard</span><span class="topo__dash-seta" aria-hidden="true">↗</span>
+      </a>
       <button class="botao-tema" type="button" id="botao-tema" aria-label="Alternar tema claro e escuro">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z" fill="currentColor"/></svg>
       </button>
@@ -256,7 +259,7 @@
         <header class="secao__cabecalho" data-revela>
           <p class="rotulo"><span class="rotulo__num">05</span> Simular</p>
           <h2 id="titulo-simulador">Simule sua região</h2>
-          <p class="secao__lede">Escolha uma cidade central e um raio. O mapa aproxima a região, as cidades de fora esmaecem e as de dentro ganham um ranking local, com a distância e a lacuna de academias de cada uma.</p>
+          <p class="secao__lede">Escolha uma cidade central e um raio. O mapa aproxima a região e pinta cada município do raio pela nota; os de fora esmaecem e as cidades de dentro ganham um ranking local, com a distância e a lacuna de academias de cada uma.</p>
         </header>
         <div class="sim__controles">
           <label class="sim__campo">
@@ -281,8 +284,9 @@
               <button type="button" role="tab" aria-selected="false" tabindex="-1" data-vista="ranking" aria-controls="sim-palco">Ranking local</button>
             </div>
             <div class="explorar__palco sim__palco" id="sim-palco" role="tabpanel">
-              <canvas id="sim-canvas" role="img" aria-label="Cidades da região como pontos; a mesma informação está na lista ao lado"></canvas>
+              <canvas id="sim-canvas" role="img" aria-label="Municípios da região pintados pela nota; a mesma informação está na lista ao lado"></canvas>
             </div>
+            <div class="mapa__legenda explorar__legenda" id="sim-legenda"></div>
           </div>
           <div class="sim__lado">
             <div class="sim__resumo" id="sim-resumo" aria-live="polite"></div>
@@ -296,6 +300,7 @@
           </div>
         </div>
         <p class="sim__aviso" id="sim-aviso"></p>
+        <p class="sim__dash"><a class="botao botao--fantasma" href="https://radar-expansao.streamlit.app" target="_blank" rel="noopener">Simular também no dashboard <span aria-hidden="true">↗</span></a> <span>O dashboard do Radar, em Streamlit, tem a mesma simulação, lendo direto a camada gold.</span></p>
       </div>
     </section>
 
@@ -421,7 +426,7 @@
         <h2 class="chamada__titulo" id="titulo-chamada">Veja o Radar completo</h2>
         <div class="chamada__acoes">
           <p>Dashboard em Streamlit, lendo direto a camada gold, com filtros e a ficha de cada cidade.</p>
-          <span class="botao botao--escuro botao--desativado" aria-disabled="true">Dashboard · em breve</span>
+          <a class="botao botao--escuro" href="https://radar-expansao.streamlit.app" target="_blank" rel="noopener">Abrir o dashboard <span aria-hidden="true">↗</span></a>
           <a class="botao botao--escuro" href="https://github.com/JJ-Junior/radar-expansao" rel="noopener">Ver o repositório</a>
         </div>
       </div>
@@ -444,6 +449,7 @@
       <div>
         <h2 class="rodape__titulo">Feito com</h2>
         <p>Python, Supabase, n8n, Streamlit. Site em HTML, CSS e JavaScript com D3, TopoJSON, GSAP e Lenis.</p>
+        <p><a href="https://radar-expansao.streamlit.app" target="_blank" rel="noopener">Dashboard do Radar (Streamlit) ↗</a></p>
         <p class="discreto" id="rodape-gerado"></p>
       </div>
     </div>

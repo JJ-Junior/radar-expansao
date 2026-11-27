@@ -126,7 +126,19 @@ button, select, input { font: inherit; color: inherit; }
 .topo__nav a:hover { color: var(--limao-texto); }
 .botao-tema { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--linha-forte); background: transparent; display: grid; place-items: center; cursor: pointer; }
 .botao-tema svg { width: 17px; height: 17px; }
-@media (max-width: 860px) { .topo__nav { display: none; } .botao-tema { margin-left: auto; } }
+/* link do dashboard publicado: sempre visível; no celular vira só o ícone */
+.topo__dash { display: inline-flex; align-items: center; gap: 8px; flex: none; height: 38px; padding: 0 16px; border-radius: 999px; background: var(--limao); color: var(--limao-sobre); text-decoration: none; font-family: var(--mono); font-size: .74rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.topo__dash svg { width: 16px; height: 16px; flex: none; }
+.topo__dash:hover { filter: brightness(1.05); }
+.topo__dash:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+/* menu + dashboard não cabem com o texto: entre 961 e 1280 px o dashboard fica só o ícone; abaixo, o menu sai */
+@media (max-width: 1280px) and (min-width: 961px), (max-width: 520px) {
+  .topo__dash { width: 38px; padding: 0; justify-content: center; }
+  .topo__dash-texto, .topo__dash-seta { display: none; }
+}
+@media (max-width: 1180px) { .topo__nav { gap: 16px; } }
+@media (max-width: 960px) { .topo__nav { display: none; } .topo__dash { margin-left: auto; } }
+@media (max-width: 520px) { .topo__interno { gap: 12px; } }
 /* sem espaço para tudo numa linha: o squad desce para uma segunda linha menor */
 @media (max-width: 1180px) {
   .marca__textos { flex-direction: column; align-items: flex-start; gap: 0; line-height: 1; }
@@ -626,6 +638,8 @@ button, select, input { font: inherit; color: inherit; }
 .sim__lacuna--espaco { color: var(--limao-texto); font-weight: 600; }
 .sim__lacuna--saturada { color: var(--tinta-3); }
 .sim__aviso { margin-top: 16px; font-size: .82rem; color: var(--tinta-3); max-width: 110ch; }
+.sim__dash { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; margin-top: 24px; color: var(--tinta-2); font-size: .92rem; }
+.sim__dash .botao { padding: 12px 20px; }
 @media (max-width: 1000px) {
   .sim__grade { grid-template-columns: 1fr; }
   .explorar__palco.sim__palco { aspect-ratio: 4 / 5; }
@@ -668,4 +682,5 @@ button, select, input { font: inherit; color: inherit; }
   .abas-explorar { border-radius: var(--raio); }
 }
 .mapa__legenda .ponto--anel { background: transparent; box-shadow: inset 0 0 0 2px var(--limao-texto); }
+.mapa__legenda .ponto--cinza { background: color-mix(in srgb, var(--tinta-3) 40%, transparent); border-radius: 2px; }
 .sinal__fechamento { font-family: var(--mono); font-size: .72rem; color: var(--tinta-3); margin: 0; }

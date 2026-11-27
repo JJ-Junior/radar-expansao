@@ -118,7 +118,7 @@ export function desenharCamadas({ estado }) {
     { classe: "silver", sub: "camada 2", nome: "Silver", texto: "Modelo estrela: dimensões de região, UF, município e calendário; fatos municipais e macroeconômicos.", lista: tabelas("silver") },
     { classe: "gold", sub: "camada 3", nome: "Gold", texto: "Tabelas prontas para consumo: indicadores, ranking, critérios, contexto macro e semáforo.", lista: tabelas("gold") },
     { classe: "uso", sub: "consumo", nome: "Painéis", texto: "Dashboard Streamlit lendo a gold e este site, que lê arquivos JSON exportados da gold.",
-      lista: "<ul><li>dashboard<span>em breve</span></li><li>site de apoio<span>esta página</span></li></ul>" },
+      lista: "<ul><li><a href='https://radar-expansao.streamlit.app' target='_blank' rel='noopener'>dashboard ↗</a><span>Streamlit</span></li><li>site de apoio<span>esta página</span></li></ul>" },
   ];
   document.getElementById("camadas").innerHTML = etapas.map((e) => `
     <li class="camada camada--${e.classe}">
