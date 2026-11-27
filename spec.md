@@ -892,7 +892,7 @@ ser removido inteiro (`DROP SCHEMA bairros CASCADE`, as views `gold.bairro_*` e 
 | DDL | `sql/bairros/01_estrutura.sql`, `02_gold_api.sql` | Idempotente, roda como `etl_radar` |
 | Testes | `python -m src.bairros.testes [--bauru]` | Regras (pesos, percentis, número "quadra-casa") e Bauru de ponta a ponta: 379.146 hab. e top 3 conhecidos |
 
-Ranking de bairros (mesma lógica de percentis do ranking de cidades; só unidades com 5 mil hab. ou mais): público de 20 a
+Ranking de bairros (mesma lógica de percentis do ranking de cidades; só unidades com 5 mil hab. ou mais na escala do IBGE e 2 mil ou mais nos bairros populares, que são loteamentos menores — com 5 mil, Bauru ficava com 7 bairros populares no ranking, com 2 mil fica com 54, que cobrem 54 % da população): público de 20 a
 59 anos 30 % · renda média do responsável 25 % · academias (93.13-1 principal) por 10 mil hab. num raio de 1,5 km, menor é
 melhor, 30 % · massa de renda por km² 15 %. Sem a base de academias, o ranking sai marcado `concorrencia = 'pendente'`,
 com os outros pesos reescalonados para somar 100 %.

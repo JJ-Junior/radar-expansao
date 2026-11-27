@@ -36,7 +36,8 @@
 # ============================== CONFIG ==============================
 DIR_DADOS_PADRAO = r"C:\dados\estudo-bairros"   # no container: DIR_DADOS=/dados
 RAIO_KM = 1.5            # concorrencia e populacao no entorno de cada bairro
-POP_MIN = 5000           # so bairros com pelo menos esta populacao entram no ranking
+POP_MIN = 5000           # so bairros com pelo menos esta populacao entram no ranking (escala do IBGE)
+POP_MIN_POPULAR = 2000   # bairros populares sao menores (loteamentos): Bauru tem 7 com 5 mil hab. e 54 com 2 mil
 PESOS = {"mercado": 0.30, "renda": 0.25, "espaco": 0.30, "densidade": 0.15}
 NUMERACAO_QUADRA = {"3506003"}  # municipios com numero "quadra-casa" (ex.: 9-50)
 CASAS_GEOJSON = 4        # casas decimais das coordenadas guardadas (~11 m)

@@ -39,6 +39,8 @@
 #   4. a escala oficial nem sempre e de bairros (Bauru cadastrou bacias
 #      hidrograficas): nome de regiao ou poucas unidades -> a escala padrao
 #      vira a popular e o resumo leva um aviso para a tela
+#   5. corte de populacao por escala: 5 mil no IBGE, 2 mil nos bairros
+#      populares (loteamentos menores; com 5 mil, Bauru ficava com 7 bairros)
 #
 # COMO RODAR: nao roda sozinho; e chamado por src/bairros/processar.py
 # =============================================================================
@@ -169,10 +171,10 @@ def _indicadores(u, g_pop, g_ac, centro, concorrencia):
     return u
 
 
-def _ranquear(u, concorrencia, nome_mun=""):
+def _ranquear(u, concorrencia, nome_mun="", pop_min=C.POP_MIN):
     w = pesos(concorrencia)
     # fora do ranking: area rural, sem localidade e a localidade com o proprio nome do municipio (CNEFE sem bairro)
-    u["elegivel"] = ((u["pop"] >= C.POP_MIN) & ~u["nome"].str.upper().str.contains(NAO_BAIRRO, regex=True)
+    u["elegivel"] = ((u["pop"] >= pop_min) & ~u["nome"].str.upper().str.contains(NAO_BAIRRO, regex=True)
                      & (u["nome"].map(chave) != chave(nome_mun)))
     el = u[u["elegivel"]].copy()
     el["nota_mercado"] = percentil(el["pop_20_59"])
@@ -255,7 +257,7 @@ def calcular(cod, st, end, geo, renda_bairro, pts, concorrencia, nome_mun=""):
         "lat": (g["lat"] * g["n"]).sum() / g["n"].sum(), "lon": (g["lon"] * g["n"]).sum() / g["n"].sum(),
     }), include_groups=False).reset_index().rename(columns={"localidade": "nome"})
     u["acad_unidade"] = u["nome"].map(pts["localidade"].value_counts()).fillna(0) if concorrencia else float("nan")
-    u = _ranquear(_indicadores(u, g_pop, g_ac, centro, concorrencia), concorrencia, nome_mun)
+    u = _ranquear(_indicadores(u, g_pop, g_ac, centro, concorrencia), concorrencia, nome_mun, C.POP_MIN_POPULAR)
     u["unidade_id"] = u["nome"].map(chave)
     u["geojson"] = None
     u["escala"] = "popular"
@@ -290,6 +292,6 @@ def calcular(cod, st, end, geo, renda_bairro, pts, concorrencia, nome_mun=""):
         "bairros_ibge": n_ibge, "bairros_ibge_ranking": n_ibge_rank,
         "bairros_populares": int(len(u)), "bairros_populares_ranking": int(u["elegivel"].sum()),
         "pesos": {k: round(v, 4) for k, v in w.items()},
-        "parametros": {"raio_km": C.RAIO_KM, "pop_min": C.POP_MIN, "escala_ibge_tipo": tipo_oficial},
+        "parametros": {"raio_km": C.RAIO_KM, "pop_min": C.POP_MIN, "pop_min_popular": C.POP_MIN_POPULAR, "escala_ibge_tipo": tipo_oficial},
     }
     return ranking, setores, resumo

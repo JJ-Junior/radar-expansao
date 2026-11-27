@@ -38,7 +38,7 @@ BAURU = "3506003"
 POP_BAURU = 379146
 TOP3_BAURU = {"ibge": ["Bacia do Córrego Água da Grama", "Bacia do Córrego Água do Sobrado",
                        "Bacia do Córrego Água do Castelo"],
-              "popular": ["Vila Industrial", "Nucleo Habitacional Mary Dota", "Parque Santa Edwiges"]}
+              "popular": ["Vila Industrial", "Nucleo Habitacional Mary Dota", "Jardim Terra Branca"]}
 # ====================================================================
 
 import argparse
@@ -71,7 +71,7 @@ def regras():
     checar("percentil vai de 0 a 100", list(p) == [0, 50, 100])
     checar("percentil menor-melhor inverte", list(percentil(pd.Series([10, 20, 30]), True)) == [100, 50, 0])
     checar("chave normaliza acentos", chave("Água  da Grama") == "AGUA DA GRAMA")
-    checar("raio e populacao minima do CONFIG", C.RAIO_KM == 1.5 and C.POP_MIN == 5000)
+    checar("raio e populacao minima do CONFIG", C.RAIO_KM == 1.5 and C.POP_MIN == 5000 and C.POP_MIN_POPULAR == 2000)
     bacias = ["BACIA DO CORREGO AGUA DA GRAMA", "BACIA DO RIBEIRAO VARGEM LIMPA", "BACIA DO CORREGO BARREIRINHO"]
     checar("escala IBGE de bacias cai para a popular", avaliar_escala_ibge("bairro", bacias, 30, 5)[:2] == ("regiao", "popular"))
     reais = [f"BAIRRO {i}" for i in range(20)]
@@ -95,7 +95,11 @@ def bauru():
     checar("Bauru: populacao dos bairros IBGE = 379.146", soma_ibge == POP_BAURU, soma_ibge)
     el = r[r["elegivel"]]
     checar("notas entre 0 e 100", el["nota_final"].between(0, 100).all())
-    checar("so unidades com 5 mil hab. ou mais no ranking", (el["populacao"] >= C.POP_MIN).all())
+    checar("IBGE: so unidades com 5 mil hab. ou mais no ranking", (el.loc[el["escala"] == "ibge", "populacao"] >= C.POP_MIN).all())
+    checar("popular: so bairros com 2 mil hab. ou mais no ranking",
+           (el.loc[el["escala"] == "popular", "populacao"] >= C.POP_MIN_POPULAR).all())
+    n_pop = int((el["escala"] == "popular").sum())
+    checar("Bauru: 54 bairros populares no ranking", n_pop == 54, n_pop)
     checar("Bauru: escala IBGE (bacias) nao e o padrao; padrao = popular, com aviso",
            (resumo["escala_ibge_tipo"], resumo["escala_padrao"]) == ("regiao", "popular") and bool(resumo["aviso_escala"]),
            (resumo["escala_ibge_tipo"], resumo["escala_padrao"]))
