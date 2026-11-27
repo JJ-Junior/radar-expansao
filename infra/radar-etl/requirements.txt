@@ -1,0 +1,9 @@
+# Dependencias do container radar-etl (ingestao + transformacao), versoes fixas.
+# Instaladas com --no-deps: a lista inteira (diretas + transitivas) esta aqui.
+requests==2.34.2
+python-dotenv==1.2.4
+psycopg2-binary==2.9.13
+certifi==2026.11.20
+charset-normalizer==3.5.3
+idna==3.20
+urllib3==2.8.0

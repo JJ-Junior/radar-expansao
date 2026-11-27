@@ -240,6 +240,46 @@ Depois de subir:
 3. **Importar o workflow:** *Workflows → Import from File* com o arquivo de [`n8n/`](../n8n/) do repositório; depois, em cada nó
    Postgres, selecione a credencial criada (o arquivo versionado nunca leva credenciais). Ative o workflow.
 
+### 4.1 Container `radar-etl` (cenário A: o n8n dispara o Python)
+
+Container com Python fixo, as dependências da ingestão e um **disparador HTTP interno**. Ele fica só na rede `radar`,
+**sem porta publicada**, e só o n8n o alcança. O código do projeto é um clone montado somente leitura, então atualizar
+o código não exige rebuild. Modelos em [`infra/radar-etl/`](../infra/radar-etl/).
+
+```bash
+mkdir -p ~/radar/etl && cd ~/radar/etl
+cp <caminho-do-repositorio>/infra/radar-etl/{Dockerfile,compose.yml,disparador.py,requirements.txt} .
+cp <caminho-do-repositorio>/infra/radar-etl/.env.example .env
+chmod 600 .env
+# no .env: DB_PASSWORD (senha do etl_radar), RADAR_ETL_TOKEN (openssl rand -hex 32),
+#          RADAR_ETL_UID/GID (saída de id -u e id -g)
+git clone --branch <branch> --single-branch <url-do-repositorio> repo
+mkdir -p logs
+docker compose build && docker compose up -d
+```
+
+| Chamada (de dentro da rede `radar`) | O que faz |
+|---|---|
+| `POST http://radar-etl:9000/rodar/cenario-a` | `python -m src.ingestao.carga_incremental` e, se der certo, `python -m src.transformacao.executar` |
+| `POST http://radar-etl:9000/rodar/transformar` | só a transformação; é usada pelo cenário B **enquanto ele está com a trava do banco** |
+| `GET http://radar-etl:9000/saude` | `livre` ou `ocupado`, sem token |
+
+- **Autenticação:** os `POST` exigem o header `X-Radar-Token` com o valor de `RADAR_ETL_TOKEN`. No n8n, ele vira uma
+  credencial *Header Auth* (nome `X-Radar-Token`) usada no nó *HTTP Request* (método POST, timeout de ~15 min).
+- **Resposta:** JSON com `status` (`sucesso`, `erro`, `ocupado`, `ignorada_trava`, `sem_trava`), `duracao_s`, o código de
+  saída de cada etapa, o resumo de `bronze.execucao` da rodada (`resultado_carga` = `sem_novidade` quando nada mudou),
+  o commit do código e o fim da saída dos scripts. Códigos HTTP: **200** sucesso, **409** ocupado ou trava, **500** erro,
+  **401** token ausente ou errado. O n8n marca erro em qualquer código diferente de 2xx.
+- **Trava:** um job por vez no container (o segundo recebe 409 na hora). Além disso vale a trava de carga do banco
+  (`bronze.trava_carga`), a mesma do cenário B. A carga incremental pega essa trava sozinha, e a transformação do
+  cenário A roda com ela pega de novo. Já `/rodar/transformar` só roda se a trava estiver com `em_uso_por = 'n8n'`.
+- **Logs:** um arquivo por execução em `logs/` (guarda as 60 últimas), mais o resumo em `docker logs radar-etl`.
+- **Atualizar o código:** `git -C repo pull --ff-only`. Rebuild só quando mudar o `Dockerfile`, o `requirements.txt` ou o
+  `disparador.py`.
+- **Carga inicial** (longa): rodar à mão, fora do disparo síncrono:
+  `docker compose run --rm radar-etl python -m src.ingestao.carga_inicial`.
+- **Remover:** `docker compose down` e apagar a pasta.
+
 ---
 
 ## 5. Acesso remoto seguro

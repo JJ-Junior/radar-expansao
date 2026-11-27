@@ -1,0 +1,45 @@
+# =============================================================================
+# Radar de Expansao - container radar-etl (cenario A: o n8n dispara o Python)
+# =============================================================================
+# Pasta propria no servidor com: Dockerfile, requirements.txt, disparador.py,
+# compose.yml, .env (chmod 600, a partir do .env.example) e:
+#   git clone --branch <branch> --single-branch <url-do-repositorio> repo
+#   mkdir -p logs
+#   docker compose build && docker compose up -d
+# Sem "ports:": so quem esta na rede "radar" (n8n) chama o disparador, em
+#   POST http://radar-etl:9000/rodar/cenario-a   (header X-Radar-Token)
+# Atualizar o codigo: git -C repo pull --ff-only   (sem rebuild)
+# =============================================================================
+
+name: radar-etl
+
+services:
+  radar-etl:
+    build: .
+    image: radar-etl:local
+    container_name: radar-etl
+    restart: unless-stopped
+    # mesmo uid/gid do dono da pasta logs/ no host (id -u; id -g)
+    user: "${RADAR_ETL_UID:-1000}:${RADAR_ETL_GID:-1000}"
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      TZ: America/Sao_Paulo
+    volumes:
+      - ./repo:/app:ro        # codigo do projeto, somente leitura
+      - ./logs:/logs          # um log por execucao
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 384m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks: [radar]
+
+networks:
+  radar:
+    external: true
