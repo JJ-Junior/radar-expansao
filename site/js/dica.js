@@ -111,7 +111,6 @@ export function conteudoDica({ titulo, chip = null, linhas = [], nota = null }) 
         estado.append(el("i", `ponto-estado ponto-estado--${l.estado}`), document.createTextNode(l.estadoTexto ?? ""));
       }
       grade.append(estado);
-      if (l.sub) grade.append(el("span", "dica__sub", l.sub));   // descrição curta, na linha toda
     }
     raiz.append(grade);
   }

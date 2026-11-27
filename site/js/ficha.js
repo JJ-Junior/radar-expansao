@@ -4,7 +4,7 @@
 // 3) corpo: "por que esta cidade" (barras dos 6 critérios) e os 8 indicadores com o percentil no Brasil.
 // Percentis e "parecidas" são leituras das colunas da gold feitas no navegador.
 
-import { COMPONENTES, CRITERIOS, INDICADORES_FICHA, NOMES_UF, REGIOES, pesoDoCriterio } from "./indicadores.js";
+import { COMPONENTES, CRITERIOS, INDICADORES_FICHA, NOMES_UF, REGIOES, pesoDoCriterio, textosCriterios } from "./indicadores.js";
 import { decimal, inteiro, ordinal } from "./formato.js";
 import { motivoFora } from "./recomendacao.js";
 
@@ -126,6 +126,7 @@ export function criarFicha({ estado, aoSelecionar }) {
 
     // por que esta cidade: barras dos critérios
     el("ficha-porque").hidden = !r;
+    const textos = textosCriterios(estado.meta);
     el("ficha-criterios").innerHTML = r ? CRITERIOS.map((c) => {
       const v = r[`nota_${c.criterio}`];
       const peso = pesoDoCriterio(estado.criterios, c.criterio);
@@ -134,6 +135,7 @@ export function criarFicha({ estado, aoSelecionar }) {
         <span class="barra-criterio__peso">peso ${peso === null ? "—" : `${Math.round(peso * 100)}%`}</span>
         <span class="barra-criterio__num">${v === null ? "—" : decimal(v, 0)}</span>
         <span class="barra-criterio__trilho" role="img" aria-label="${c.nome}: ${v === null ? "sem dado" : `${decimal(v, 0)} de 100`}"><span class="barra-criterio__valor" style="width:${v ?? 0}%"></span></span>
+        ${textos[c.criterio]?.curto ? `<span class="barra-criterio__desc">${textos[c.criterio].curto}</span>` : ""}
       </li>`;
     }).join("") : "";
 

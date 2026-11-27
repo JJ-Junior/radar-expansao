@@ -471,6 +471,7 @@ button, select, input { font: inherit; color: inherit; }
 .barra-criterio__trilho { grid-column: 1 / -1; position: relative; height: 8px; background: var(--superficie-2); border-radius: 4px; }
 .barra-criterio__trilho::after { content: ""; position: absolute; left: 50%; top: -4px; bottom: -4px; width: 1px; background: var(--linha-forte); }
 .barra-criterio__valor { display: block; height: 100%; background: var(--limao-texto); border-radius: 4px; }
+.barra-criterio__desc { grid-column: 1 / -1; margin-top: -2px; font-size: .8rem; line-height: 1.35; color: var(--tinta-3); }
 
 .indicadores { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 0; }
 .indicador { background: var(--superficie); border-radius: var(--raio); padding: 16px; display: grid; gap: 8px; align-content: start; }
@@ -634,7 +635,6 @@ button, select, input { font: inherit; color: inherit; }
 .dica__estado { display: inline-flex; align-items: center; gap: 8px; font-size: .74rem; color: var(--tinta-2); white-space: nowrap; }
 .dica__estado .ponto-estado { width: 8px; height: 8px; }
 .dica__nota { margin: 8px 0 0; font-size: .7rem; color: var(--tinta-3); }
-.dica__sub { grid-column: 1 / -1; margin: -2px 0 4px; font-size: .72rem; color: var(--tinta-3); line-height: 1.3; }
 
 /* ---------------------------------------------------------------- 05 simule sua região */
 .sim__controles { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 24px; margin-bottom: 24px; }

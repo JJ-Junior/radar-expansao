@@ -2,7 +2,7 @@
 // Desktop: grade (5 colunas, ou 3 + 2) com todos os cards inteiros na tela.
 // Celular: carrossel nativo com "snap", card compacto (6 barras no lugar do radar) e indicador de posição com setas.
 
-import { CRITERIOS, REGIOES, pesoDoCriterio, textosCriterios } from "./indicadores.js";
+import { CRITERIOS, REGIOES, pesoDoCriterio } from "./indicadores.js";
 import { compacto, decimal, normalizar } from "./formato.js";
 import { graficoRadar } from "./grafico-radar.js";
 import { conteudoDica, ligarDica } from "./dica.js";
@@ -72,7 +72,6 @@ export function criarCards({ estado, aoSelecionar }) {
 
   /** As notas dos 6 critérios no tooltip do radar do card. */
   function ligarRadares() {
-    const textos = textosCriterios(estado.meta);
     for (const el of trilho.querySelectorAll(".cartao-cidade__radar")) {
       const c = estado.porId.get(Number(el.dataset.id));
       el.setAttribute("aria-label", `Notas de ${c.municipio_nome}; foco mostra os valores`);
@@ -82,7 +81,6 @@ export function criarCards({ estado, aoSelecionar }) {
         linhas: CRITERIOS.map((k) => ({
           rotulo: k.nome, valor: decimal(c.ranking[`nota_${k.criterio}`], 0),
           detalhe: `peso ${Math.round((pesoDoCriterio(estado.criterios, k.criterio) ?? 0) * 100)}%`,
-          sub: textos[k.criterio]?.curto,
         })),
         nota: "Notas de 0 a 100: percentil entre as cidades com 50 mil hab. ou mais. Detalhes em “Como o ranking é calculado”.",
       }));
