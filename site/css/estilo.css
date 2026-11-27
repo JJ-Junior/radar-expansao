@@ -185,12 +185,12 @@ button, select, input { font: inherit; color: inherit; }
   .hero > .largura:last-child { order: 2; }
 }
 
-/* celular (abaixo de 768 px): play ao lado do título, no espaço livre à direita das linhas (left/top vêm do pitch.js);
+/* celular (abaixo de 768 px): play no canto superior direito do título, encostado na margem (left/top/tamanho vêm do pitch.js);
    fica fora do fluxo, então não empurra o título; o play sobre o radar some nessa faixa */
 .pitch-titulo { display: none; position: absolute; z-index: 3; left: var(--pt-x, 0); top: var(--pt-y, 0); transform: translate(-50%, -50%);
   padding: 0; border: 0; background: none; cursor: pointer; color: var(--tinta); }
-.pitch-titulo .pitch-play__circulo { width: 44px; height: 44px; border-width: 1.5px; }
-.pitch-titulo .pitch-play__circulo svg { width: 18px; height: 18px; margin-left: 3px; }
+.pitch-titulo .pitch-play__circulo { width: var(--pt-d, 52px); height: var(--pt-d, 52px); border-width: 2px; }
+.pitch-titulo .pitch-play__circulo svg { width: 40%; height: 40%; margin-left: 3px; }
 /* anel do título pulsa menos, para não passar por cima das letras vizinhas */
 .pitch-titulo .pitch-play__circulo::after { animation-name: pitch-pulso-curto; border-width: 1.5px; }
 @keyframes pitch-pulso-curto { from { transform: scale(1); opacity: .55; } to { transform: scale(1.22); opacity: 0; } }

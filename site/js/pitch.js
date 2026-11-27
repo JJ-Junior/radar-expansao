@@ -49,28 +49,47 @@ export function criarPitch() {
 }
 
 /**
- * Celular: o play do título fica à direita do título, na altura da linha com mais sobra, sem tocar em nenhuma letra:
- * o botão começa depois do fim de TODAS as linhas que cruzam a altura dele. Usa offsetLeft/offsetTop (não mudam com a
- * animação de entrada do título). Se não couber em nenhuma linha, o botão não aparece.
+ * Celular: o play fica no canto superior direito do título, encostado na margem direita, sem tocar em nenhuma letra.
+ * Tenta, nesta ordem: entre a 1ª e a 2ª linha, na altura da 1ª linha, na altura do sobretítulo; e com 52, 48 e 44 px.
+ * Se nada couber (tela muito estreita), vai para o fim da linha com mais sobra, com 44 px (área de toque mínima).
+ * Usa offsetTop/offsetLeft (não mudam com a animação de entrada do título).
  */
 export function posicionarPlayTitulo() {
   const botao = document.getElementById("pitch-titulo");
   const texto = botao?.closest(".hero__texto");
   const linhas = [...document.querySelectorAll(".hero__titulo .linha > span")];
+  const sobretitulo = texto?.querySelector(".rotulo");
   if (!botao || !texto || !linhas.length) return;
-  const D = 44, FOLGA = 8;                        // diâmetro (área de toque mínima) e respiro das letras
-  const caixas = linhas.map((s) => ({ topo: s.offsetTop, base: s.offsetTop + s.offsetHeight, fim: s.offsetLeft + s.offsetWidth }));
-  let melhor = null;
-  for (const c of caixas) {
-    const y = (c.topo + c.base) / 2;
-    const x0 = Math.max(...caixas.filter((o) => o.topo < y + D / 2 && o.base > y - D / 2).map((o) => o.fim)) + FOLGA;
-    const sobra = texto.clientWidth - (x0 + D);
-    if (sobra >= 0 && (!melhor || sobra > melhor.sobra)) melhor = { x: x0 + D / 2 + Math.min(sobra / 2, D / 2), y, sobra };
+  const W = texto.clientWidth, FOLGA = 8;
+  const caixa = (el, largura = el.offsetWidth) => ({ esq: el.offsetLeft, dir: el.offsetLeft + largura, topo: el.offsetTop, base: el.offsetTop + el.offsetHeight });
+  const obstaculos = linhas.map((s) => caixa(s));
+  let rotulo = null;
+  if (sobretitulo) {
+    const faixa = document.createRange(); faixa.selectNodeContents(sobretitulo);
+    rotulo = caixa(sobretitulo, Math.min(sobretitulo.offsetWidth, faixa.getBoundingClientRect().width));
+    obstaculos.push(rotulo);
   }
-  botao.classList.toggle("pitch-titulo--posicionado", !!melhor);
-  if (!melhor) return;
-  botao.style.setProperty("--pt-x", `${Math.round(melhor.x)}px`);
-  botao.style.setProperty("--pt-y", `${Math.round(melhor.y)}px`);
+  const livre = (x, y, d) => obstaculos.every((o) =>
+    x + d / 2 + FOLGA <= o.esq || x - d / 2 - FOLGA >= o.dir || y + d / 2 + FOLGA <= o.topo || y - d / 2 - FOLGA >= o.base);
+  const [l1, l2] = obstaculos;
+  const alturas = [l2 ? (l1.base + l2.topo) / 2 : null, (l1.topo + l1.base) / 2, rotulo ? (rotulo.topo + rotulo.base) / 2 : null].filter((y) => y !== null);
+  let escolha = null;
+  for (const d of [52, 48, 44]) {
+    for (const y of alturas) { const x = W - d / 2; if (livre(x, y, d)) { escolha = { x, y, d }; break; } }
+    if (escolha) break;
+  }
+  if (!escolha) {                                   // reserva: fim da linha com mais sobra, 44 px
+    const d = 44;
+    for (const o of obstaculos.slice(0, linhas.length)) {
+      const y = (o.topo + o.base) / 2, x = W - d / 2;
+      if (livre(x, y, d) && (!escolha || o.dir < escolha.fim)) escolha = { x, y, d, fim: o.dir };
+    }
+  }
+  botao.classList.toggle("pitch-titulo--posicionado", !!escolha);
+  if (!escolha) return;
+  botao.style.setProperty("--pt-x", `${Math.round(escolha.x)}px`);
+  botao.style.setProperty("--pt-y", `${Math.round(escolha.y)}px`);
+  botao.style.setProperty("--pt-d", `${escolha.d}px`);
 }
 
 /** Põe o botão no centro do radar (o hero-radar avisa onde fica o centro). */
