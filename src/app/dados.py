@@ -38,6 +38,8 @@
 #                              pagina nao chama a API de novo
 #   5. fallback             -> sem API, o app continua de pe com a copia da gold
 #                              e avisa na tela de quando sao os dados
+#   6. TopoJSON -> GeoJSON  -> a malha dos municipios vem em arcos compartilhados;
+#                              o app junta os arcos de cada contorno para o mapa
 #
 # INSTALACAO: pip install -r requirements.txt
 # COMO RODAR: nao roda sozinho; e importado pelas paginas do dashboard
@@ -243,6 +245,52 @@ def contornos_ufs() -> tuple[list, list]:
         longitudes.append(None)
         latitudes.append(None)
     return longitudes, latitudes
+
+
+def _anel(indices: list, arcos: list) -> list:
+    """Junta os arcos de um anel; indice negativo (~i) = arco i de tras para frente."""
+    anel: list = []
+    for i in indices:
+        pontos = arcos[i] if i >= 0 else arcos[~i][::-1]
+        anel.extend(pontos if not anel else pontos[1:])
+    return anel
+
+
+def _orientar(anel: list, horario: bool) -> list:
+    """Poe o anel no sentido pedido (o mapa do plotly espera borda externa no sentido horario)."""
+    area = sum(x0 * y1 - x1 * y0 for (x0, y0), (x1, y1) in zip(anel, anel[1:] + anel[:1]))
+    return anel[::-1] if (area < 0) != horario else anel
+
+
+@st.cache_data
+def malha_municipios_uf(uf: int) -> dict | None:
+    """Contorno dos municipios de uma UF: {municipio_id: geometria GeoJSON}.
+
+    Le site/dados/malha/municipios/<uf>.topo.json (TopoJSON do IBGE). Devolve None
+    se o arquivo nao existir: o simulador volta a desenhar pontos.
+    """
+    caminho = PASTA_SNAPSHOT / "malha" / "municipios" / f"{uf}.topo.json"
+    if not caminho.exists():
+        return None
+    malha = json.loads(caminho.read_text(encoding="utf-8"))
+    (escala_x, escala_y), (origem_x, origem_y) = malha["transform"]["scale"], malha["transform"]["translate"]
+    arcos = []
+    for arco in malha["arcs"]:
+        x = y = 0
+        pontos = []
+        for dx, dy in arco:  # coordenadas quantizadas e em diferenca (delta)
+            x, y = x + dx, y + dy
+            pontos.append((round(x * escala_x + origem_x, 4), round(y * escala_y + origem_y, 4)))
+        arcos.append(pontos)
+    geometrias = {}
+    for g in malha["objects"]["municipios"]["geometries"]:
+        poligonos = [g["arcs"]] if g["type"] == "Polygon" else g["arcs"]
+        coordenadas = [
+            [_orientar(_anel(anel, arcos), horario=(n == 0)) for n, anel in enumerate(poligono)]
+            for poligono in poligonos
+        ]
+        geometrias[int(g["id"])] = {"type": "MultiPolygon", "coordinates": coordenadas}
+    return geometrias
 
 
 def tabela(nome: str) -> pd.DataFrame:

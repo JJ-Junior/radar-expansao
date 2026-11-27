@@ -35,6 +35,8 @@
 #   3. st.slider             -> raio escolhido pelo usuario (10 a 300 km)
 #   4. circulo no mapa       -> pontos a uma distancia fixa do centro, em todas
 #                              as direcoes (formula do "ponto de destino")
+#   5. go.Choropleth         -> pinta o contorno de cada municipio (malha do IBGE,
+#                              um TopoJSON por UF, so das UFs do raio) pela nota
 #
 # INSTALACAO: pip install -r requirements.txt
 # COMO RODAR: streamlit run src/app/app.py  (menu "Simulador de regiao")
@@ -164,69 +166,116 @@ if tem_estimativas:
     )
 
 # --- Mapa -------------------------------------------------------------------------
+# Contorno de cada municipio do raio, pintado pela nota (malha do IBGE por UF, so das UFs
+# que aparecem no raio). Sem o arquivo da malha, o municipio vira um ponto, como antes.
 circ_lat, circ_lon = circulo(centro["latitude"], centro["longitude"], raio)
 meia_altura = (circ_lat.max() - circ_lat.min()) / 2 * FOLGA_MAPA
 meia_largura = (circ_lon.max() - circ_lon.min()) / 2 * FOLGA_MAPA
 divisa_lon, divisa_lat = dados.contornos_ufs()
 
-figura = go.Figure()
-figura.add_trace(go.Scatter(x=divisa_lon, y=divisa_lat, mode="lines", hoverinfo="skip",
-                            showlegend=False, line={"color": "rgba(242,241,236,.28)", "width": 0.8}))
-figura.add_trace(go.Scatter(x=circ_lon, y=circ_lat, mode="lines", hoverinfo="skip",
-                            name=f"Raio de {raio} km",
-                            line={"color": fmt.COR_MARCA, "width": 1.5, "dash": "dot"}))
+contornos: dict = {}
+for uf in sorted({int(i) // 100_000 for i in regiao["municipio_id"]}):
+    contornos.update(dados.malha_municipios_uf(uf) or {})
 
 
-def hover(df: pd.DataFrame) -> pd.Series:
-    """Texto ao passar o mouse."""
-    texto = ("<b>" + df["municipio_nome"] + " (" + df["uf_sigla"] + ")</b><br>"
-             + df["distancia_km"].map(lambda d: fmt.numero(d)) + " km · "
-             + df["populacao"].map(fmt.compacto) + " hab.")
-    if "nota_final" in df:
-        texto = texto + df["nota_final"].map(
-            lambda n: "" if fmt.ausente(n) else f"<br>Nota {fmt.nota(n)}")
-    if tem_estimativas:
-        texto = texto + df["lacuna_academias"].map(
-            lambda v: "" if fmt.ausente(v) else f"<br>Lacuna estimada {int(v):+d} academias")
-    return texto
+def hover(df: pd.DataFrame) -> list[str]:
+    """Texto ao passar o mouse: nome, nota, populacao e lacuna."""
+    textos = []
+    for r in df.itertuples():
+        partes = [f"<b>{r.municipio_nome} ({r.uf_sigla})</b>",
+                  f"{fmt.numero(r.distancia_km)} km do centro · {fmt.compacto(r.populacao)} hab."]
+        if not fmt.ausente(getattr(r, "nota_final", None)):
+            partes.append(f"Nota {fmt.nota(r.nota_final)} · {r.posicao_raio}º no raio")
+        else:
+            partes.append("Sem nota (menos de 50 mil habitantes)")
+        if tem_estimativas and not fmt.ausente(r.lacuna_academias):
+            partes.append(f"Lacuna estimada {int(r.lacuna_academias):+d} academias")
+        textos.append("<br>".join(partes))
+    return textos
 
 
-tamanho_max = max(regiao["populacao"].max(), 1) if not regiao.empty else 1
+def poligonos(df: pd.DataFrame, **estilo) -> go.Choropleth | None:
+    """Uma camada com o contorno dos municipios de df que tem malha."""
+    com_malha = df[df["municipio_id"].isin(contornos.keys())]
+    if com_malha.empty:
+        return None
+    geojson = {"type": "FeatureCollection", "features": [
+        {"type": "Feature", "id": int(i), "geometry": contornos[int(i)]} for i in com_malha["municipio_id"]]}
+    return go.Choropleth(geojson=geojson, locations=com_malha["municipio_id"].astype(int).tolist(),
+                         text=hover(com_malha), hoverinfo="text", **estilo)
+
+
+def pontos(df: pd.DataFrame, com_nota: bool) -> go.Scattergeo | None:
+    """Municipios sem malha (arquivo ausente ou municipio novo) viram pontos, como antes."""
+    sem_malha = df[~df["municipio_id"].isin(contornos.keys())]
+    if sem_malha.empty:
+        return None
+    if com_nota:  # tamanho pela populacao, cor pela nota
+        marcador = {"size": (8 + 30 * np.sqrt(sem_malha["populacao"] / max(df["populacao"].max(), 1))).tolist(),
+                    "color": sem_malha["nota_final"].tolist(), "colorscale": fmt.ESCALA_DADO, "cmin": 0, "cmax": 100,
+                    "opacity": 0.9, "showscale": len(sem_malha) == len(df),
+                    "colorbar": {"title": {"text": "Nota"}, "thickness": 12, "len": 0.6}}
+    else:
+        marcador = {"size": 5, "color": "#8a929b", "opacity": 0.6}
+    return go.Scattergeo(lon=sem_malha["longitude"].tolist(), lat=sem_malha["latitude"].tolist(), mode="markers",
+                         marker=marcador, text=hover(sem_malha), hoverinfo="text", showlegend=False)
+
+
+borda = {"line": {"color": "#0b0d0f", "width": 0.5}}
+camadas = []
 if incluir_pequenas and not pequenas.empty:
-    figura.add_trace(go.Scatter(
-        x=pequenas["longitude"], y=pequenas["latitude"], mode="markers", name="Menos de 50 mil (sem nota)",
-        marker={"size": 5, "color": "#8a929b", "opacity": 0.6}, text=hover(pequenas), hoverinfo="text",
-    ))
+    camadas += [
+        poligonos(pequenas, z=[0] * len(pequenas), colorscale=[[0, "#3b4249"], [1, "#3b4249"]],
+                  showscale=False, marker=borda, name="Menos de 50 mil (sem nota)"),
+        pontos(pequenas, com_nota=False),
+    ]
 if not universo.empty:
-    figura.add_trace(go.Scatter(
-        x=universo["longitude"], y=universo["latitude"], mode="markers+text", name="Cidades do ranking",
-        marker={"size": 8 + 30 * np.sqrt(universo["populacao"] / tamanho_max),
-                "color": universo["nota_final"], "colorscale": fmt.ESCALA_DADO, "cmin": 0, "cmax": 100,
-                "opacity": 0.9, "line": {"width": 0},
-                "colorbar": {"title": {"text": "Nota"}, "thickness": 12, "len": 0.6}},
-        text=[f"{p}º {n}" if p <= ROTULOS_MAPA else ""
-              for p, n in zip(universo["posicao_raio"], universo["municipio_nome"])],
+    camadas += [
+        poligonos(universo, z=universo.loc[universo["municipio_id"].isin(contornos.keys()), "nota_final"].tolist(),
+                  colorscale=fmt.ESCALA_DADO, zmin=0, zmax=100, marker=borda, name="Cidades do ranking",
+                  colorbar={"title": {"text": "Nota"}, "thickness": 12, "len": 0.6}),
+        pontos(universo, com_nota=True),
+    ]
+figura = go.Figure([c for c in camadas if c is not None])
+figura.add_trace(go.Scattergeo(lon=divisa_lon, lat=divisa_lat, mode="lines", hoverinfo="skip",
+                               showlegend=False, line={"color": "rgba(242,241,236,.45)", "width": 1}))
+figura.add_trace(go.Scattergeo(lon=circ_lon.tolist(), lat=circ_lat.tolist(), mode="lines", hoverinfo="skip",
+                               name=f"Raio de {raio} km",
+                               line={"color": fmt.COR_MARCA, "width": 1.5, "dash": "dot"}))
+if int(centro_id) in contornos:  # contorno destacado da cidade central
+    contorno_lon, contorno_lat = [], []
+    for poligono in contornos[int(centro_id)]["coordinates"]:
+        for anel in poligono:
+            contorno_lon += [p[0] for p in anel] + [None]
+            contorno_lat += [p[1] for p in anel] + [None]
+    figura.add_trace(go.Scattergeo(lon=contorno_lon, lat=contorno_lat, mode="lines", hoverinfo="skip",
+                                   showlegend=False, line={"color": fmt.COR_DESTAQUE, "width": 2.5}))
+rotulos_mapa = universo[universo["posicao_raio"] <= ROTULOS_MAPA]
+if not rotulos_mapa.empty:
+    figura.add_trace(go.Scattergeo(
+        lon=rotulos_mapa["longitude"].tolist(), lat=rotulos_mapa["latitude"].tolist(), mode="text", hoverinfo="skip",
+        showlegend=False, text=[f"{p}º {n}" for p, n in zip(rotulos_mapa["posicao_raio"],
+                                                            rotulos_mapa["municipio_nome"])],
         textposition="top center", textfont={"color": "#f2f1ec", "size": 11},
-        hovertext=hover(universo), hoverinfo="text",
     ))
-figura.add_trace(go.Scatter(
-    x=[centro["longitude"]], y=[centro["latitude"]], mode="markers+text", name="Cidade central",
+figura.add_trace(go.Scattergeo(
+    lon=[float(centro["longitude"])], lat=[float(centro["latitude"])], mode="markers+text", name="Cidade central",
     marker={"symbol": "star", "size": 18, "color": fmt.COR_DESTAQUE, "line": {"width": 1, "color": "#0b0d0f"}},
     text=[centro["municipio_nome"]], textposition="bottom center", textfont={"color": "#f2f1ec", "size": 13},
     hoverinfo="skip",
 ))
-eixo = {"visible": False, "showgrid": False, "zeroline": False}
+figura.update_geos(
+    projection_type="mercator", visible=False, bgcolor="rgba(0,0,0,0)",
+    lonaxis_range=[float(centro["longitude"] - meia_largura), float(centro["longitude"] + meia_largura)],
+    lataxis_range=[float(centro["latitude"] - meia_altura), float(centro["latitude"] + meia_altura)],
+)
 figura.update_layout(
     separators=",.", height=ALTURA_MAPA, margin={"l": 0, "r": 0, "t": 0, "b": 0},
-    xaxis={**eixo, "range": [centro["longitude"] - meia_largura, centro["longitude"] + meia_largura]},
-    # um grau de longitude encolhe com o cosseno da latitude
-    yaxis={**eixo, "range": [centro["latitude"] - meia_altura, centro["latitude"] + meia_altura],
-           "scaleanchor": "x", "scaleratio": 1 / np.cos(np.radians(centro["latitude"]))},
-    legend={"orientation": "h", "y": 0.01, "x": 0.01}, plot_bgcolor="rgba(0,0,0,0)", dragmode="pan",
+    legend={"orientation": "h", "y": 0.01, "x": 0.01}, paper_bgcolor="rgba(0,0,0,0)", dragmode="pan",
 )
 st.plotly_chart(figura, config={"displaylogo": False, "scrollZoom": True},
                 alt=f"Mapa da região de {fmt.numero(raio)} km em volta de {centro['municipio_nome']}, com "
-                    "as cidades coloridas pela nota e dimensionadas pela população.")
+                    "o contorno de cada município colorido pela nota do ranking.")
 
 # --- Ranking local ----------------------------------------------------------------
 st.subheader("Melhores candidatas no raio")
