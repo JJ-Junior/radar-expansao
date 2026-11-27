@@ -10,7 +10,7 @@
 > | 4 · Camada silver (modelo estrela) | ✅ concluída: 5 dimensões, 2 fatos, 12 testes de qualidade passando |
 > | 5 · Camada gold (ranking, contexto macro, semáforo) | ✅ concluída: tabelas de consumo + parâmetros do ranking + coordenadas e estimativas do simulador de região (P9) + semáforo com janela móvel até o último fechamento, 25 testes de qualidade passando |
 > | 6 · n8n | ⏳ próxima etapa |
-> | 7 · Dashboard Streamlit | ✅ app com 6 páginas (inclui o simulador de região) lendo a gold pela API REST, com cópia de contingência; publicação no Streamlit Cloud em andamento |
+> | 7 · Dashboard Streamlit | ✅ app com 6 páginas (inclui o simulador de região) lendo a gold pela API REST, com cópia de contingência; publicado em https://radar-expansao.streamlit.app |
 > | Extra · Site de apoio | ✅ publicado em https://radar-expansao.lovelearning.com.br |
 
 Sistema que cruza dados oficiais do **IBGE** e do **Banco Central** para responder a uma pergunta de negócio:
@@ -20,7 +20,7 @@ Projeto Integrador do Data Challenger 2 da Pós Tech em Engenharia de Dados & IA
 
 - **Repositório:** https://github.com/JJ-Junior/radar-expansao
 - **Site de apoio:** https://radar-expansao.lovelearning.com.br
-- **Dashboard publicado:** em breve
+- **Dashboard publicado:** https://radar-expansao.streamlit.app
 - **Entrega:** 20/12/2026
 
 ---
@@ -42,13 +42,17 @@ tamanho de mercado com poder de compra, concorrência (academias por habitante) 
 
 ```mermaid
 flowchart LR
-    IBGE[API IBGE<br/>Localidades + Agregados] --> ING[Ingestão<br/>Python ou n8n]
-    BCB[API BCB<br/>SGS] --> ING
-    N8N[n8n<br/>agenda semanal] -.dispara.-> ING
-    ING --> B[(bronze<br/>JSON original)]
+    IBGE[API IBGE<br/>Localidades + Agregados] --> PY[Cenário A<br/>container Python]
+    BCB[API BCB<br/>SGS] --> PY
+    IBGE --> WF[Cenário B<br/>nós do n8n]
+    BCB --> WF
+    N8N[n8n<br/>agenda semanal] -.->|A: dispara por HTTP interno| PY
+    N8N -.->|B: executa| WF
+    PY -->|origem_carga = python| B[(bronze<br/>JSON original)]
+    WF -->|origem_carga = n8n| B
     B --> S[(silver<br/>modelo estrela)]
     S --> G[(gold<br/>tabelas de consumo)]
-    G -->|API REST| APP[Streamlit<br/>dashboard]
+    G -->|API REST| APP[Streamlit Cloud<br/>dashboard]
     G -->|JSON exportado| SITE[Site de apoio<br/>servidor autohospedado]
 ```
 
@@ -71,8 +75,14 @@ Guia passo a passo, com pré-requisitos, geração de segredos, SQL inicial, bac
 
 ## 5. Dashboard
 
-- **Link do app publicado:** em breve (Streamlit Cloud)
-- **Prints:** _(a preencher com o app publicado — imagens em `docs/img/`)_
+- **Link do app publicado:** https://radar-expansao.streamlit.app (Streamlit Cloud, lendo a gold ao vivo pela API)
+- **Prints** (app publicado, lendo a API ao vivo, 27/11/2026):
+
+| Visão geral | Simulador de região |
+|---|---|
+| ![Visão geral do dashboard](docs/img/dashboard-visao-geral.png) | ![Simulador de região](docs/img/dashboard-simulador.png) |
+| **Ranking** | **Momento econômico** |
+| ![Ranking](docs/img/dashboard-ranking.png) | ![Momento econômico](docs/img/dashboard-momento-economico.png) |
 
 Feito para o diretor de expansão entender **em 30 segundos** quais cidades priorizar e por quê. Código em
 [`src/app/`](src/app/); tema em [`.streamlit/config.toml`](.streamlit/config.toml) (escuro, verde-limão como cor de marca e

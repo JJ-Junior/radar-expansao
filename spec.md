@@ -706,8 +706,8 @@ Workflows exportados (sempre **sem credenciais**): `n8n/radar-expansao-cenario-a
 
 ### 9.1 Dashboard
 
-Implementado em `src/app/` e publicado no Streamlit Cloud (repositório `JJ-Junior/radar-expansao`, branch `junior`,
-arquivo `src/app/app.py`). O app **só lê e apresenta**: ranking, notas, lista recomendada e semáforo vêm prontos da gold.
+Implementado em `src/app/` e publicado no Streamlit Cloud em **https://radar-expansao.streamlit.app** (repositório `JJ-Junior/radar-expansao`,
+branch `junior`, arquivo `src/app/app.py`), lendo a gold ao vivo pela API REST. O app **só lê e apresenta**: ranking, notas, lista recomendada e semáforo vêm prontos da gold.
 
 | Arquivo | Conteúdo |
 |---|---|
