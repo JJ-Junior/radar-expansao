@@ -16,8 +16,9 @@
 #           Se o resultado da cidade ja existe, mostra mapa e ranking nas duas
 #           escalas (bairros do IBGE e bairros populares); se nao existe, pede o
 #           calculo pela API e acompanha a fila ate ficar pronto.
-# ENTRADA:  gold.bairro_ranking e gold.bairro_pedido (views so de leitura) e a
-#           funcao gold.pedir_bairros (unica escrita exposta pela API)
+# ENTRADA:  views gold.bairro_resumo, bairro_ranking, bairro_setor,
+#           bairro_academia e bairro_pedido (so leitura) e a funcao
+#           gold.pedir_bairros (unica escrita exposta pela API)
 # SAIDA:    pagina web + CSV baixado pelo usuario; grava so o pedido na fila
 #
 # =============================================================================
@@ -44,26 +45,26 @@
 
 # ============================== CONFIG ==============================
 DADOS_FICTICIOS = True           # True ate a 03 aplicar o schema bairros no banco
-VIEW_RANKING = "bairro_ranking"
-VIEW_PEDIDO = "bairro_pedido"
+VIEWS = {"resumo": "bairro_resumo", "ranking": "bairro_ranking", "setor": "bairro_setor",
+         "academia": "bairro_academia", "pedido": "bairro_pedido"}
 FUNCAO_PEDIDO = "pedir_bairros"
-PARAMETRO_FUNCAO = "cod_municipio"
 CIDADE_PADRAO = 3506003          # Bauru (SP)
 ATUALIZAR_A_CADA_S = 10          # status da fila
-DURACAO_PADRAO_S = 240           # estimativa quando ainda nao ha pedido concluido
-TIMEOUT_SEGUNDOS = 15
+TIMEOUT_SEGUNDOS = 20
 VALIDADE_CACHE_SEGUNDOS = 600
-RAIO_CONCORRENCIA_KM = 1.5
-POPULACAO_MINIMA_BAIRRO = 5000
+RAIO_PADRAO_KM, POPULACAO_MINIMA_PADRAO = 1.5, 5000   # se o resumo nao trouxer os parametros
 MAX_OPCOES_BUSCA = 60
+ROTULOS_MAPA = 10
 ESCALAS = {"ibge": "Bairros do IBGE", "popular": "Bairros populares"}
-# Colunas esperadas em gold.bairro_ranking (contrato de 27/11; trocar aqui se o DDL mudar)
-COL = {
-    "municipio": "cod_municipio", "escala": "escala", "nome": "unidade_nome", "populacao": "populacao",
-    "publico": "pop_20_59", "renda": "renda_media_resp", "academias": "academias_raio",
-    "densidade": "academias_10mil_raio", "massa": "massa_renda_km2", "nota": "nota", "posicao": "posicao",
-    "lat": "lat", "lon": "lon", "geometria": "geometria", "calculado_em": "calculado_em",
-    "base_cnpj": "base_cnpj_ref",
+NOTAS = {"nota_mercado": "Público 20–59", "nota_renda": "Renda", "nota_espaco": "Pouca concorrência",
+         "nota_densidade": "Poder de compra concentrado"}
+PESOS_ROTULO = {"mercado": "público de 20 a 59 anos", "renda": "renda média do responsável",
+                "espaco": "pouca concorrência no raio (menos academias por 10 mil hab.)",
+                "densidade": "massa de renda por km²"}
+MENSAGENS_PEDIDO = {   # status devolvido por gold.pedir_bairros
+    "invalido": ("error", "O código desta cidade não foi reconhecido pelo banco."),
+    "fila_cheia": ("warning", "A fila de cálculo está cheia agora. Tente de novo em alguns minutos."),
+    "limite_hora": ("warning", "Muitos pedidos na última hora. Tente de novo mais tarde."),
 }
 # ====================================================================
 
@@ -81,11 +82,35 @@ import dados
 import formato as fmt
 
 
-# ------------------------------------------------------------------ busca sem acento
+# ------------------------------------------------------------------ utilitarios
 
 def sem_acento(texto: str) -> str:
     """'São José' -> 'sao jose' (para comparar o que foi digitado com o nome)."""
     return "".join(c for c in unicodedata.normalize("NFD", str(texto)) if unicodedata.category(c) != "Mn").lower()
+
+
+def geometria(valor) -> dict | None:
+    """GeoJSON (objeto ou texto, geometria ou Feature) com a borda externa no sentido que o mapa espera."""
+    if isinstance(valor, str) and valor.strip():
+        valor = json.loads(valor)
+    if isinstance(valor, dict) and valor.get("type") == "Feature":
+        valor = valor.get("geometry")
+    if not isinstance(valor, dict) or valor.get("type") not in ("Polygon", "MultiPolygon"):
+        return None
+    poligonos = [valor["coordinates"]] if valor["type"] == "Polygon" else valor["coordinates"]
+    return {"type": "MultiPolygon", "coordinates": [
+        [dados._orientar([tuple(p) for p in anel], horario=(n == 0)) for n, anel in enumerate(poligono)]
+        for poligono in poligonos]}
+
+
+def linhas_de_contorno(geo: dict) -> tuple[list, list]:
+    """Contorno de uma geometria como listas de lon/lat separadas por None."""
+    lons, lats = [], []
+    for poligono in geo["coordinates"]:
+        for anel in poligono:
+            lons += [p[0] for p in anel] + [None]
+            lats += [p[1] for p in anel] + [None]
+    return lons, lats
 
 
 # ------------------------------------------------------------------ acesso a API
@@ -102,119 +127,163 @@ def conexao() -> tuple[str, dict] | None:
     }
 
 
-def ler_view(view: str, filtros: dict) -> pd.DataFrame:
+def ler_view(nome: str, filtros: dict) -> pd.DataFrame:
     """GET numa view da gold com filtros do PostgREST (ex.: {'cod_municipio': 'eq.3506003'})."""
     url, cabecalhos = conexao()
-    resposta = requests.get(f"{url}/rest/v1/{view}", params={"select": "*", **filtros},
-                            headers=cabecalhos, timeout=TIMEOUT_SEGUNDOS)
-    resposta.raise_for_status()
-    return pd.DataFrame(resposta.json())
+    linhas, deslocamento = [], 0
+    while True:  # a API devolve no maximo 1000 linhas por chamada
+        resposta = requests.get(f"{url}/rest/v1/{VIEWS[nome]}",
+                                params={"select": "*", **filtros, "limit": 1000, "offset": deslocamento},
+                                headers=cabecalhos, timeout=TIMEOUT_SEGUNDOS)
+        resposta.raise_for_status()
+        lote = resposta.json()
+        linhas += lote
+        if len(lote) < 1000:
+            return pd.DataFrame(linhas)
+        deslocamento += 1000
 
 
-@st.cache_data(ttl=VALIDADE_CACHE_SEGUNDOS, show_spinner=False)
-def _ranking_api(municipio_id: int) -> pd.DataFrame:
-    return ler_view(VIEW_RANKING, {COL["municipio"]: f"eq.{municipio_id}"})
+@st.cache_data(ttl=VALIDADE_CACHE_SEGUNDOS, show_spinner="Lendo os bairros…")
+def _resultado_api(municipio_id: int) -> dict:
+    filtro = {"cod_municipio": f"eq.{municipio_id}"}
+    resumo = ler_view("resumo", filtro)
+    if resumo.empty:
+        return {"resumo": None}
+    return {"resumo": resumo.iloc[0].to_dict(), "ranking": ler_view("ranking", filtro),
+            "setor": ler_view("setor", filtro), "academia": ler_view("academia", filtro)}
 
 
 @st.cache_data(ttl=VALIDADE_CACHE_SEGUNDOS, show_spinner=False)
 def _prontas_api() -> list[int]:
-    df = ler_view(VIEW_RANKING, {"select": COL["municipio"]})
-    return sorted(df[COL["municipio"]].astype(int).unique()) if not df.empty else []
+    df = ler_view("resumo", {"select": "cod_municipio"})
+    return sorted(df["cod_municipio"].astype(int).unique()) if not df.empty else []
 
 
-def ranking_da_cidade(municipio_id: int) -> pd.DataFrame:
-    """Resultado ja calculado da cidade (vazio se ainda nao existe); cache de 10 min na API."""
-    return ficticio_ranking(municipio_id) if DADOS_FICTICIOS else _ranking_api(municipio_id)
+def resultado(municipio_id: int) -> dict:
+    """{'resumo': dict | None, 'ranking', 'setor', 'academia': DataFrames} da cidade."""
+    return ficticio_resultado(municipio_id) if DADOS_FICTICIOS else _resultado_api(municipio_id)
 
 
 def cidades_prontas() -> list[int]:
     """Cidades que ja tem resultado (para a lista inicial)."""
+    return sorted(ficticio_prontas()) if DADOS_FICTICIOS else _prontas_api()
+
+
+def pedido_atual(municipio_id: int) -> dict | None:
+    """Ultimo pedido da cidade em gold.bairro_pedido (sem cache: e o que muda)."""
     if DADOS_FICTICIOS:
-        return sorted(st.session_state.setdefault("bairros_ficticio_prontas", set(ficticio_iniciais())))
-    return _prontas_api()
+        return ficticio_pedido(municipio_id)
+    df = ler_view("pedido", {"cod_municipio": f"eq.{municipio_id}"})
+    return df.iloc[0].to_dict() if not df.empty else None
 
 
-def fila() -> pd.DataFrame:
-    """Pedidos da fila (sem cache: e o que muda)."""
-    if DADOS_FICTICIOS:
-        return ficticio_fila()
-    return ler_view(VIEW_PEDIDO, {"order": "pedido_em.asc"})
-
-
-def pedir(municipio_id: int) -> str:
-    """Chama gold.pedir_bairros e devolve o status que a funcao respondeu."""
+def pedir(municipio_id: int) -> dict:
+    """Chama gold.pedir_bairros: {status, pedido_id, posicao_fila, estimativa_s, mensagem}."""
     if DADOS_FICTICIOS:
         return ficticio_pedir(municipio_id)
     url, cabecalhos = conexao()
-    resposta = requests.post(f"{url}/rest/v1/rpc/{FUNCAO_PEDIDO}", json={PARAMETRO_FUNCAO: municipio_id},
+    resposta = requests.post(f"{url}/rest/v1/rpc/{FUNCAO_PEDIDO}", json={"cod_municipio": municipio_id},
                              headers={**cabecalhos, "Content-Profile": "gold", "Content-Type": "application/json"},
                              timeout=TIMEOUT_SEGUNDOS)
     resposta.raise_for_status()
     corpo = resposta.json()
-    if isinstance(corpo, list):
-        corpo = corpo[0] if corpo else {}
-    return str(corpo.get("status", corpo) if isinstance(corpo, dict) else corpo)
+    corpo = (corpo[0] if corpo else {}) if isinstance(corpo, list) else corpo
+    return corpo if isinstance(corpo, dict) else {"status": str(corpo)}
+
+
+def limpar_cache() -> None:
+    """Apaga o cache da API (depois que um pedido fica pronto)."""
+    _resultado_api.clear()
+    _prontas_api.clear()
 
 
 # ------------------------------------------------------------------ dados ficticios (provisorio)
+# Mesmo formato das views da gold; somem quando DADOS_FICTICIOS = False.
 
-def ficticio_iniciais() -> list[int]:
-    """As 5 recomendadas + Bauru, como no contrato."""
-    return sorted({CIDADE_PADRAO, *dados.recomendadas()["municipio_id"].astype(int)})
+def ficticio_prontas() -> set:
+    """As 5 recomendadas + Bauru ja calculadas, como no contrato."""
+    iniciais = {CIDADE_PADRAO, *dados.recomendadas()["municipio_id"].astype(int)}
+    return st.session_state.setdefault("bairros_ficticio_prontas", iniciais)
 
 
-def ficticio_ranking(municipio_id: int) -> pd.DataFrame:
-    """Resultado inventado, sorteado a partir do codigo da cidade (sempre o mesmo)."""
-    if municipio_id not in st.session_state.get("bairros_ficticio_prontas", set(ficticio_iniciais())):
-        return pd.DataFrame()
+def ficticio_resultado(municipio_id: int) -> dict:
+    """Resultado inventado (sorteado a partir do codigo; codigo impar = concorrencia pendente)."""
+    if municipio_id not in ficticio_prontas():
+        return {"resumo": None}
     cidade = dados.municipios_completos().set_index("municipio_id").loc[municipio_id]
-    gerador = np.random.default_rng(municipio_id)
-    linhas = []
-    for escala, quantidade in (("ibge", 12), ("popular", 7)):
+    sorteio = np.random.default_rng(municipio_id)
+    concorrencia = "pendente" if municipio_id % 2 else "ok"
+    ranking, setores, academias = [], [], []
+    for escala, quantidade in (("ibge", 12), ("popular", 9)):
         for i in range(quantidade):
-            dlat, dlon = gerador.normal(0, 0.025, 2)
-            lat, lon = float(cidade["latitude"] + dlat), float(cidade["longitude"] + dlon)
-            lado = 0.008 + 0.006 * gerador.random()
-            quadrado = [[lon - lado, lat - lado], [lon - lado, lat + lado], [lon + lado, lat + lado],
-                        [lon + lado, lat - lado], [lon - lado, lat - lado]]
-            populacao = int(gerador.integers(5_000, 70_000 if escala == "ibge" else 15_000))
-            academias = int(gerador.integers(1, 40))
-            linhas.append({
-                COL["municipio"]: municipio_id, COL["escala"]: escala,
-                COL["nome"]: f"{'Bacia' if escala == 'ibge' else 'Bairro'} fictício {i + 1}",
-                COL["populacao"]: populacao, COL["publico"]: int(populacao * 0.58),
-                COL["renda"]: float(gerador.integers(1_800, 9_500)), COL["academias"]: academias,
-                COL["densidade"]: round(academias / populacao * 10_000, 2),
-                COL["massa"]: float(gerador.integers(2, 60)) * 1e6, COL["nota"]: round(90 - i * 6.5, 1),
-                COL["posicao"]: i + 1, COL["lat"]: lat, COL["lon"]: lon,
-                COL["geometria"]: {"type": "Polygon", "coordinates": [quadrado]} if escala == "ibge" else None,
-                COL["calculado_em"]: "2026-11-27T03:00:00-03:00", COL["base_cnpj"]: "2026-11",
+            lat, lon = (float(cidade["latitude"] + sorteio.normal(0, 0.02)),
+                        float(cidade["longitude"] + sorteio.normal(0, 0.02)))
+            lado = 0.006 + 0.004 * sorteio.random()
+            quadrado = [[lon - lado, lat - lado], [lon + lado, lat - lado], [lon + lado, lat + lado],
+                        [lon - lado, lat + lado], [lon - lado, lat - lado]]
+            populacao = float(sorteio.integers(1_000, 60_000 if escala == "ibge" else 14_000))
+            acad = int(sorteio.integers(0, 30))
+            ranking.append({
+                "cod_municipio": municipio_id, "escala": escala, "unidade_id": f"{escala}{i}",
+                "unidade_nome": f"{'Bacia' if escala == 'ibge' else 'Vila'} fictícia {i + 1}",
+                "elegivel": populacao >= POPULACAO_MINIMA_PADRAO, "posicao": None,
+                "setores": int(sorteio.integers(5, 60)), "populacao": populacao,
+                "pop_20_59": round(populacao * 0.57, 1), "renda_media_resp": float(sorteio.integers(1_800, 9_000)),
+                "massa_renda_km2": float(sorteio.integers(2, 60)) * 1e6, "acad_raio": acad,
+                "pop_raio": int(populacao * 1.4), "acad_raio_10k": round(acad / populacao * 1e4, 3),
+                "dist_centro_km": round(float(np.hypot(lat - cidade["latitude"], lon - cidade["longitude"]) * 111), 3),
+                **{n: float(sorteio.integers(5, 100)) for n in NOTAS}, "nota_final": None, "frase": None,
+                "concorrencia": concorrencia, "lat": lat, "lon": lon,
+                "geojson": {"type": "Polygon", "coordinates": [quadrado]} if escala == "ibge" else None,
+                "processado_em": "2026-11-27T03:00:00-03:00",
             })
-    return pd.DataFrame(linhas)
+            if escala == "ibge":
+                setores.append({"cod_municipio": municipio_id, "cd_setor": f"{municipio_id}{i:08d}",
+                                "geojson": {"type": "Polygon", "coordinates": [quadrado]}})
+    for _ in range(25 if concorrencia == "ok" else 0):
+        academias.append({"cod_municipio": municipio_id, "lat": float(cidade["latitude"] + sorteio.normal(0, 0.02)),
+                          "lon": float(cidade["longitude"] + sorteio.normal(0, 0.02)),
+                          "nivel_geocod": "cep", "localidade": None})
+    ranking = pd.DataFrame(ranking)
+    for escala in ESCALAS:
+        el = ranking[(ranking["escala"] == escala) & ranking["elegivel"]].copy()
+        if concorrencia == "pendente":
+            el["nota_espaco"] = np.nan
+        el["nota_final"] = el[list(NOTAS)].mean(axis=1).round(1)
+        el["posicao"] = el["nota_final"].rank(ascending=False, method="first").astype(int)
+        el["frase"] = "forte em público de 20 a 59 anos; fraco em renda do responsável"
+        for coluna in ("nota_espaco", "nota_final", "posicao", "frase"):
+            ranking.loc[el.index, coluna] = el[coluna]
+    resumo = {"cod_municipio": municipio_id, "municipio_nome": cidade["municipio_nome"], "uf_sigla": cidade["uf_sigla"],
+              "processado_em": "2026-11-27T03:00:00-03:00", "duracao_s": 150, "concorrencia": concorrencia,
+              "data_base_cnpj": "2026-11" if concorrencia == "ok" else None, "academias_base": len(academias) + 3,
+              "academias_geocodificadas": len(academias),
+              "pesos": {"mercado": 0.3, "renda": 0.25, "espaco": 0.3, "densidade": 0.15} if concorrencia == "ok"
+              else {"mercado": 0.43, "renda": 0.36, "densidade": 0.21},
+              "parametros": {"raio_km": 1.5, "pop_min": 5000, "versao": "ficticio"}}
+    return {"resumo": resumo, "ranking": ranking, "setor": pd.DataFrame(setores), "academia": pd.DataFrame(academias)}
 
 
-def ficticio_fila() -> pd.DataFrame:
-    """Simula o worker: cada pedido fica 15 s pendente e 30 s processando."""
-    pedidos = st.session_state.setdefault("bairros_ficticio_fila", [])
-    agora = datetime.now().astimezone()
-    for p in pedidos:
-        idade = (agora - p["pedido_em"]).total_seconds()
-        if p["status"] != "pronto" and idade > 45:
-            p.update(status="pronto", fim=agora, duracao_s=30)
-            st.session_state.setdefault("bairros_ficticio_prontas", set(ficticio_iniciais())).add(p["cod_municipio"])
-        elif p["status"] == "pendente" and idade > 15:
-            p.update(status="processando", inicio=agora)
-    return pd.DataFrame(pedidos)
+def ficticio_pedido(municipio_id: int) -> dict | None:
+    """Simula o worker: 15 s pendente, 30 s processando, depois pronto."""
+    pedido = st.session_state.get("bairros_ficticio_fila", {}).get(municipio_id)
+    if not pedido:
+        return None
+    idade = (datetime.now() - pedido["pedido_em"]).total_seconds()
+    if idade > 45:
+        ficticio_prontas().add(municipio_id)
+        return {**pedido, "status": "pronto", "posicao_fila": None, "estimativa_s": None}
+    if idade > 15:
+        return {**pedido, "status": "processando", "posicao_fila": None, "estimativa_s": int(45 - idade)}
+    return {**pedido, "status": "pendente", "posicao_fila": 1, "estimativa_s": int(45 - idade)}
 
 
-def ficticio_pedir(municipio_id: int) -> str:
+def ficticio_pedir(municipio_id: int) -> dict:
     """Enfileira o pedido inventado (sem duplicar)."""
-    pedidos = st.session_state.setdefault("bairros_ficticio_fila", [])
-    if not any(p["cod_municipio"] == municipio_id and p["status"] != "erro" for p in pedidos):
-        pedidos.append({"id": len(pedidos) + 1, "cod_municipio": municipio_id, "status": "pendente",
-                        "pedido_em": datetime.now().astimezone(), "inicio": None, "fim": None,
-                        "duracao_s": None, "erro_resumo": None})
-    return "pendente"
+    fila = st.session_state.setdefault("bairros_ficticio_fila", {})
+    fila.setdefault(municipio_id, {"id": len(fila) + 1, "cod_municipio": municipio_id, "pedido_em": datetime.now()})
+    return {"status": "pendente", "pedido_id": fila[municipio_id]["id"], "posicao_fila": 1, "estimativa_s": 45,
+            "mensagem": "pedido registrado"}
 
 
 # ------------------------------------------------------------------ pagina
@@ -236,30 +305,38 @@ elif conexao() is None:
 municipios = dados.municipios_completos()
 nomes = municipios.set_index("municipio_id")["municipio_nome"].to_dict()
 ufs = municipios.set_index("municipio_id")["uf_sigla"].to_dict()
-rotulo = lambda i: f"{nomes[i]} ({ufs[i]})"
+
+
+def rotulo(i: int) -> str:
+    """'Bauru (SP)'."""
+    return f"{nomes[i]} ({ufs[i]})"
+
+
+def falha_api(erro: Exception, acao: str) -> None:
+    """Mensagem para erro da API (404 = modulo de bairros ainda nao instalado no banco)."""
+    if getattr(getattr(erro, "response", None), "status_code", None) == 404:
+        st.info("Os bairros sob demanda ainda não estão disponíveis no banco.", icon=":material/construction:")
+    else:
+        st.error(f"A API não respondeu ao {acao}. Tente de novo em instantes.", icon=":material/error:")
+    st.stop()
+
 
 try:
     prontas = [i for i in cidades_prontas() if i in nomes]
 except requests.RequestException as erro:
-    if getattr(getattr(erro, "response", None), "status_code", None) == 404:
-        st.info("Os bairros sob demanda ainda não estão disponíveis no banco.", icon=":material/construction:")
-    else:
-        st.error("A API não respondeu ao listar as cidades já calculadas. Tente de novo em instantes.",
-                 icon=":material/error:")
-    st.stop()
+    falha_api(erro, "listar as cidades já calculadas")
 
 # --- Escolha da cidade (busca sem acento) -----------------------------------------
 with st.container(border=True):
     col_busca, col_cidade = st.columns([2, 3], vertical_alignment="bottom")
     with col_busca:
-        busca = st.text_input("Buscar cidade", placeholder="parte do nome, com ou sem acento",
-                              key="bairros_busca")
+        busca = st.text_input("Buscar cidade", placeholder="parte do nome, com ou sem acento", key="bairros_busca")
     alvo = sem_acento(busca.strip())
     if alvo:
         chaves = municipios.assign(_n=municipios["municipio_nome"].map(sem_acento))
         achadas = chaves[chaves["_n"].str.contains(alvo, regex=False)]
-        achadas = achadas.assign(_comeca=~achadas["_n"].str.startswith(alvo)).sort_values(
-            ["_comeca", "populacao"], ascending=[True, False])
+        achadas = achadas.assign(_depois=~achadas["_n"].str.startswith(alvo)).sort_values(
+            ["_depois", "populacao"], ascending=[True, False])
         opcoes = achadas["municipio_id"].astype(int).head(MAX_OPCOES_BUSCA).tolist()
     else:
         opcoes = prontas or [CIDADE_PADRAO]
@@ -267,185 +344,249 @@ with st.container(border=True):
         if not opcoes:
             st.selectbox("Cidade", ["Nenhuma cidade com esse nome"], disabled=True)
             st.stop()
-        municipio_id = st.selectbox(
+        municipio_id = int(st.selectbox(
             "Cidade" + ("" if alvo else " (já calculadas)"), opcoes, key=f"bairros_cidade_{alvo}",
             index=opcoes.index(CIDADE_PADRAO) if CIDADE_PADRAO in opcoes else 0,
-            format_func=lambda i: rotulo(i) + ("  ✓" if i in prontas else ""))
+            format_func=lambda i: rotulo(i) + ("  ✓" if i in prontas else "")))
 
 try:
-    resultado = ranking_da_cidade(int(municipio_id))
-except requests.RequestException:
-    st.error("A API não respondeu ao ler os bairros desta cidade. Tente de novo em instantes.",
-             icon=":material/error:")
-    st.stop()
+    res = resultado(municipio_id)
+except requests.RequestException as erro:
+    falha_api(erro, "ler os bairros desta cidade")
 
 
 # --- Cidade sem resultado: pedido e fila ------------------------------------------
+def minutos(segundos) -> str:
+    """Tempo estimado em palavras."""
+    return "menos de 1 min" if fmt.ausente(segundos) or segundos < 60 else f"cerca de {round(segundos / 60)} min"
+
+
 @st.fragment(run_every=ATUALIZAR_A_CADA_S)
 def acompanhar_pedido(municipio_id: int) -> None:
     """Status do pedido desta cidade; quando fica pronto, recarrega a pagina."""
     try:
-        pedidos = fila()
+        pedido = pedido_atual(municipio_id)
     except requests.RequestException:
         st.warning("Não consegui ler a fila agora; tento de novo em alguns segundos.", icon=":material/sync_problem:")
         return
-    meus = pedidos[pedidos[COL["municipio"]] == municipio_id] if not pedidos.empty else pedidos
-    if meus.empty:
-        st.info(f"Ainda não há resultado para {rotulo(municipio_id)}. O cálculo usa os dados do Censo 2022 por "
-                "setor e a base de academias da Receita Federal e leva alguns minutos.", icon=":material/schedule:")
-        if st.button("Calcular bairros desta cidade", type="primary", icon=":material/play_arrow:"):
-            try:
-                pedir(municipio_id)
-            except requests.RequestException as erro:
-                codigo = getattr(getattr(erro, "response", None), "status_code", None)
-                st.error(f"O pedido não foi aceito{f' (HTTP {codigo})' if codigo else ''}. "
-                         "A fila pode estar cheia; tente de novo mais tarde.", icon=":material/error:")
-                return
-            st.rerun(scope="fragment")
+    status = (pedido or {}).get("status")
+
+    if status == "pronto":
+        if st.session_state.get("bairros_recarregou") != municipio_id:  # evita laco se o cache demorar
+            st.session_state["bairros_recarregou"] = municipio_id
+            limpar_cache()
+            st.rerun(scope="app")
+        st.info("O resultado ficou pronto. Recarregue a página se ele não aparecer.", icon=":material/check_circle:")
+        return
+    if status == "pendente":
+        posicao = pedido.get("posicao_fila")
+        st.info(f"**Na fila{'' if fmt.ausente(posicao) else f': posição {int(posicao)}'}.** "
+                f"Tempo estimado até o resultado: {minutos(pedido.get('estimativa_s'))}. "
+                f"Esta área se atualiza sozinha a cada {ATUALIZAR_A_CADA_S} s; pode sair e voltar depois.",
+                icon=":material/hourglass_top:")
+        st.progress(0.15)
+        return
+    if status == "processando":
+        st.info(f"**Calculando os bairros de {rotulo(municipio_id)}…** Faltam {minutos(pedido.get('estimativa_s'))}. "
+                f"Esta área se atualiza sozinha a cada {ATUALIZAR_A_CADA_S} s.", icon=":material/autorenew:")
+        st.progress(0.6)
         return
 
-    pedido = meus.sort_values("pedido_em").iloc[-1]
-    status = pedido["status"]
-    if status == "pronto":
-        _ranking_api.clear()
-        _prontas_api.clear()
-        st.rerun(scope="app")
+    # sem pedido (ou o ultimo deu erro): oferece o calculo
     if status == "erro":
-        st.error(f"O cálculo desta cidade falhou: {pedido.get('erro_resumo') or 'erro sem detalhe'}.",
+        st.error("O último cálculo desta cidade falhou. Você pode pedir de novo.", icon=":material/error:")
+    else:
+        st.info(f"Ainda não há resultado para {rotulo(municipio_id)}. O cálculo usa os setores do Censo 2022 e a base "
+                "de academias da Receita Federal e leva alguns minutos.", icon=":material/schedule:")
+    if not st.button("Calcular bairros desta cidade", type="primary", icon=":material/play_arrow:"):
+        return
+    try:
+        resposta = pedir(municipio_id)
+    except requests.RequestException as erro:
+        codigo = getattr(getattr(erro, "response", None), "status_code", None)
+        st.error(f"O pedido não chegou ao banco{f' (HTTP {codigo})' if codigo else ''}. Tente de novo em instantes.",
                  icon=":material/error:")
         return
-
-    concluidos = pedidos[pedidos["status"] == "pronto"]["duracao_s"].dropna() if "duracao_s" in pedidos else []
-    duracao = float(np.median(concluidos)) if len(concluidos) else DURACAO_PADRAO_S
-    pendentes = pedidos[pedidos["status"] == "pendente"].sort_values("pedido_em")
-    if status == "pendente":
-        posicao = int((pendentes["pedido_em"] < pedido["pedido_em"]).sum()) + 1
-        em_andamento = int((pedidos["status"] == "processando").sum())
-        espera = (posicao - 1 + em_andamento + 1) * duracao
-        st.info(f"**Na fila: posição {posicao}.** Tempo estimado até o resultado: cerca de "
-                f"{max(1, round(espera / 60))} min. Esta área se atualiza sozinha a cada {ATUALIZAR_A_CADA_S} s.",
-                icon=":material/hourglass_top:")
-    else:
-        inicio = pd.to_datetime(pedido.get("inicio") or pedido["pedido_em"])
-        decorrido = (pd.Timestamp.now(tz=inicio.tz) - inicio).total_seconds() if inicio.tz else 0
-        restante = max(duracao - decorrido, 30)
-        st.info(f"**Calculando os bairros de {rotulo(municipio_id)}…** Faltam cerca de "
-                f"{max(1, round(restante / 60))} min. Esta área se atualiza sozinha a cada {ATUALIZAR_A_CADA_S} s.",
-                icon=":material/autorenew:")
-    st.progress(0.15 if status == "pendente" else 0.6)
+    novo = resposta.get("status")
+    if novo == "pronto":
+        limpar_cache()
+        st.rerun(scope="app")
+    if novo in MENSAGENS_PEDIDO:
+        tipo, texto = MENSAGENS_PEDIDO[novo]
+        getattr(st, tipo)(texto, icon=":material/error:" if tipo == "error" else ":material/schedule:")
+        return
+    if novo not in ("pendente", "processando"):
+        st.warning(f"Resposta inesperada do banco: {resposta.get('mensagem') or novo}.", icon=":material/help:")
+        return
+    st.rerun(scope="fragment")
 
 
-if resultado.empty:
-    acompanhar_pedido(int(municipio_id))
+if res["resumo"] is None:
+    acompanhar_pedido(municipio_id)
     st.stop()
 
-# --- Cidade com resultado: mapa e ranking -----------------------------------------
+# --- Cidade com resultado ---------------------------------------------------------
+resumo, ranking = res["resumo"], res["ranking"]
+parametros = resumo.get("parametros") or {}
+parametros = json.loads(parametros) if isinstance(parametros, str) else parametros
+raio = float(parametros.get("raio_km", RAIO_PADRAO_KM))
+pop_min = int(parametros.get("pop_min", POPULACAO_MINIMA_PADRAO))
+concorrencia_ok = resumo.get("concorrencia") == "ok"
+
+if not concorrencia_ok:
+    st.warning(
+        "**A concorrência ainda não entrou neste resultado.** A base nacional de academias da Receita Federal está "
+        "sendo carregada; por enquanto a nota usa só público, renda e poder de compra concentrado (pesos "
+        "redistribuídos), e o mapa não mostra as academias.", icon=":material/pending:")
+
 escala = st.segmented_control("Escala", list(ESCALAS), format_func=ESCALAS.get, default="ibge",
                               key="bairros_escala") or "ibge"
-unidades = resultado[resultado[COL["escala"]] == escala].sort_values(COL["posicao"])
+unidades = ranking[ranking["escala"] == escala].copy()
+unidades["elegivel"] = unidades["elegivel"].astype(bool)
+elegiveis = unidades[unidades["elegivel"]].sort_values("posicao")
+fora = unidades[~unidades["elegivel"]]
 st.subheader(f"{rotulo(municipio_id)} · {ESCALAS[escala]}")
-if unidades.empty:
-    st.info(f"Nenhum bairro com {fmt.numero(POPULACAO_MINIMA_BAIRRO)} habitantes ou mais nesta escala.",
-            icon=":material/search_off:")
-    st.stop()
 
-base_cnpj = resultado[COL["base_cnpj"]].dropna().iloc[0] if COL["base_cnpj"] in resultado else None
+base = resumo.get("data_base_cnpj")
+geocod, total_acad = resumo.get("academias_geocodificadas"), resumo.get("academias_base")
 st.info(
     "**Limitações.** População, faixa de 20 a 59 anos e renda vêm do **Censo 2022** por setor. As academias são as "
-    f"empresas ativas da Receita Federal{f' (base de {base_cnpj})' if base_cnpj else ''} pelo **endereço fiscal**, "
-    "que pode não ser onde a academia funciona. A concorrência é contada num **raio de "
-    f"{fmt.numero(RAIO_CONCORRENCIA_KM, 1)} km** do centro de cada bairro. Bairros com menos de "
-    f"{fmt.numero(POPULACAO_MINIMA_BAIRRO)} habitantes ficam fora do ranking. Os bairros populares são os nomes de "
-    "localidade dos endereços do IBGE, sem limite oficial.",
+    f"empresas ativas da Receita Federal{f' (base de {base})' if base else ''} pelo **endereço fiscal**, que pode não ser "
+    "onde a academia funciona"
+    + (f"; {fmt.numero(geocod)} de {fmt.numero(total_acad)} foram localizadas no mapa"
+       if concorrencia_ok and not fmt.ausente(geocod) and not fmt.ausente(total_acad) else "")
+    + f". A concorrência é contada num **raio de {fmt.numero(raio, 1)} km** do centro de cada bairro. Bairros com menos de "
+    f"{fmt.numero(pop_min)} habitantes ou só área rural ficam fora do ranking. Os bairros populares são os nomes de "
+    "localidade dos endereços do IBGE, sem limite oficial (no mapa, um ponto no centro de cada um).",
     icon=":material/info:",
 )
-
-# Mapa: poligono quando houver geometria, senao ponto
-unidades = unidades.assign(**{COL["nome"]: unidades[COL["nome"]].astype(str)})
-textos = [
-    f"<b>{r[COL['posicao']]}º {r[COL['nome']]}</b><br>Nota {fmt.nota(r[COL['nota']])} · "
-    f"{fmt.compacto(r[COL['populacao']])} hab.<br>Renda média do responsável {fmt.reais(r[COL['renda']], 0)}"
-    f"<br>{fmt.numero(r[COL['academias']])} academias no raio ({fmt.numero(r[COL['densidade']], 2)} por 10 mil)"
-    for _, r in unidades.iterrows()
-]
-unidades = unidades.assign(_texto=textos)
+if elegiveis.empty:
+    st.info(f"Nenhum bairro com {fmt.numero(pop_min)} habitantes ou mais nesta escala.", icon=":material/search_off:")
 
 
-def geometria(valor):
-    """GeoJSON da unidade (pode vir como texto ou objeto) ou None."""
-    if isinstance(valor, str) and valor.strip():
-        valor = json.loads(valor)
-    return valor if isinstance(valor, dict) and valor.get("type") in ("Polygon", "MultiPolygon") else None
+# --- Mapa: bairros (poligono ou ponto), setores e academias -------------------------
+def texto_hover(r) -> str:
+    """Nome, nota, populacao, renda, academias no raio e a frase da gold."""
+    posicao = "" if fmt.ausente(r["posicao"]) else f"{int(r['posicao'])}º "
+    partes = [f"<b>{posicao}{r['unidade_nome']}</b>",
+              f"Nota {fmt.nota(r['nota_final'])}" if r["elegivel"] else "Fora do ranking",
+              f"{fmt.compacto(r['populacao'])} hab. · renda média do responsável {fmt.reais(r['renda_media_resp'], 0)}"]
+    if concorrencia_ok and not fmt.ausente(r.get("acad_raio")):
+        partes.append(f"{fmt.numero(r['acad_raio'])} academias no raio "
+                      f"({fmt.numero(r['acad_raio_10k'], 2)} por 10 mil hab.)")
+    if isinstance(r.get("frase"), str) and r["frase"]:
+        partes.append(r["frase"])
+    return "<br>".join(partes)
 
 
-unidades = unidades.assign(_geo=unidades[COL["geometria"]].map(geometria) if COL["geometria"] in unidades else None)
-com_geo = unidades[unidades["_geo"].notna()]
-sem_geo = unidades[unidades["_geo"].isna()]
+with st.container(horizontal=True):
+    ver_academias = st.toggle("Academias", value=concorrencia_ok, disabled=not concorrencia_ok,
+                              key=f"bairros_ver_academias_{concorrencia_ok}")  # sem concorrencia, fica travado
+    ver_setores = st.toggle("Setores do Censo", value=False, key="bairros_ver_setores",
+                            help="Contorno dos setores censitários, a menor área com dados do Censo 2022.")
+
+unidades["_texto"] = [texto_hover(r) for _, r in unidades.iterrows()]
+unidades["_geo"] = unidades["geojson"].map(geometria) if "geojson" in unidades else None
 figura = go.Figure()
-contorno = (dados.malha_municipios_uf(int(municipio_id) // 100_000) or {}).get(int(municipio_id))
-if contorno:  # limite do municipio, so como referencia
-    contorno_lon, contorno_lat = [], []
-    for poligono in contorno["coordinates"]:
-        for anel in poligono:
-            contorno_lon += [p[0] for p in anel] + [None]
-            contorno_lat += [p[1] for p in anel] + [None]
-    figura.add_trace(go.Scattergeo(lon=contorno_lon, lat=contorno_lat, mode="lines", hoverinfo="skip",
-                                   showlegend=False, line={"color": "rgba(242,241,236,.45)", "width": 1}))
 barra = {"title": {"text": "Nota"}, "thickness": 12, "len": 0.6}
-if not com_geo.empty:
+contorno = (dados.malha_municipios_uf(municipio_id // 100_000) or {}).get(municipio_id)
+if contorno:  # limite do municipio, so como referencia
+    lon_c, lat_c = linhas_de_contorno(contorno)
+    figura.add_trace(go.Scattergeo(lon=lon_c, lat=lat_c, mode="lines", hoverinfo="skip", showlegend=False,
+                                   line={"color": "rgba(242,241,236,.45)", "width": 1}))
+if ver_setores and not res["setor"].empty:
+    lon_s, lat_s = [], []
+    for g in res["setor"]["geojson"].map(geometria).dropna():
+        lo, la = linhas_de_contorno(g)
+        lon_s += lo
+        lat_s += la
+    figura.add_trace(go.Scattergeo(lon=lon_s, lat=lat_s, mode="lines", hoverinfo="skip", showlegend=False,
+                                   line={"color": "rgba(242,241,236,.18)", "width": 0.5}))
+com_geo = unidades[unidades["_geo"].notna()]
+for grupo, cinza in ((com_geo[~com_geo["elegivel"]], True), (com_geo[com_geo["elegivel"]], False)):
+    if grupo.empty:
+        continue
     figura.add_trace(go.Choropleth(
         geojson={"type": "FeatureCollection", "features": [
-            {"type": "Feature", "id": int(i), "geometry": g} for i, g in zip(com_geo.index, com_geo["_geo"])]},
-        locations=[int(i) for i in com_geo.index], z=com_geo[COL["nota"]].tolist(), zmin=0, zmax=100,
-        colorscale=fmt.ESCALA_DADO, marker={"line": {"color": "#0b0d0f", "width": 0.6}}, colorbar=barra,
-        text=com_geo["_texto"].tolist(), hoverinfo="text"))
+            {"type": "Feature", "id": str(i), "geometry": g} for i, g in zip(grupo["unidade_id"], grupo["_geo"])]},
+        locations=grupo["unidade_id"].astype(str).tolist(),
+        z=[0] * len(grupo) if cinza else grupo["nota_final"].astype(float).tolist(),
+        zmin=0, zmax=100, colorscale=[[0, "#3b4249"], [1, "#3b4249"]] if cinza else fmt.ESCALA_DADO,
+        showscale=not cinza, colorbar=barra, marker={"line": {"color": "#0b0d0f", "width": 0.6}},
+        text=grupo["_texto"].tolist(), hoverinfo="text"))
+sem_geo = unidades[unidades["_geo"].isna() & unidades["lat"].notna()]
 if not sem_geo.empty:
+    maior = max(float(sem_geo["populacao"].max()), 1.0)
     figura.add_trace(go.Scattergeo(
-        lon=sem_geo[COL["lon"]].astype(float).tolist(), lat=sem_geo[COL["lat"]].astype(float).tolist(),
-        mode="markers", text=sem_geo["_texto"].tolist(), hoverinfo="text", showlegend=False,
-        marker={"size": (10 + 26 * np.sqrt(sem_geo[COL["populacao"]] / max(unidades[COL["populacao"]].max(), 1))).tolist(),
-                "color": sem_geo[COL["nota"]].tolist(), "colorscale": fmt.ESCALA_DADO, "cmin": 0, "cmax": 100,
-                "opacity": 0.9, "showscale": com_geo.empty, "colorbar": barra}))
-top = unidades.head(10)
-figura.add_trace(go.Scattergeo(
-    lon=top[COL["lon"]].astype(float).tolist(), lat=top[COL["lat"]].astype(float).tolist(), mode="text",
-    text=[f"{p}º {n}" for p, n in zip(top[COL["posicao"]], top[COL["nome"]])], hoverinfo="skip",
-    showlegend=False, textposition="top center", textfont={"color": "#f2f1ec", "size": 11}))
-lats, lons = unidades[COL["lat"]].astype(float), unidades[COL["lon"]].astype(float)
-folga = 0.02
-figura.update_geos(projection_type="mercator", visible=False, bgcolor="rgba(0,0,0,0)",
-                   lonaxis_range=[float(lons.min() - folga), float(lons.max() + folga)],
-                   lataxis_range=[float(lats.min() - folga), float(lats.max() + folga)])
-figura.update_layout(separators=",.", height=500, margin={"l": 0, "r": 0, "t": 0, "b": 0},
-                     paper_bgcolor="rgba(0,0,0,0)", dragmode="pan")
+        lon=sem_geo["lon"].astype(float).tolist(), lat=sem_geo["lat"].astype(float).tolist(), mode="markers",
+        text=sem_geo["_texto"].tolist(), hoverinfo="text", showlegend=False,
+        marker={"size": (8 + 24 * np.sqrt(sem_geo["populacao"].astype(float) / maior)).tolist(),
+                "color": [float(n) if e and not fmt.ausente(n) else 0
+                          for n, e in zip(sem_geo["nota_final"], sem_geo["elegivel"])],
+                "colorscale": fmt.ESCALA_DADO, "cmin": 0, "cmax": 100, "opacity": 0.9,
+                "showscale": com_geo.empty, "colorbar": barra}))
+if ver_academias and not res["academia"].empty:
+    figura.add_trace(go.Scattergeo(
+        lon=res["academia"]["lon"].astype(float).tolist(), lat=res["academia"]["lat"].astype(float).tolist(),
+        mode="markers", name="Academia (endereço fiscal)", hoverinfo="name",
+        marker={"size": 5, "color": fmt.COR_DESTAQUE, "symbol": "diamond", "line": {"width": 0}}))
+top = elegiveis.head(ROTULOS_MAPA)
+if not top.empty:
+    figura.add_trace(go.Scattergeo(
+        lon=top["lon"].astype(float).tolist(), lat=top["lat"].astype(float).tolist(), mode="text", hoverinfo="skip",
+        showlegend=False, text=[f"{int(p)}º {n}" for p, n in zip(top["posicao"], top["unidade_nome"])],
+        textposition="top center", textfont={"color": "#f2f1ec", "size": 11}))
+pontos = unidades[unidades["lat"].notna()]
+if not pontos.empty:
+    folga = 0.02
+    figura.update_geos(lonaxis_range=[float(pontos["lon"].min() - folga), float(pontos["lon"].max() + folga)],
+                       lataxis_range=[float(pontos["lat"].min() - folga), float(pontos["lat"].max() + folga)])
+figura.update_geos(projection_type="mercator", visible=False, bgcolor="rgba(0,0,0,0)")
+figura.update_layout(separators=",.", height=520, margin={"l": 0, "r": 0, "t": 0, "b": 0},
+                     paper_bgcolor="rgba(0,0,0,0)", dragmode="pan",
+                     legend={"orientation": "h", "y": 0.01, "x": 0.01})
 st.plotly_chart(figura, config={"displaylogo": False, "scrollZoom": True},
                 alt=f"Mapa dos bairros de {rotulo(municipio_id)} coloridos pela nota.")
 
-# Ranking
+# --- Ranking --------------------------------------------------------------------------
 colunas = {
-    COL["posicao"]: st.column_config.NumberColumn("Posição", format="%dº", width="small"),
-    COL["nome"]: st.column_config.TextColumn("Bairro", pinned=True),
-    COL["nota"]: st.column_config.ProgressColumn("Nota", min_value=0, max_value=100, format="%.1f",
-                                                 color=fmt.COR_DADO),
-    COL["populacao"]: st.column_config.NumberColumn("População", format="localized"),
-    COL["publico"]: st.column_config.NumberColumn("20 a 59 anos", format="localized"),
-    COL["renda"]: st.column_config.NumberColumn("Renda média resp. (R$)", format="localized"),
-    COL["academias"]: st.column_config.NumberColumn(f"Academias no raio de {fmt.numero(RAIO_CONCORRENCIA_KM, 1)} km",
-                                                    format="%d"),
-    COL["densidade"]: st.column_config.NumberColumn("Por 10 mil hab.", format="%.2f"),
-    COL["massa"]: st.column_config.NumberColumn("Massa de renda por km²", format="compact"),
+    "posicao": st.column_config.NumberColumn("Posição", format="%dº", width="small"),
+    "unidade_nome": st.column_config.TextColumn("Bairro", pinned=True),
+    "nota_final": st.column_config.ProgressColumn("Nota", min_value=0, max_value=100, format="%.1f",
+                                                  color=fmt.COR_DADO),
+    **{c: st.column_config.NumberColumn(r, format="%.0f") for c, r in NOTAS.items()},
+    "populacao": st.column_config.NumberColumn("População", format="localized"),
+    "pop_20_59": st.column_config.NumberColumn("20 a 59 anos", format="localized"),
+    "renda_media_resp": st.column_config.NumberColumn("Renda média resp. (R$)", format="localized"),
+    "acad_raio": st.column_config.NumberColumn(f"Academias no raio de {fmt.numero(raio, 1)} km", format="%d"),
+    "acad_raio_10k": st.column_config.NumberColumn("Por 10 mil hab. no raio", format="%.2f"),
+    "massa_renda_km2": st.column_config.NumberColumn("Massa de renda por km²", format="compact"),
+    "dist_centro_km": st.column_config.NumberColumn("Distância do centro (km)", format="%.1f"),
+    "frase": st.column_config.TextColumn("Leitura", width="large"),
 }
+if not concorrencia_ok:
+    for coluna in ("nota_espaco", "acad_raio", "acad_raio_10k"):
+        colunas.pop(coluna)
 colunas = {c: v for c, v in colunas.items() if c in unidades}
-st.dataframe(unidades[list(colunas)], column_config=colunas, hide_index=True,
-             alt="Ranking dos bairros com nota, população, renda e academias no raio.")
-calculado = resultado[COL["calculado_em"]].dropna().iloc[0] if COL["calculado_em"] in resultado else None
+if not elegiveis.empty:
+    st.dataframe(elegiveis[list(colunas)], column_config=colunas, hide_index=True,
+                 alt="Ranking dos bairros com nota, população, renda e academias no raio.")
+pesos = resumo.get("pesos") or {}
+pesos = json.loads(pesos) if isinstance(pesos, str) else pesos
 st.caption(
-    "Nota de 0 a 100 dentro da escala: público de 20 a 59 anos 30 %, renda média do responsável 25 %, academias por "
-    "10 mil hab. no raio 30 % (menor é melhor) e massa de renda por km² 15 %."
-    + (f" Calculado em {fmt.data_hora(calculado)}." if calculado else "")
+    "Nota de 0 a 100 dentro da escala (percentil entre os bairros da cidade): "
+    + ", ".join(f"{PESOS_ROTULO.get(k, k)} {fmt.numero(v * 100)} %" for k, v in pesos.items()) + ". "
+    + f"Calculado em {fmt.data_hora(resumo.get('processado_em'))}."
 )
+if not fora.empty:
+    with st.expander(f"Fora do ranking: {len(fora)} {'bairro' if len(fora) == 1 else 'bairros'} "
+                     f"(menos de {fmt.numero(pop_min)} hab. ou área rural)"):
+        colunas_fora = ["unidade_nome", "populacao", "renda_media_resp"]
+        st.dataframe(fora[colunas_fora].sort_values("populacao", ascending=False),
+                     column_config={c: colunas[c] for c in colunas_fora}, hide_index=True)
 st.download_button(
     "Baixar CSV dos bairros",
-    data=unidades[list(colunas)].to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig"),
+    data=unidades[["elegivel", *colunas]].sort_values("posicao")
+    .to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig"),
     file_name=f"radar_expansao_bairros_{municipio_id}_{escala}.csv", mime="text/csv", icon=":material/download:",
 )
