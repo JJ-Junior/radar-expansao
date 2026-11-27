@@ -91,8 +91,11 @@ BEGIN
         RETURN;
     END IF;
 
-    -- ja calculado e dentro da validade: nao entra na fila
-    IF EXISTS (SELECT 1 FROM bairros.resumo r WHERE r.cod_municipio = v_cod AND r.processado_em > now() - validade) THEN
+    -- ja calculado, dentro da validade e com a base de academias vigente: nao entra na fila
+    -- (resultado "pendente" feito antes da carga do CNPJ, ou com base de outro mes, pode ser pedido de novo)
+    IF EXISTS (SELECT 1 FROM bairros.resumo r
+                WHERE r.cod_municipio = v_cod AND r.processado_em > now() - validade
+                  AND coalesce(r.data_base_cnpj, '') = coalesce((SELECT max(a.data_referencia) FROM bairros.academia a), '')) THEN
         RETURN QUERY SELECT 'pronto'::text, NULL::bigint, NULL::integer, 0, 'resultado disponivel'::text;
         RETURN;
     END IF;
