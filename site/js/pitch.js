@@ -29,10 +29,13 @@ export function criarPitch() {
   for (const b of [botao, ...document.querySelectorAll("[data-abrir-pitch]")]) {
     b.addEventListener("click", () => { origem = b; abrir({ tocar: true }); });
   }
-  modal.querySelector("[data-fechar]").addEventListener("click", () => modal.close());
+  // o evento "close" pode chegar com atraso: o vídeo pausa já no gesto de fechar (X, clique fora, Esc)
+  const fechar = () => { video.pause(); modal.close(); };
+  modal.querySelector("[data-fechar]").addEventListener("click", fechar);
+  modal.addEventListener("cancel", () => video.pause());
   modal.addEventListener("close", aoFechar);
   // clique no fundo escurecido (fora da caixa) fecha
-  modal.addEventListener("click", (e) => { if (e.target === modal) modal.close(); });
+  modal.addEventListener("click", (e) => { if (e.target === modal) fechar(); });
 
   const peloEndereco = () => { if (location.hash === "#pitch") abrir(); };
   window.addEventListener("hashchange", peloEndereco);
