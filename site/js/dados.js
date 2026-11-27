@@ -2,9 +2,12 @@
 // e monta o "estado" que todas as seções usam.
 
 const PASTA = "dados";
+/** Versão do site (hash do commit, gravada pelo atualizar.sh no index.html): vai na URL dos JSONs para furar o cache. */
+export const VERSAO = document.querySelector('meta[name="radar-versao"]')?.content ?? "";
+export const comVersao = (url) => (VERSAO ? `${url}?v=${encodeURIComponent(VERSAO)}` : url);
 
 async function buscarJson(caminho) {
-  const resposta = await fetch(`${PASTA}/${caminho}`);
+  const resposta = await fetch(comVersao(`${PASTA}/${caminho}`));
   if (!resposta.ok) throw new Error(`Não foi possível carregar ${caminho} (HTTP ${resposta.status})`);
   return resposta.json();
 }

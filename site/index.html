@@ -36,7 +36,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800;900&family=Archivo:wdth,wght@62..125,400..800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/estilo.css">
+  <!-- Versão dos arquivos (cache-busting): no servidor, o atualizar.sh troca __VERSAO__ pelo hash do commit
+       em todo este arquivo. Módulo novo em js/ precisa entrar no importmap abaixo. -->
+  <meta name="radar-versao" content="__VERSAO__">
+  <link rel="stylesheet" href="css/estilo.css?v=__VERSAO__">
 
   <!-- Bibliotecas por CDN, versões fixas -->
   <script defer src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
@@ -44,7 +47,31 @@
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
   <script defer src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/lenis@1.1.13/dist/lenis.min.js"></script>
-  <script type="module" src="js/main.js"></script>
+  <script type="importmap">
+  {
+    "imports": {
+      "./js/busca.js": "./js/busca.js?v=__VERSAO__",
+      "./js/cards.js": "./js/cards.js?v=__VERSAO__",
+      "./js/dados.js": "./js/dados.js?v=__VERSAO__",
+      "./js/dica.js": "./js/dica.js?v=__VERSAO__",
+      "./js/explorar.js": "./js/explorar.js?v=__VERSAO__",
+      "./js/ficha.js": "./js/ficha.js?v=__VERSAO__",
+      "./js/formato.js": "./js/formato.js?v=__VERSAO__",
+      "./js/geo.js": "./js/geo.js?v=__VERSAO__",
+      "./js/grafico-radar.js": "./js/grafico-radar.js?v=__VERSAO__",
+      "./js/hero-radar.js": "./js/hero-radar.js?v=__VERSAO__",
+      "./js/indicadores.js": "./js/indicadores.js?v=__VERSAO__",
+      "./js/macro.js": "./js/macro.js?v=__VERSAO__",
+      "./js/mapa-regioes.js": "./js/mapa-regioes.js?v=__VERSAO__",
+      "./js/menu-municipio.js": "./js/menu-municipio.js?v=__VERSAO__",
+      "./js/metodologia.js": "./js/metodologia.js?v=__VERSAO__",
+      "./js/movimento.js": "./js/movimento.js?v=__VERSAO__",
+      "./js/recomendacao.js": "./js/recomendacao.js?v=__VERSAO__",
+      "./js/simulador.js": "./js/simulador.js?v=__VERSAO__"
+    }
+  }
+  </script>
+  <script type="module" src="js/main.js?v=__VERSAO__"></script>
 </head>
 <body>
   <a class="pular" href="#conteudo">Pular para o conteúdo</a>

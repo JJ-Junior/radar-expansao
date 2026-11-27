@@ -8,6 +8,7 @@
 import { compacto, decimal, inteiro, normalizar } from "./formato.js";
 import { conteudoDica, esconderDica, mostrarDica } from "./dica.js";
 import { feicoes, objetoDe } from "./geo.js";
+import { comVersao } from "./dados.js";
 import { parametro } from "./indicadores.js";
 
 const RAIO_PADRAO = 100;
@@ -111,7 +112,7 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar, menu = null }) {
 
   function carregarUf(cod) {
     if (!pedidos.has(cod)) {
-      pedidos.set(cod, fetch(`${PASTA_MALHA}/${String(cod).padStart(2, "0")}.topo.json`)
+      pedidos.set(cod, fetch(comVersao(`${PASTA_MALHA}/${String(cod).padStart(2, "0")}.topo.json`))
         .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
         .then((topo) => {
           const mapa = new Map();

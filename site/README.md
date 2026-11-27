@@ -101,6 +101,12 @@ então não há passo de build nem de deploy:
 2. faça commit e push em `site/` na branch `junior`;
 3. em até 10 minutos a versão nova está no ar (confira, por exemplo, o `gerado_em` de `dados/meta.json`).
 
+**Cache:** o `index.html` tem o marcador `__VERSAO__` (meta `radar-versao`, `?v=` no CSS, no `main.js` e no *import map*
+de todos os módulos; os JSONs de `dados/` também levam `?v=`). No servidor, o `atualizar.sh` troca o marcador pelo hash do
+commit depois do `git pull`, e o `index.html` vai com `Cache-Control: no-cache`; assim cada commit gera URLs novas e o
+navegador e o Cloudflare não seguram versão velha. **Módulo novo em `js/` precisa entrar no import map do `index.html`.**
+Localmente o marcador fica literal e o site funciona igual.
+
 Como os caminhos do site são todos relativos (`css/`, `js/`, `dados/`), a mesma pasta funciona na raiz do domínio,
 numa subpasta ou no servidor local de teste.
 
