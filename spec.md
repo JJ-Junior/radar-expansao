@@ -878,3 +878,21 @@ streamlit run src/app/app.py
 - ⏳ Cenário de ingestão da entrega: A (Python) ou B (n8n), após a comparação (seção 8.5).
 - ⏳ Limiares do semáforo macro (seção 5.1).
 - ⏳ Data de início do histórico do BCB (proposta: 01/01/2015).
+
+## 12. Bairros sob demanda (experimental, só na branch `bairros`)
+
+Estudo exploratório que desce o ranking da cidade ao bairro. Fica **fora** das camadas bronze/silver/gold oficiais e pode
+ser removido inteiro (`DROP SCHEMA bairros CASCADE`, as views `gold.bairro_*` e a função `gold.pedir_bairros`).
+
+| Peça | Onde | O que faz |
+|---|---|---|
+| Base nacional de academias | `src/bairros/base_cnpj.py` → `bairros.academia` | Mensal: CNPJ da Receita (10 zips de Estabelecimentos, ~5,5 GB em fluxo), só ativas com CNAE 93.13-1 (principal ou secundária) ou 85.91-1, endereço fiscal e código IBGE. Sem nome, telefone, e-mail ou sócios |
+| Pipeline por município | `python -m src.bairros.processar --municipio <código>` | Baixa do IBGE os setores 2022 (WFS), o CNEFE do município e os agregados por setor (população, 20 a 59 anos, renda do responsável); geocodifica as academias pelo CNEFE; calcula 2 escalas (bairros do IBGE e "bairros populares" = localidade do CNEFE, com rateio da população por endereço residencial) e grava `bairros.ranking`, `bairros.setor`, `bairros.academia_ponto` e `bairros.resumo` numa transação |
+| Fila | `bairros.pedido` + `gold.pedir_bairros(cod)` | A API (papel `web_leitor`) só lê as views `gold.bairro_*` e chama a função, que valida o código, não duplica pedido, limita a 20 pendentes e 30 pedidos por hora; o container `radar-bairros` atende um pedido por vez |
+| DDL | `sql/bairros/01_estrutura.sql`, `02_gold_api.sql` | Idempotente, roda como `etl_radar` |
+| Testes | `python -m src.bairros.testes [--bauru]` | Regras (pesos, percentis, número "quadra-casa") e Bauru de ponta a ponta: 379.146 hab. e top 3 conhecidos |
+
+Ranking de bairros (mesma lógica de percentis do ranking de cidades; só unidades com 5 mil hab. ou mais): público de 20 a
+59 anos 30 % · renda média do responsável 25 % · academias (93.13-1 principal) por 10 mil hab. num raio de 1,5 km, menor é
+melhor, 30 % · massa de renda por km² 15 %. Sem a base de academias, o ranking sai marcado `concorrencia = 'pendente'`,
+com os outros pesos reescalonados para somar 100 %.
