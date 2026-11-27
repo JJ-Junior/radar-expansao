@@ -54,10 +54,16 @@ TIMEOUT_SEGUNDOS = 20
 VALIDADE_CACHE_SEGUNDOS = 600
 RAIO_PADRAO_KM, POPULACAO_MINIMA_PADRAO = 1.5, 5000   # se o resumo nao trouxer os parametros
 MAX_OPCOES_BUSCA = 60
-ROTULOS_MAPA = 10
+MAX_NUMEROS_MAPA = 40           # bairros do ranking com o numero da posicao no mapa
+ALTURA_MAPA = 600
+PROPORCAO_MAPA = 1.5             # largura / altura do mapa (enquadramento inicial)
+FOLGA_MAPA = 0.06                # margem em volta dos bairros
 ESCALAS = {"ibge": "Bairros do IBGE", "popular": "Bairros populares"}
 NOTAS = {"nota_mercado": "Público 20–59", "nota_renda": "Renda", "nota_espaco": "Pouca concorrência",
          "nota_densidade": "Poder de compra concentrado"}
+ROTULO_COMPONENTE = {"nota_mercado": "Público de 20 a 59 anos", "nota_renda": "Renda do responsável",
+                     "nota_espaco": "Pouca concorrência no raio",
+                     "nota_densidade": "Poder de compra concentrado"}
 PESOS_ROTULO = {"mercado": "público de 20 a 59 anos", "renda": "renda média do responsável",
                 "espaco": "pouca concorrência no raio (menos academias por 10 mil hab.)",
                 "densidade": "massa de renda por km²"}
@@ -483,18 +489,59 @@ if elegiveis.empty:
 
 
 # --- Mapa: bairros (poligono ou ponto), setores e academias -------------------------
+for coluna in ("populacao", "pop_20_59", "renda_media_resp"):  # pessoa nao tem decimal; renda em reais inteiros
+    unidades[coluna] = pd.to_numeric(unidades[coluna], errors="coerce").round().astype("Int64")
+
+
+def componente(r, coluna: str) -> str:
+    """'81' ou o motivo de nao haver nota."""
+    if coluna == "nota_espaco" and not concorrencia_ok:
+        return "ainda não calculada"
+    return "—" if fmt.ausente(r.get(coluna)) else fmt.numero(r[coluna])
+
+
 def texto_hover(r) -> str:
-    """Nome, nota, populacao, renda, academias no raio e a frase da gold."""
-    posicao = "" if fmt.ausente(r["posicao"]) else f"{int(r['posicao'])}º "
-    partes = [f"<b>{posicao}{r['unidade_nome']}</b>",
-              f"Nota {fmt.nota(r['nota_final'])}" if r["elegivel"] else "Fora do ranking",
-              f"{fmt.compacto(r['populacao'])} hab. · renda média do responsável {fmt.reais(r['renda_media_resp'], 0)}"]
+    """Tudo o que explica a nota do bairro, em linhas curtas."""
+    posicao = f"{int(r['posicao'])}º · " if r["elegivel"] and not fmt.ausente(r["posicao"]) else ""
+    linhas = [f"<b>{posicao}{r['unidade_nome']}</b>"]
+    if r["elegivel"]:
+        linhas += [f"<b>Nota final: {fmt.nota(r['nota_final'])}</b> (0 a 100)", "<i>Componentes da nota (0 a 100):</i>"]
+        linhas += [f"  · {ROTULO_COMPONENTE[c]}: {componente(r, c)}" for c in NOTAS]
+    else:
+        linhas.append(f"Fora do ranking (menos de {fmt.numero(pop_min)} hab. ou área rural)")
+    linhas += [f"População: {fmt.numero(r['populacao'])} hab.",
+               f"Público de 20 a 59 anos: {fmt.numero(r['pop_20_59'])}",
+               f"Renda média do responsável: {fmt.reais(r['renda_media_resp'], 0)}"]
     if concorrencia_ok and not fmt.ausente(r.get("acad_raio")):
-        partes.append(f"{fmt.numero(r['acad_raio'])} academias no raio "
-                      f"({fmt.numero(r['acad_raio_10k'], 2)} por 10 mil hab.)")
-    if isinstance(r.get("frase"), str) and r["frase"]:
-        partes.append(r["frase"])
-    return "<br>".join(partes)
+        linhas += [f"Academias no raio de {fmt.numero(raio, 1)} km: {fmt.numero(r['acad_raio'])}",
+                   f"Academias por 10 mil hab. no raio: {fmt.numero(r['acad_raio_10k'], 2)}"]
+    return "<br>".join(linhas)
+
+
+def texto_academia(r) -> str:
+    """Academia sem nenhum dado da empresa (LGPD): so o bairro do endereco fiscal."""
+    linhas = ["<b>Academia (endereço fiscal)</b>"]
+    if isinstance(r.get("localidade"), str) and r["localidade"].strip():
+        linhas.append(f"Bairro do endereço: {r['localidade'].strip().title()}")
+    nivel = str(r.get("nivel_geocod") or "")
+    linhas.append("Posição pelo CEP e número do endereço" if nivel.startswith("1")
+                  else "Posição aproximada pelo CEP do endereço")
+    return "<br>".join(linhas)
+
+
+def enquadrar(lons: list, lats: list) -> tuple[list, list]:
+    """Faixa de lon/lat que mostra tudo com folga e tem a proporcao do mapa (largo)."""
+    x0, x1 = np.radians(min(lons)), np.radians(max(lons))
+    y0, y1 = (np.log(np.tan(np.pi / 4 + np.radians(v) / 2)) for v in (min(lats), max(lats)))  # mercator
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    largura, altura = max(x1 - x0, 1e-4) * (1 + 2 * FOLGA_MAPA), max(y1 - y0, 1e-4) * (1 + 2 * FOLGA_MAPA)
+    largura, altura = max(largura, altura * PROPORCAO_MAPA), max(altura, largura / PROPORCAO_MAPA)
+
+    def latitude(y):
+        return float(np.degrees(2 * np.arctan(np.exp(y)) - np.pi / 2))
+
+    return ([float(np.degrees(cx - largura / 2)), float(np.degrees(cx + largura / 2))],
+            [latitude(cy - altura / 2), latitude(cy + altura / 2)])
 
 
 with st.container(horizontal=True):
@@ -502,9 +549,13 @@ with st.container(horizontal=True):
                               key=f"bairros_ver_academias_{concorrencia_ok}")  # sem concorrencia, fica travado
     ver_setores = st.toggle("Setores do Censo", value=False, key="bairros_ver_setores",
                             help="Contorno dos setores censitários, a menor área com dados do Censo 2022.")
+st.caption("Passe o mouse (ou toque) num bairro para ver a nota e o que a compõe. O número é a posição no ranking.")
 
 unidades["_texto"] = [texto_hover(r) for _, r in unidades.iterrows()]
 unidades["_geo"] = unidades["geojson"].map(geometria) if "geojson" in unidades else None
+elegiveis = unidades[unidades["elegivel"]].sort_values("posicao")
+fora = unidades[~unidades["elegivel"]]
+dica = "%{text}<extra></extra>"  # sem o nome do traco ao lado da caixa
 figura = go.Figure()
 barra = {"title": {"text": "Nota"}, "thickness": 12, "len": 0.6}
 contorno = (dados.malha_municipios_uf(municipio_id // 100_000) or {}).get(municipio_id)
@@ -532,40 +583,49 @@ for grupo, cinza in ((com_geo[~com_geo["elegivel"]], True), (com_geo[com_geo["el
         z=[0] * len(grupo) if cinza else grupo["nota_final"].astype(float).tolist(),
         zmin=0, zmax=100, colorscale=[[0, "#3b4249"], [1, "#3b4249"]] if cinza else fmt.ESCALA_DADO,
         showscale=not cinza, colorbar=barra, marker={"line": {"color": "#0b0d0f", "width": 0.6}},
-        text=grupo["_texto"].tolist(), hoverinfo="text"))
+        text=grupo["_texto"].tolist(), hovertemplate=dica))
 sem_geo = unidades[unidades["_geo"].isna() & unidades["lat"].notna() & unidades["elegivel"]]  # so os do ranking
 if not sem_geo.empty:
     maior = max(float(sem_geo["populacao"].max()), 1.0)
     figura.add_trace(go.Scattergeo(
         lon=sem_geo["lon"].astype(float).tolist(), lat=sem_geo["lat"].astype(float).tolist(), mode="markers",
-        text=sem_geo["_texto"].tolist(), hoverinfo="text", showlegend=False,
-        marker={"size": (8 + 24 * np.sqrt(sem_geo["populacao"].astype(float) / maior)).tolist(),
-                "color": [float(n) if e and not fmt.ausente(n) else 0
-                          for n, e in zip(sem_geo["nota_final"], sem_geo["elegivel"])],
+        text=sem_geo["_texto"].tolist(), hovertemplate=dica, showlegend=False,
+        marker={"size": (14 + 24 * np.sqrt(sem_geo["populacao"].astype(float) / maior)).tolist(),
+                "color": sem_geo["nota_final"].astype(float).tolist(),
                 "colorscale": fmt.ESCALA_DADO, "cmin": 0, "cmax": 100, "opacity": 0.9,
                 "showscale": com_geo.empty, "colorbar": barra}))
-if ver_academias and not res["academia"].empty:
+academias = res["academia"]
+if ver_academias and not academias.empty:
     figura.add_trace(go.Scattergeo(
-        lon=res["academia"]["lon"].astype(float).tolist(), lat=res["academia"]["lat"].astype(float).tolist(),
-        mode="markers", name="Academia (endereço fiscal)", hoverinfo="name",
-        marker={"size": 5, "color": fmt.COR_DESTAQUE, "symbol": "diamond", "line": {"width": 0}}))
-top = elegiveis.head(ROTULOS_MAPA)
-if not top.empty:
+        lon=academias["lon"].astype(float).tolist(), lat=academias["lat"].astype(float).tolist(),
+        mode="markers", name="Academia (endereço fiscal)", showlegend=True,
+        text=[texto_academia(r) for _, r in academias.iterrows()], hovertemplate=dica,
+        marker={"size": 6, "color": fmt.COR_DESTAQUE, "symbol": "diamond", "line": {"width": 0}}))
+numerados = elegiveis[elegiveis["lat"].notna()].head(MAX_NUMEROS_MAPA)
+if not numerados.empty:  # so o numero da posicao, num selo escuro; o nome fica no hover
     figura.add_trace(go.Scattergeo(
-        lon=top["lon"].astype(float).tolist(), lat=top["lat"].astype(float).tolist(), mode="text", hoverinfo="skip",
-        showlegend=False, text=[f"{int(p)}º {n}" for p, n in zip(top["posicao"], top["unidade_nome"])],
-        textposition="top center", textfont={"color": "#f2f1ec", "size": 11}))
-pontos = unidades[unidades["lat"].notna()]
-if not pontos.empty:
-    folga = 0.02
-    figura.update_geos(lonaxis_range=[float(pontos["lon"].min() - folga), float(pontos["lon"].max() + folga)],
-                       lataxis_range=[float(pontos["lat"].min() - folga), float(pontos["lat"].max() + folga)])
-figura.update_geos(projection_type="mercator", visible=False, bgcolor="rgba(0,0,0,0)")
-figura.update_layout(separators=",.", height=520, margin={"l": 0, "r": 0, "t": 0, "b": 0},
+        lon=numerados["lon"].astype(float).tolist(), lat=numerados["lat"].astype(float).tolist(),
+        mode="markers+text", showlegend=False, text=[str(int(p)) for p in numerados["posicao"]],
+        customdata=numerados["_texto"].tolist(), hovertemplate="%{customdata}<extra></extra>",
+        textposition="middle center", textfont={"color": "#f2f1ec", "size": 11},
+        marker={"size": 20, "color": "rgba(11,13,15,.78)", "line": {"color": "#f2f1ec", "width": 1}}))
+lons = unidades["lon"].dropna().astype(float).tolist()
+lats = unidades["lat"].dropna().astype(float).tolist()
+for g in com_geo["_geo"]:  # inclui o contorno inteiro dos bairros, nao so o centro
+    for poligono in g["coordinates"]:
+        lons += [p[0] for p in poligono[0]]
+        lats += [p[1] for p in poligono[0]]
+if lons:
+    faixa_lon, faixa_lat = enquadrar(lons, lats)
+    figura.update_geos(lonaxis_range=faixa_lon, lataxis_range=faixa_lat)
+figura.update_geos(projection_type="mercator", projection_scale=1, visible=False, bgcolor="rgba(0,0,0,0)")
+figura.update_layout(separators=",.", height=ALTURA_MAPA, margin={"l": 0, "r": 0, "t": 0, "b": 0},
                      paper_bgcolor="rgba(0,0,0,0)", dragmode="pan",
-                     legend={"orientation": "h", "y": 0.01, "x": 0.01})
+                     legend={"orientation": "h", "y": 0.01, "x": 0.01, "bgcolor": "rgba(11,13,15,.6)"},
+                     hoverlabel={"bgcolor": "#151a1f", "bordercolor": "#262d35", "align": "left",
+                                 "font": {"color": "#f2f1ec", "size": 13}, "namelength": -1})
 st.plotly_chart(figura, config={"displaylogo": False, "scrollZoom": True},
-                alt=f"Mapa dos bairros de {rotulo(municipio_id)} coloridos pela nota.")
+                alt=f"Mapa dos bairros de {rotulo(municipio_id)} coloridos pela nota, com o número da posição.")
 
 # --- Ranking --------------------------------------------------------------------------
 colunas = {
