@@ -1,7 +1,8 @@
 // Menu de contexto de um município nos mapas do site (simulador, Explorar e mapa por regiões).
 // Abre com o botão direito, com a tecla de menu / Shift+F10 num item focado e, no celular, com toque longo.
 // Fecha com Esc, clique fora, rolagem ou ao escolher uma opção; o foco volta para onde estava.
-// Opções: ver a cidade (ficha do site; se não houver, o dashboard), ver os bairros no dashboard e abrir no dashboard.
+// Opções: ver a cidade (ficha do site), ver os bairros no dashboard (qualquer município) e abrir no dashboard
+// (só cidades do ranking, com 50 mil hab. ou mais: as outras não têm ficha lá).
 
 /** Endereço do dashboard oficial (Streamlit Community Cloud). */
 export const DASHBOARD_URL = "https://radar-expansao.streamlit.app";
@@ -59,10 +60,12 @@ export function criarMenuMunicipio({ estado, aoSelecionar }) {
       el.addEventListener("click", () => { fechar({ devolverFoco: !href }); acao?.(); });
       menu.append(el);
     };
-    if (estado.porId.has(id)) item("Ver cidade", "ficha neste site", { acao: () => aoSelecionar(id) });
-    else item("Ver cidade", "no dashboard ↗", { href: linkDashboard("municipio", id) });
+    // a ficha do site cobre todos os municípios; sem ela, a opção some (nunca cai na ficha do dashboard)
+    if (m) item("Ver cidade", "ficha neste site", { acao: () => aoSelecionar(id) });
+    // Bairros do dashboard aceita qualquer município (calcula sob demanda)
     item("Ver bairros", "no dashboard ↗", { href: linkDashboard("bairros", id) });
-    item("Abrir no dashboard", "página do município ↗", { href: linkDashboard("municipio", id) });
+    // a página Município do dashboard só tem ficha para quem está no ranking (50 mil hab. ou mais)
+    if (m?.ranking) item("Abrir no dashboard", "página do município ↗", { href: linkDashboard("municipio", id) });
 
     menu.hidden = false;
     const larg = menu.offsetWidth, alt = menu.offsetHeight;
