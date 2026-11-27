@@ -55,6 +55,7 @@ import urllib.request
 import zipfile
 
 import pandas as pd
+from pandas.api.types import union_categoricals
 
 from src.bairros import config as C
 from src.bairros.geo import centroide, localizar, poligonos
@@ -163,11 +164,14 @@ def _ler_cnefe(caminho):
     with zipfile.ZipFile(caminho) as z, z.open(z.namelist()[0]) as f:
         for cn in pd.read_csv(io.TextIOWrapper(f, encoding="utf-8", errors="replace"), sep=";", dtype=str,
                               usecols=COLUNAS_CNEFE, chunksize=LINHAS_POR_BLOCO):
-            partes.append(_bloco_cnefe(cn))
-    end = pd.concat(partes, ignore_index=True)
+            b = _bloco_cnefe(cn)
+            for c in COLUNAS_CATEGORIA:  # cada bloco ja vira categoria: nunca ha milhoes de textos de uma vez
+                b[c] = b[c].astype("category")
+            partes.append(b)
+    end = pd.DataFrame({c: union_categoricals([p[c] for p in partes], ignore_order=True) if c in COLUNAS_CATEGORIA
+                        else pd.concat([p[c] for p in partes], ignore_index=True).to_numpy()
+                        for c in partes[0].columns})
     del partes
-    for c in COLUNAS_CATEGORIA:
-        end[c] = end[c].astype("category")
     return end
 
 

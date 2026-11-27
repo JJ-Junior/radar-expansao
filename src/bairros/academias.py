@@ -52,6 +52,7 @@ import time
 import unicodedata
 import urllib.request
 
+import numpy as np
 import pandas as pd
 
 from src.bairros import config as C
@@ -110,40 +111,50 @@ def geocodificar(cod, p, ac, end, geo):
     # so os enderecos dos CEPs e logradouros das academias (cidades grandes: evita copiar milhoes de linhas)
     ceps_ac = set(ac["cep"].astype(str).str.replace(r"\D", "", regex=True))
     toks_ac = {" ".join(sorted(tokens(x))) for x in ac["logradouro"]}
-    logr_cat = (end["titulo_logr"].astype(str) + " " + end["nome_logr"].astype(str)).str.strip().astype("category")
-    cats = pd.Series(logr_cat.cat.categories)
-    tok_de = dict(zip(cats, cats.map(lambda x: " ".join(sorted(tokens(x))))))
-    codigos_ok = [i for i, c in enumerate(cats) if tok_de[c] in toks_ac]
-    mascara = logr_cat.cat.codes.isin(codigos_ok) | end["cep"].isin(ceps_ac)
+    # nome da rua so por combinacao unica (titulo, nome): evita montar milhoes de textos em SP e no Rio
+    tit, nom = end["titulo_logr"].cat, end["nome_logr"].cat
+    par = tit.codes.astype("int64") * (len(nom.categories) + 1) + nom.codes.astype("int64")
+    pares = pd.Series(pd.unique(par))
+    texto = {k: f"{tit.categories[k // (len(nom.categories) + 1)] if k // (len(nom.categories) + 1) >= 0 else ''} "
+                f"{nom.categories[k % (len(nom.categories) + 1)] if k % (len(nom.categories) + 1) < len(nom.categories) else ''}".strip()
+             for k in pares}
+    tok_de = {t: " ".join(sorted(tokens(t))) for t in set(texto.values())}
+    pares_ok = [k for k, t in texto.items() if tok_de[t] in toks_ac]
+    mascara = par.isin(pares_ok) | end["cep"].isin(ceps_ac)
     e = end.loc[mascara, ["cep", "quadra", "numero", "lat", "lon", "cd_setor_final", "localidade"]].copy()
-    e["logr"] = logr_cat[mascara].astype(str)
-    del logr_cat
-    for c in ["cep", "quadra", "numero", "cd_setor_final", "localidade"]:
-        e[c] = e[c].astype(str)
+    e["logr"] = par[mascara].map(texto)
+    del par
+    e["cep"] = e["cep"].astype(str)
+    e = e.reset_index(drop=True)
     e["logr_tok"] = e["logr"].map(tok_de)
-    e["q"] = e["quadra"].map(_inteiro)
-    e["c"] = e["numero"].map(_inteiro)
-    por_cep = {k: g for k, g in e[e["cep"].isin(ceps_ac)].groupby("cep")}
-    por_logr = {k: g for k, g in e[e["logr_tok"].isin(toks_ac)].groupby("logr_tok") if k}
+    e["q"] = e["quadra"].astype(object).map(_inteiro)
+    e["c"] = e["numero"].astype(object).map(_inteiro)
+    # so os indices de cada grupo (fatiar na hora evita copiar o DataFrame por CEP e por rua)
+    por_cep = e.groupby("cep").indices
+    por_logr = {k: v for k, v in e.groupby("logr_tok").indices.items() if k}
     # grade dos enderecos residenciais (indices em vez de listas Python de milhoes de pontos)
-    res = end.loc[end["especie"] == "1", ["lat", "lon", "localidade"]].reset_index(drop=True)
-    res_lat, res_lon, res_loc = res["lat"].to_numpy(), res["lon"].to_numpy(), res["localidade"].astype(str).to_numpy()
-    grade_res = res.groupby([res["lat"].map(lambda v: round(v, 2)), res["lon"].map(lambda v: round(v, 2))]).indices
-    del res
+    eh_res = (end["especie"] == "1").to_numpy()
+    res_lat, res_lon = end["lat"].to_numpy()[eh_res], end["lon"].to_numpy()[eh_res]
+    res_loc_cod = end["localidade"].cat.codes.to_numpy()[eh_res]
+    res_loc_cats = end["localidade"].cat.categories
+    chaves = pd.DataFrame({"a": np.rint(res_lat * 100).astype("int64"), "b": np.rint(res_lon * 100).astype("int64")})
+    grade_res = chaves.groupby(["a", "b"]).indices
+    del chaves
     lat_min, lat_max, lon_min, lon_max = end.lat.min(), end.lat.max(), end.lon.min(), end.lon.max()
     polis = poligonos(geo, "cd_setor")
 
     def localidade_proxima(la, lo):
         melhor, dmin = "", 9e9
-        for dy in (-0.01, 0, 0.01):
-            for dx in (-0.01, 0, 0.01):
-                idx = grade_res.get((round(la + dy, 2), round(lo + dx, 2)))
+        ca, cb = int(round(la * 100)), int(round(lo * 100))
+        for dy in (-1, 0, 1):
+            for dx in (-1, 0, 1):
+                idx = grade_res.get((ca + dy, cb + dx))
                 if idx is None:
                     continue
                 d = (res_lat[idx] - la) ** 2 + (res_lon[idx] - lo) ** 2
                 k = int(d.argmin())
                 if d[k] < dmin:
-                    dmin, melhor = float(d[k]), res_loc[idx[k]]
+                    dmin, melhor = float(d[k]), str(res_loc_cats[res_loc_cod[idx[k]]])
         return melhor
 
     def escolher_rua(cand, logr_cnpj):
@@ -181,8 +192,9 @@ def geocodificar(cod, p, ac, end, geo):
         cep = re.sub(r"\D", "", str(r["cep"] or ""))
         lat = lon = None
         nivel, ref = "nao_geocodificado", None
-        cand_cep = escolher_rua(por_cep[cep], logr_cnpj) if cep in por_cep else None
-        cand_logr = por_logr.get(" ".join(sorted(tokens(logr_cnpj))))
+        cand_cep = escolher_rua(e.iloc[por_cep[cep]], logr_cnpj) if cep in por_cep else None
+        idx_logr = por_logr.get(" ".join(sorted(tokens(logr_cnpj))))
+        cand_logr = e.iloc[idx_logr] if idx_logr is not None else None
 
         def tentar(cand, filtro, rotulo):
             nonlocal lat, lon, nivel, ref

@@ -134,9 +134,11 @@ def _indicadores(u, g_pop, g_ac, centro, concorrencia):
     return u
 
 
-def _ranquear(u, concorrencia):
+def _ranquear(u, concorrencia, nome_mun=""):
     w = pesos(concorrencia)
-    u["elegivel"] = (u["pop"] >= C.POP_MIN) & ~u["nome"].str.upper().str.contains(NAO_BAIRRO, regex=True)
+    # fora do ranking: area rural, sem localidade e a localidade com o proprio nome do municipio (CNEFE sem bairro)
+    u["elegivel"] = ((u["pop"] >= C.POP_MIN) & ~u["nome"].str.upper().str.contains(NAO_BAIRRO, regex=True)
+                     & (u["nome"].map(chave) != chave(nome_mun)))
     el = u[u["elegivel"]].copy()
     el["nota_mercado"] = percentil(el["pop_20_59"])
     el["nota_renda"] = percentil(el["renda_media_resp"])
@@ -156,15 +158,15 @@ def _ranquear(u, concorrencia):
     return pd.concat([el, u[~u["elegivel"]]]).reindex(columns=list(u.columns) + cols)
 
 
-def calcular(cod, st, end, geo, renda_bairro, pts, concorrencia):
+def calcular(cod, st, end, geo, renda_bairro, pts, concorrencia, nome_mun=""):
     """Devolve (ranking, setores para o mapa, resumo)."""
     st = preparar_setores(st, renda_bairro)
     res = end[(end["especie"] == "1") & (end["cd_setor_final"] != "")]
     # setores com moradores mas sem domicilio particular no CNEFE: rateio pelos domicilios coletivos
     sem_res = end[(end["especie"] == "2") & (end["cd_setor_final"] != "") & ~end["cd_setor_final"].isin(res["cd_setor_final"])]
     res = pd.concat([res, sem_res], ignore_index=True)[["cd_setor_final", "localidade", "lat", "lon"]]
-    res["cd_setor_final"] = res["cd_setor_final"].astype(str)
-    res["localidade"] = res["localidade"].astype(str).replace("", "(SEM LOCALIDADE)")
+    if "" in res["localidade"].cat.categories:  # categoria (sem copiar milhoes de textos)
+        res["localidade"] = res["localidade"].cat.rename_categories({"": "(SEM LOCALIDADE)"})
     centro, origem_centro = definir_centro(st, end)
     g_pop = GradePontos(zip(st["lat"], st["lon"], st["pop"]))
     g_ac = GradePontos(zip(pts["lat"], pts["lon"], [1] * len(pts)))
@@ -173,6 +175,7 @@ def calcular(cod, st, end, geo, renda_bairro, pts, concorrencia):
 
     # escala 1: bairros do IBGE (nem todo municipio tem)
     cent = res.groupby("cd_setor_final", observed=True)[["lat", "lon"]].agg(["mean", "count"])
+    cent.index = cent.index.astype(str)
     st["lat_res"] = st["cd_setor"].map(cent[("lat", "mean")])
     st["lon_res"] = st["cd_setor"].map(cent[("lon", "mean")])
     st["n_res"] = st["cd_setor"].map(cent[("lat", "count")]).fillna(0)
@@ -203,6 +206,7 @@ def calcular(cod, st, end, geo, renda_bairro, pts, concorrencia):
     # escala 2: bairros populares (localidade do CNEFE; populacao rateada por endereco residencial)
     tot = res.groupby("cd_setor_final", observed=True).size().rename("n_setor")
     par = res.groupby(["cd_setor_final", "localidade"], observed=True).agg(n=("lat", "size"), lat=("lat", "mean"), lon=("lon", "mean")).reset_index()
+    par["cd_setor_final"], par["localidade"] = par["cd_setor_final"].astype(str), par["localidade"].astype(str)
     par = par.merge(tot, left_on="cd_setor_final", right_index=True)
     par["fr"] = par["n"] / par["n_setor"]
     par = par.merge(st[["cd_setor", "pop", "pop_20_59", "dom_ocupados", "resp_uso", "massa_renda", "area_km2"]],
@@ -216,7 +220,7 @@ def calcular(cod, st, end, geo, renda_bairro, pts, concorrencia):
         "lat": (g["lat"] * g["n"]).sum() / g["n"].sum(), "lon": (g["lon"] * g["n"]).sum() / g["n"].sum(),
     }), include_groups=False).reset_index().rename(columns={"localidade": "nome"})
     u["acad_unidade"] = u["nome"].map(pts["localidade"].value_counts()).fillna(0) if concorrencia else float("nan")
-    u = _ranquear(_indicadores(u, g_pop, g_ac, centro, concorrencia), concorrencia)
+    u = _ranquear(_indicadores(u, g_pop, g_ac, centro, concorrencia), concorrencia, nome_mun)
     u["unidade_id"] = u["nome"].map(chave)
     u["geojson"] = None
     u["escala"] = "popular"

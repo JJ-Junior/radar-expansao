@@ -150,22 +150,24 @@ def processar(cod, sem_banco=False):
     log(f"{cod}: baixando/conferindo arquivos do IBGE")
     meta = ibge.baixar(cod, p)
     t_baixar = time.time()
-    log(f"{cod} {meta['nome']}/{meta['uf']}: carregando setores e CNEFE")
+    log(f"{cod} {meta['nome']}/{meta['uf']}: carregando setores e CNEFE (memoria {memoria_pico_mb()} MB)")
     st, end, geo, renda_bairro, conf = ibge.carregar(cod, p, meta)
     if conf["pop_setores"] != conf["pop_oficial"]:
         raise RuntimeError(f"populacao dos setores ({conf['pop_setores']}) difere da oficial ({conf['pop_oficial']})")
     t_carga = time.time()
     ac, base_ok, data_base = academias_do_municipio(cod, conn)
     if base_ok:
-        log(f"{cod}: geocodificando {int(ac['academia_principal'].astype(str).isin(['1', 'True', 'true', 't']).sum())} academias")
+        log(f"{cod}: memoria {memoria_pico_mb()} MB; geocodificando {int(ac['academia_principal'].astype(str).isin(['1', 'True', 'true', 't']).sum())} academias")
         pts, est = academias.geocodificar(cod, p, ac, end, geo)
     else:
         log(f"{cod}: base de academias ausente; concorrencia pendente")
         pts = pd.DataFrame(columns=["cnpj", "lat", "lon", "nivel_geocod", "cd_setor", "localidade"])
         est = {"academias_base": None, "academias_geocodificadas": None, "niveis_geocod": None, "consultas_api_cep": 0}
     t_geo = time.time()
-    ranking, setores, res = indicadores.calcular(cod, st, end, geo, renda_bairro, pts, base_ok)
+    log(f"{cod}: calculando indicadores (memoria {memoria_pico_mb()} MB)")
+    ranking, setores, res = indicadores.calcular(cod, st, end, geo, renda_bairro, pts, base_ok, meta["nome"])
     del end
+    log(f"{cod}: gravando (memoria {memoria_pico_mb()} MB)")
     t_ind = time.time()
     resumo = {"cod_municipio": int(cod), "municipio_nome": meta["nome"], "uf_sigla": meta["uf"],
               "duracao_s": round(time.time() - t0, 1), "pop_oficial": conf["pop_oficial"],
