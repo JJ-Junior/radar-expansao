@@ -32,7 +32,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
-    mem_limit: 1536m          # Sao Paulo, a maior cidade, fica perto de 1,35 GB
+    mem_limit: 2048m          # Sao Paulo, a maior cidade, chega a 1,5 GB
     stop_grace_period: 30s
     logging:
       driver: json-file
