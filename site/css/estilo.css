@@ -205,7 +205,6 @@ button, select, input { font: inherit; color: inherit; }
 .pitch-modal__fechar:focus-visible, .pitch-modal__video:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
 .pitch-modal__video { display: block; width: 100%; aspect-ratio: 16 / 9; height: auto; max-height: calc(100vh - 160px); background: #000; border-radius: 8px; }
 .pitch-modal__rodape { margin: 0; font-family: var(--mono); font-size: .7rem; color: var(--tinta-3); }
-.pitch-modal__rodape a { color: var(--limao-texto); }
 @media (max-width: 600px) { .pitch-modal { width: 100vw; max-height: 100vh; border-radius: 0; border-inline: 0; } .pitch-modal__caixa { padding: 8px 8px 12px; } }
 .hero__texto { max-width: 760px; }
 .hero__titulo { font-family: var(--display); font-weight: 900; text-transform: uppercase; font-size: clamp(3.4rem, 8.4vw, 7.6rem); line-height: .84; letter-spacing: -.005em; margin-bottom: 32px; }

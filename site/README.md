@@ -4,7 +4,7 @@ Vitrine de expansão para o diretor da rede de academias, numa página só, cont
 
 1. **Hero:** o radar varre o Brasil e acende as cidades avaliadas; KPIs e busca de cidade.
    **Pitch em vídeo:** botão de play no centro do radar do topo abre um modal com o vídeo legendado (4 min 33 s,
-   `video/pitch-radar-expansao.mp4`, pôster `img/pitch-poster.jpg`); o vídeo só carrega ao abrir. O endereço `#pitch` abre o modal.
+   `video/pitch-radar-expansao.mp4`, pôster `img/pitch-poster.jpg`); o vídeo só carrega ao abrir, sem botão nem menu de download. O endereço `#pitch` abre o modal.
 2. **Letreiro** com os números do momento (Selic, IPCA, dólar, cidades no radar, 1ª do ranking, as recomendadas).
 3. **Quando:** semáforo econômico, histórico mês a mês e as três séries.
 4. **Onde:** mapa por regiões do IBGE que se aproxima com o scroll — Brasil → região → estado → região intermediária → região imediata —, e depois fica livre para explorar.

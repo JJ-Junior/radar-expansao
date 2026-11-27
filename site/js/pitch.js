@@ -33,6 +33,7 @@ export function criarPitch() {
   const fechar = () => { video.pause(); modal.close(); };
   modal.querySelector("[data-fechar]").addEventListener("click", fechar);
   modal.addEventListener("cancel", () => video.pause());
+  video.addEventListener("contextmenu", (e) => e.preventDefault());   // sem "salvar vídeo como" no menu do botão direito
   modal.addEventListener("close", aoFechar);
   // clique no fundo escurecido (fora da caixa) fecha
   modal.addEventListener("click", (e) => { if (e.target === modal) fechar(); });
