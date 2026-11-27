@@ -253,14 +253,41 @@ TopoJSON baixado da [API de Malhas v3 do IBGE](https://servicodados.ibge.gov.br/
 | `intermediarias.topo.json` | `regiao-intermediaria` | `BRIN` | 4 dígitos (`regiao_intermediaria_id`) |
 | `imediatas.topo.json` | `regiao-imediata` | `BRIM` | 6 dígitos (`regiao_imediata_id`) |
 
-A malha de municípios (1,4 MB) é baixada só em memória, para calcular os pontos do `territorio.json`; o site não a usa.
-As malhas mudam raramente: rode `baixar_territorio.py` só quando o IBGE publicar uma nova divisão territorial.
+A malha do Brasil inteiro por município é baixada só em memória, para calcular os pontos do `territorio.json`.
+
+### `malha/municipios/<codigo_uf>.topo.json` — contorno dos municípios, um arquivo por UF
+
+Usada no mapa do simulador de região (dashboard e site), que carrega só as UFs que o raio toca.
+Vem de `/api/v3/malhas/estados/<codigo_uf>?formato=application/json&qualidade=minima&intrarregiao=municipio`,
+com dois ajustes:
+
+- o objeto se chama sempre **`municipios`** (o IBGE usa `UF<codigo>MU`);
+- cada geometria tem **`id`** = código IBGE do município com 7 dígitos (**inteiro**, igual a `municipio_id`),
+  além do `properties.codarea` (texto) que veio do IBGE.
+
+| Item | Valor |
+|---|---|
+| Arquivos | 27, nomeados pelo código da UF com 2 dígitos (`11.topo.json` … `53.topo.json`; SP = `35`) |
+| Geometrias | 5.570 `Polygon`/`MultiPolygon` (todos os municípios da gold menos Boa Esperança do Norte-MT, `5101837`, criado depois da malha; ele aparece só como ponto, pelo `territorio.json`) |
+| Tamanho | 1,4 MB no total (de 1 KB no DF a 207 KB em MG) |
+| Coordenadas | quantizadas: aplique `transform` (`scale`, `translate`) para obter longitude/latitude (WGS84) |
+
+No navegador (d3 + topojson-client):
+
+```js
+const topo = await d3.json(`dados/malha/municipios/${codigoUf}.topo.json`);
+const municipios = topojson.feature(topo, topo.objects.municipios); // feature.id = municipio_id
+const divisas = topojson.mesh(topo, topo.objects.municipios, (a, b) => a !== b);
+```
+
+As malhas mudam raramente: rode `baixar_territorio.py` só quando o IBGE publicar uma nova divisão territorial
+(`--so-municipios` refaz só a pasta `malha/municipios/`).
 
 ## Como gerar
 
 ```powershell
 # na raiz do repositório, com o ambiente virtual ativo
-python src/exportacao/baixar_territorio.py # uma vez (malhas + territorio.json)
+python src/exportacao/baixar_territorio.py # uma vez (malhas, malha municipal por UF e territorio.json)
 python src/exportacao/exportar_site.py     # a cada atualização da gold
 ```
 

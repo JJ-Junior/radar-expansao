@@ -16,8 +16,11 @@
 #           intermediarias e imediatas) para o mapa do site e montar o arquivo
 #           territorio.json: municipio -> regiao imediata/intermediaria + ponto
 #           central (longitude, latitude) calculado da malha municipal.
+#           Tambem grava a malha municipal, um arquivo por UF, para o mapa do
+#           simulador de regiao (dashboard e site).
 # ENTRADA:  API de Malhas v3 e API de Localidades do IBGE
-# SAIDA:    site/dados/malha/*.topo.json e site/dados/territorio.json
+# SAIDA:    site/dados/malha/*.topo.json, site/dados/malha/municipios/<uf>.topo.json
+#           e site/dados/territorio.json
 #           (substitui os arquivos inteiros a cada execucao)
 #
 # =============================================================================
@@ -38,9 +41,11 @@
 #                           cadarco / shoelace), ponderado pela area
 #   4. hierarquia do IBGE -> municipio < regiao imediata < regiao intermediaria
 #                           < UF < regiao geografica
+#   5. sys.argv          -> opcao --so-municipios: roda so a malha municipal
 #
 # INSTALACAO: pip install requests   (ou: pip install -r requirements.txt)
 # COMO RODAR: python src/exportacao/baixar_territorio.py
+#             python src/exportacao/baixar_territorio.py --so-municipios
 #
 # =============================================================================
 
@@ -54,6 +59,9 @@ CAMADAS = {                          # arquivo salvo -> (intrarregiao da API, ob
     "intermediarias": ("regiao-intermediaria", "BRIN", 130),
     "imediatas": ("regiao-imediata", "BRIM", 500),
 }
+URL_MALHA_UF = "https://servicodados.ibge.gov.br/api/v3/malhas/estados/{uf}"
+URL_UFS = "https://servicodados.ibge.gov.br/api/v1/localidades/estados"
+OBJETO_MUNICIPIOS = "municipios"     # nome unico do objeto nos arquivos por UF (o IBGE usa UF<cod>MU)
 CASAS_COORDENADA = 4                 # ~11 m de precisao: suficiente para um ponto no mapa
 TIMEOUT_SEGUNDOS = 60
 TENTATIVAS = 3
@@ -61,6 +69,7 @@ USER_AGENT = "radar-expansao/0.1 (projeto academico; dados publicos)"
 # ====================================================================
 
 import json
+import sys
 import time
 from datetime import datetime
 from pathlib import Path
@@ -156,8 +165,52 @@ def centroides_municipios(topo: dict) -> dict:
     return resultado
 
 
+def baixar_municipios_por_uf(municipios: list) -> None:
+    """Malha municipal, um TopoJSON por UF: site/dados/malha/municipios/<codigo_uf>.topo.json.
+
+    Cada geometria ganha "id" = codigo IBGE de 7 digitos (inteiro), alem do
+    properties.codarea (texto) que o IBGE ja manda. Confere a contagem de cada UF
+    com a API de Localidades e avisa os municipios que estao sem malha.
+    """
+    pasta = PASTA_MALHA / "municipios"
+    pasta.mkdir(parents=True, exist_ok=True)
+    esperados: dict[int, set] = {}
+    for m in municipios:
+        esperados.setdefault(m["UF-id"], set()).add(m["municipio-id"])
+    ufs = sorted(uf["id"] for uf in chamar_api(URL_UFS, {}))
+    if len(ufs) != 27:
+        raise ValueError(f"esperava 27 UFs, vieram {len(ufs)}")
+    total = total_bytes = 0
+    sem_malha = []
+    print("Baixando a malha municipal por UF:")
+    for uf in ufs:
+        topo = chamar_api(URL_MALHA_UF.format(uf=uf),
+                          {"formato": "application/json", "qualidade": QUALIDADE, "intrarregiao": "municipio"})
+        objetos = topo.get("objects", {})
+        if topo.get("type") != "Topology" or len(objetos) != 1:
+            raise ValueError(f"malha municipal da UF {uf} inesperada")
+        objeto = objetos.pop(next(iter(objetos)))
+        for geometria in objeto["geometries"]:
+            geometria["id"] = int(geometria["properties"]["codarea"])
+        objetos[OBJETO_MUNICIPIOS] = objeto
+        codigos = {g["id"] for g in objeto["geometries"]}
+        if codigos - esperados.get(uf, set()):
+            raise ValueError(f"UF {uf}: malha com municipio fora da UF: {sorted(codigos - esperados[uf])}")
+        sem_malha += sorted(esperados.get(uf, set()) - codigos)
+        caminho = pasta / f"{uf}.topo.json"
+        caminho.write_text(json.dumps(topo, separators=(",", ":")), encoding="utf-8")
+        total += len(codigos)
+        total_bytes += caminho.stat().st_size
+        print(f"    {caminho.relative_to(RAIZ)}: {len(codigos)} municipios ({caminho.stat().st_size / 1024:,.0f} KB)")
+    print(f"    total: {total} municipios em 27 arquivos ({total_bytes / 1024 / 1024:,.2f} MB); "
+          f"sem malha no IBGE: {sem_malha or 'nenhum'}")
+
+
 def main() -> None:
     PASTA_MALHA.mkdir(parents=True, exist_ok=True)
+    if "--so-municipios" in sys.argv:  # so a malha municipal por UF, sem refazer o resto
+        baixar_municipios_por_uf(chamar_api(URL_MUNICIPIOS, {"view": "nivelado"}))
+        return
     print("Baixando as malhas do IBGE:")
     for arquivo, (intrarregiao, objeto, minimo) in CAMADAS.items():
         topo = baixar_malha(intrarregiao, objeto, minimo)
@@ -186,6 +239,8 @@ def main() -> None:
     caminho.write_text(texto, encoding="utf-8")
     print(f"    {caminho.relative_to(RAIZ)}: {len(linhas)} municipios, {sem_ponto} sem ponto "
           f"({caminho.stat().st_size / 1024:,.0f} KB)")
+
+    baixar_municipios_por_uf(municipios)
 
 
 if __name__ == "__main__":
