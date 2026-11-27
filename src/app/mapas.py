@@ -13,7 +13,7 @@
 # =============================================================================
 #
 # OBJETIVO: deixar os mapas de municipio e bairro com duas vistas: "Mapa de
-#           ruas" (tiles publicos do CARTO/OpenStreetMap, sem token) e "So
+#           ruas" (tiles publicos do OpenStreetMap, sem chave) e "So
 #           contornos" (a vista original, sem servidor de mapas).
 # ENTRADA:  a figura montada pela pagina com tracos geograficos (Scattergeo e
 #           Choropleth) e a caixa (lon/lat) que o mapa deve enquadrar
@@ -42,12 +42,12 @@
 # ============================== CONFIG ==============================
 RUAS, CONTORNOS = "ruas", "contornos"
 ROTULOS_FUNDO = {RUAS: "Mapa de ruas", CONTORNOS: "Só contornos"}
-ESTILO_RUAS = "carto-darkmatter"         # alternativa mais clara: "open-street-map"
-OPACIDADE_AREAS = 0.45                   # areas semitransparentes: as ruas aparecem por baixo
+ESTILO_RUAS = "open-street-map"          # tiles do OpenStreetMap, sem chave (os do CARTO passaram a exigir chave)
+OPACIDADE_AREAS = 0.6                    # areas semitransparentes: as ruas aparecem por baixo, com contraste no fundo claro
 LARGURA_REFERENCIA_PX = 700              # largura usada no zoom (a de uma tela estreita: cabe em todas)
 TAMANHO_ALVO_CLIQUE = 26                 # px do ponto invisivel que recebe o clique no centro de cada area
 FOLGA_ZOOM = 0.25                       # um pouco mais afastado: legenda e borda nao cobrem a area
-CREDITO = "Mapa de fundo: © OpenStreetMap contributors © CARTO"
+CREDITO = "Mapa de fundo: © OpenStreetMap contributors"
 # ====================================================================
 
 import math
@@ -99,7 +99,7 @@ def pontos_clicaveis(dados: dict) -> go.Scattermap:
 
 
 def em_mapa_de_ruas(figura: go.Figure, caixa: tuple, altura_px: int) -> go.Figure:
-    """Mesma figura, com os tracos geograficos sobre o mapa de ruas do CARTO."""
+    """Mesma figura, com os tracos geograficos sobre o mapa de ruas do OpenStreetMap."""
     nova = go.Figure()
     for traco in figura.data:
         dados = traco.to_plotly_json()
