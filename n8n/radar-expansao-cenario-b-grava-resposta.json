@@ -1,0 +1,278 @@
+{
+  "name": "Radar · Cenário B · grava resposta",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Radar · Cenário B · grava resposta\nSub-workflow chamado pelo **Radar · Cenário B**, uma vez por chamada de API: GET com 3 tentativas → valida o JSON → `INSERT` do payload inteiro em `bronze.api_resposta` (`origem_carga = 'n8n'`, `ON CONFLICT DO NOTHING`: a mesma resposta não entra duas vezes). Devolve só um resumo pequeno (nova / já existia / nada novo / erro). Execuções bem-sucedidas não são salvas, para não guardar o JSON.",
+        "height": 200,
+        "width": 560,
+        "color": 7
+      },
+      "id": "fcbd0f36-3dbd-5df9-a03e-9c47677fd90b",
+      "name": "Nota · grava resposta",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "id": "e6fa1ee3-1c75-57be-a372-99bc74beb24d",
+      "name": "Recebe a chamada",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.base + $json.endpoint }}",
+        "sendQuery": true,
+        "specifyQuery": "json",
+        "jsonQuery": "={{ JSON.stringify($json.params) }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "radar-expansao/0.1 (projeto academico de engenharia de dados; cenario B n8n)"
+            },
+            {
+              "name": "Accept",
+              "value": "application/json"
+            }
+          ]
+        },
+        "options": {
+          "timeout": "={{ $json.timeout_ms }}",
+          "response": {
+            "response": {
+              "fullResponse": true,
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "id": "d47f934e-5f87-5a86-b10a-240f5e248828",
+      "name": "GET na API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        20,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 4000,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mesma validacao do cenario A: so grava JSON. HTML com status 200 (BCB) ou corpo vazio vira erro.\nconst c = $('Recebe a chamada').first().json;\nconst r = $json;\nconst tipo = String(r.headers?.['content-type'] ?? '');\nconst vazio = r.body === undefined || r.body === null || r.body === '' ||\n              (Array.isArray(r.body) && r.body.length === 0);\nif (c.fonte === 'BCB' && (r.statusCode === 404 || vazio)) {\n  return [{ json: { gravar: false, resultado: 'nada_novo' } }];\n}\nif (!tipo.toLowerCase().includes('json') || typeof r.body !== 'object' || vazio) {\n  return [{ json: { gravar: false, resultado: 'erro',\n                    mensagem: `resposta invalida (HTTP ${r.statusCode}, content-type ${tipo || 'vazio'})` } }];\n}\nreturn [{ json: { gravar: true, http_status: r.statusCode, payload: r.body } }];\n"
+      },
+      "id": "d65218b0-7804-5557-af42-dadffe7cb05f",
+      "name": "Valida a resposta",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        240,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "309249d5-cdf9-5f9a-8993-332211be0a87",
+              "leftValue": "={{ $json.gravar }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "500063c0-29aa-5838-a048-2add13dc4c9a",
+      "name": "Gravar?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        460,
+        -100
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO bronze.api_resposta\n       (origem_carga, fonte, recurso, endpoint, parametros, url, lote,\n        modificacao_fonte, http_status, payload, execucao_id)\nVALUES ('n8n', $1, $2, $3, $4::jsonb, $5, $6, $7::date, $8, $9::jsonb, $10)\nON CONFLICT ON CONSTRAINT uq_api_resposta DO NOTHING\nRETURNING resposta_id;",
+        "options": {
+          "queryReplacement": "={{ (() => { const c = $('Recebe a chamada').first().json; return [ c.fonte, c.recurso, c.endpoint, JSON.stringify(c.parametros), c.url, c.lote, c.modificacao, $json.http_status, JSON.stringify($json.payload), c.execucao_id ]; })() }}"
+        }
+      },
+      "id": "e49a6aec-c806-5a3c-8842-d0474b60799c",
+      "name": "INSERT na bronze",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        680,
+        -200
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CREDENCIAL_POSTGRES",
+          "name": "Radar · Postgres etl_radar"
+        }
+      },
+      "alwaysOutputData": true,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Recebe a chamada').first().json;\nconst nova = Boolean($json.resposta_id);\nreturn [{ json: { execucao_id: c.execucao_id, recurso: c.recurso, lote: c.lote,\n                  resultado: nova ? 'nova' : 'ja_existia', http_status: 200 } }];\n"
+      },
+      "id": "4d900cc3-b3d4-55fd-a010-21ebbbca52c7",
+      "name": "Resultado: gravado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        -260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const c = $('Recebe a chamada').first().json;\nreturn [{ json: { execucao_id: c.execucao_id, recurso: c.recurso, lote: c.lote,\n                  resultado: $json.resultado, mensagem: $json.mensagem ?? null } }];\n"
+      },
+      "id": "b53203cf-d3b4-5837-ac16-64da0df51956",
+      "name": "Resultado: sem gravar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// HTTP com erro depois das 3 tentativas, ou INSERT com erro.\nconst c = $('Recebe a chamada').first().json;\nconst e = $json.error ?? $json;\nconst texto = typeof e === 'string' ? e : (e.message ?? JSON.stringify(e));\n// BCB: 404 = \"nada novo\" (nao e erro)\nif (c.fonte === 'BCB' && /404/.test(texto)) {\n  return [{ json: { execucao_id: c.execucao_id, recurso: c.recurso, lote: c.lote, resultado: 'nada_novo' } }];\n}\nreturn [{ json: { execucao_id: c.execucao_id, recurso: c.recurso, lote: c.lote,\n                  resultado: 'erro', mensagem: String(texto).slice(0, 300) } }];\n"
+      },
+      "id": "ab4a3f31-7272-5506-b92e-c1ec336e36d5",
+      "name": "Resultado: erro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        160
+      ]
+    }
+  ],
+  "connections": {
+    "Recebe a chamada": {
+      "main": [
+        [
+          {
+            "node": "GET na API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "GET na API": {
+      "main": [
+        [
+          {
+            "node": "Valida a resposta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resultado: erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valida a resposta": {
+      "main": [
+        [
+          {
+            "node": "Gravar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gravar?": {
+      "main": [
+        [
+          {
+            "node": "INSERT na bronze",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resultado: sem gravar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "INSERT na bronze": {
+      "main": [
+        [
+          {
+            "node": "Resultado: gravado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Resultado: erro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "none",
+    "saveManualExecutions": false,
+    "saveExecutionProgress": false,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

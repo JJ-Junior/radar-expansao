@@ -591,25 +591,30 @@ comparados; o squad escolhe um para a entrega (⏳).
 
 Um container de ETL (imagem Python fixa, com o `requirements.txt` instalado e o código deste repositório montado só para leitura)
 fica na mesma rede Docker interna do n8n e do banco. Ele **não publica porta** nem fica exposto fora do servidor.
-Um disparador HTTP interno executa apenas **jobs fixos** — nenhum comando livre vem da requisição:
+Um disparador HTTP interno (`infra/radar-etl/disparador.py`) executa apenas **jobs fixos** — nenhum comando livre vem da requisição:
 
-| Job | Executa |
+| Chamada | Executa |
 |---|---|
-| `ingerir_ibge` | `python -m src.ingestao.carga_incremental --fonte ibge --disparado-por agenda_n8n` |
-| `ingerir_bcb` | `python -m src.ingestao.carga_incremental --fonte bcb --disparado-por agenda_n8n` |
-| `transformar` | `python -m src.transformacao.executar` |
+| `POST /rodar/cenario-a` | `python -m src.ingestao.carga_incremental --disparado-por agenda_n8n` e, se der certo, `python -m src.transformacao.executar` (com a trava do banco pega de novo) |
+| `POST /rodar/transformar` | só `python -m src.transformacao.executar`; usado pelo cenário B e só aceito com a trava em `em_uso_por = 'n8n'` (senão 409 `sem_trava`) |
+| `GET /saude` | `livre` ou `ocupado` (um job por vez no container) |
 
-O n8n chama cada job com um nó *HTTP Request* (`POST` interno, com um token secreto num header guardado como credencial do n8n).
-A resposta é síncrona e traz o código de retorno do script, então o n8n marca erro se o script falhar.
+Os `POST` exigem o header `X-Radar-Token`, guardado no n8n como credencial *Header Auth*. A resposta é síncrona (JSON com
+`status`, etapas e código de saída de cada script, resumo de `bronze.execucao`, duração e commit): **200** sucesso,
+**409** ocupado ou trava, **500** erro, **401** token.
+
+Workflow **Radar · Cenário A** (`n8n/radar-expansao-cenario-a.json`):
 
 ```mermaid
 flowchart LR
-    T["n8n · Schedule Trigger<br/>segunda 06:00"] --> I1["HTTP interno<br/>job ingerir_ibge"]
-    I1 --> I2["HTTP interno<br/>job ingerir_bcb"]
-    I2 --> TR["HTTP interno<br/>job transformar"]
-    I1 -.-> B[("bronze<br/>origem_carga = 'python'")]
-    I2 -.-> B
-    TR -.-> SG[("silver → gold")]
+    T["Schedule Trigger<br/>segunda 06:00"] --> S["GET /saude"]
+    S -- livre --> P["POST /rodar/cenario-a<br/>timeout 15 min"]
+    P -- 200 --> OK["Resumo do sucesso"]
+    P -- "409 / erro" --> R["Postgres: registra em<br/>bronze.execucao"]
+    S -- "ocupado / fora" --> R
+    R -- 409 --> F["Fim sem rodar"]
+    R -- erro --> E["Stop and Error"]
+    P -.-> B[("bronze · origem_carga = 'python'<br/>→ silver → gold")]
 ```
 
 - `src/ingestao/` faz as chamadas com `requests` (timeout, 3 tentativas, validação de `content-type`) e grava na bronze.
@@ -619,30 +624,43 @@ flowchart LR
 
 ### 8.2 Cenário B — ingestão no próprio n8n
 
+Workflow **Radar · Cenário B** (`n8n/radar-expansao-cenario-b.json`) + sub-workflow **Radar · Cenário B · grava resposta** +
+error workflow **Radar · Cenário B · erro**:
+
 ```mermaid
 flowchart LR
-    T["n8n · Schedule Trigger<br/>segunda 07:00"] --> K["Postgres: pega a trava<br/>abre execução 'n8n'"]
-    K --> P["HTTP Request: IBGE /periodos<br/>Postgres: vw_ultimo_periodo"]
-    P --> C{"Período novo<br/>ou modificado?"}
-    C -- sim --> L["Loop ano × UF<br/>HTTP Request com retry"]
-    C -- não --> BCB
-    L --> G["Postgres: INSERT do<br/>JSON bruto ($1::jsonb)"]
-    G --> BCB["BCB: última data salva<br/>→ janela nova (404 = nada novo)"]
-    BCB --> TR["HTTP interno<br/>job transformar"]
-    TR --> F["Postgres: fecha execução<br/>e solta a trava"]
+    T["Manual ou Schedule<br/>segunda 07:00 (inativo)"] --> CF["Code: Config"]
+    CF --> K["Postgres: pega a trava<br/>em_uso_por = 'n8n'"]
+    K -- "não pegou" --> IG["Postgres: registra<br/>ignorada_trava"]
+    K -- pegou --> U["Postgres: vw_ultimo_periodo<br/>(origem n8n)"]
+    U --> P["HTTP: IBGE /periodos<br/>(7 agregados)"]
+    P --> M["Code: monta as chamadas<br/>lotes novos ou modificados"]
+    M --> AB["Postgres: abre<br/>bronze.execucao"]
+    AB --> G["Sub-workflow por chamada:<br/>GET com retry → INSERT jsonb"]
+    G --> FE["Postgres: fecha<br/>bronze.execucao"]
+    FE -- "houve nova" --> TR["POST /rodar/transformar"]
+    FE -- "nada novo" --> SO
+    TR --> SO["Postgres: solta a trava"]
+    SO --> FIM{"tudo certo?"}
 ```
 
-- Nós *HTTP Request* (com *Retry On Fail*, timeout e espera entre tentativas), *Loop Over Items* para os lotes **ano × UF**
-  (seção 6, item 4), nó *Code* só para montar URLs e parâmetros, nó *Postgres* para ler o último período e gravar o JSON
-  inteiro em `jsonb` **sem transformar** — uma linha por chamada.
-- Memória do n8n: não "explodir" o JSON em milhares de itens; histórico de execuções com limpeza automática (7 dias),
-  sem guardar o conteúdo das execuções bem-sucedidas que carregam JSON grande.
-- Carga inicial: o mesmo workflow com gatilho manual e `modo = 'inicial'`, rodando por agregado.
-- Credencial Postgres do n8n com o papel `etl_radar` (ou um papel ainda mais restrito: só `INSERT`/`SELECT` na bronze).
+- **Mesmo contrato da bronze:** `bronze.api_resposta` (JSON inteiro em `jsonb`, sem transformar, uma linha por chamada,
+  `ON CONFLICT DO NOTHING`) e `bronze.execucao` (uma linha por recurso, mesma regra de status da seção 3.1), com `origem_carga = 'n8n'`.
+- **Mesmos recursos e regras de incremental** do cenário A (seção 7), lidos de `bronze.vw_ultimo_periodo` filtrada por `'n8n'`.
+  Agregados municipais sempre por ano × UF (seção 6, item 4) e só a partir de `ANO_INICIO` (padrão 2022, nó *Config*):
+  o histórico longo fica com o cenário A. A primeira execução faz ~370 chamadas; as semanais, só as dos períodos novos.
+- **Memória:** cada chamada roda num sub-workflow que devolve só um resumo (nova, já existia, nada novo, erro) e não salva
+  execução bem-sucedida; o JSON não fica acumulado na execução principal.
+- **Retry:** nó *HTTP Request* com 3 tentativas e espera de 4 s; 404 do BCB = "nada novo"; resposta que não é JSON = erro.
+- **Trava:** pega no início e solta no fim, inclusive quando chamadas falham (o fluxo segue e marca erro só depois de soltar).
+  Se o workflow quebrar no meio, o error workflow solta a trava e fecha as execuções abertas; numa execução manual, a trava
+  expira sozinha em 2 horas.
+- **Transformação:** só se houve resposta nova, pelo `POST /rodar/transformar` do container (seção 8.1) — a mesma regra SQL do A.
+- Credenciais do n8n: Postgres com o papel `etl_radar` e *Header Auth* do token; nenhuma vai nos arquivos exportados.
 
 ### 8.3 Convivência dos cenários: trava e agenda
 
-- **Agendas diferentes:** cenário A na segunda às 06:00; cenário B na segunda às 07:00 (ou só manual, para demonstração).
+- **Agendas diferentes:** cenário A na segunda às 06:00 (ativo); cenário B na segunda às 07:00, desligado por padrão (roda manual, para demonstração e comparação).
 - **Trava de carga:** toda execução, nos dois cenários, começa tentando pegar a trava e só segue se conseguir. Se não conseguir,
   registra `status = 'ignorada_trava'` em `bronze.execucao` e termina sem chamar as APIs. A trava vale entre processos e
   conexões diferentes (Python e nó Postgres do n8n) e expira sozinha se um processo morrer no meio.
@@ -699,8 +717,7 @@ ORDER BY indicador_id, ano;
 Onde os lotes coincidem (localidades, IPCA, séries do BCB), também dá para comparar direto os `payload_hash` da bronze,
 calculados pelo Postgres (diferenças de serialização entre Python e n8n não interferem).
 
-Workflows exportados (sempre **sem credenciais**): `n8n/radar-expansao-cenario-a.json` (agenda + disparo dos jobs) e
-`n8n/radar-expansao-cenario-b.json` (ingestão completa no n8n).
+Workflows exportados (sempre **sem credenciais**) e passo a passo de importação em [`n8n/README.md`](n8n/README.md).
 
 ## 9. Dashboard (Streamlit) e site de apoio
 

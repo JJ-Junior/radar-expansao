@@ -1,0 +1,78 @@
+{
+  "name": "Radar · Cenário B · erro",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## Radar · Cenário B · erro\n*Error workflow* do **Radar · Cenário B**: se a execução agendada quebrar no meio, solta a trava do n8n e fecha as execuções que ficaram `em_andamento` com `status = 'erro'`. (Execuções manuais não acionam error workflow; para elas, a trava expira sozinha em 2 horas.)",
+        "height": 180,
+        "width": 520,
+        "color": 7
+      },
+      "id": "9474536f-6bbc-5912-9bff-393ae2b54660",
+      "name": "Nota · erro",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -260
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "0a1330c9-b62d-55f4-ba7d-7fa89d2d7633",
+      "name": "Erro no cenário B",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH trava AS (\n    UPDATE bronze.trava_carga SET em_uso_por = NULL, rodada_id = NULL, desde = NULL\n     WHERE trava_id = 1 AND em_uso_por = 'n8n'\n    RETURNING trava_id\n), abertas AS (\n    UPDATE bronze.execucao\n       SET finalizado_em = now(), status = 'erro',\n           mensagem = left('n8n: workflow falhou no no \"' || $1 || '\": ' || $2, 1000)\n     WHERE origem_carga = 'n8n' AND status = 'em_andamento'\n    RETURNING execucao_id\n)\nSELECT (SELECT count(*) FROM trava) AS travas_soltas, (SELECT count(*) FROM abertas) AS execucoes_fechadas;",
+        "options": {
+          "queryReplacement": "={{ [ $json.execution?.lastNodeExecuted ?? 'desconhecido', $json.execution?.error?.message ?? 'sem mensagem' ] }}"
+        }
+      },
+      "id": "e89115a4-54b7-5797-8f30-53249471f48a",
+      "name": "Solta a trava e fecha execuções",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "position": [
+        40,
+        0
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "CREDENCIAL_POSTGRES",
+          "name": "Radar · Postgres etl_radar"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Erro no cenário B": {
+      "main": [
+        [
+          {
+            "node": "Solta a trava e fecha execuções",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "America/Sao_Paulo",
+    "saveDataErrorExecution": "all",
+    "saveDataSuccessExecution": "all"
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true
+  }
+}

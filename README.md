@@ -9,7 +9,7 @@
 > | 3 · Camada bronze (ingestão em Python) | ✅ concluída: 13 recursos carregados no banco do projeto; incremental sem duplicar |
 > | 4 · Camada silver (modelo estrela) | ✅ concluída: 5 dimensões, 2 fatos, 12 testes de qualidade passando |
 > | 5 · Camada gold (ranking, contexto macro, semáforo) | ✅ concluída: tabelas de consumo + parâmetros do ranking + coordenadas e estimativas do simulador de região (P9) + semáforo com janela móvel até o último fechamento, 25 testes de qualidade passando |
-> | 6 · n8n | ⏳ próxima etapa |
+> | 6 · n8n | 🟡 workflows dos cenários A e B prontos em `n8n/`; execução de validação e print em andamento |
 > | 7 · Dashboard Streamlit | ✅ app com 6 páginas (inclui o simulador de região) lendo a gold pela API REST, com cópia de contingência; publicado em https://radar-expansao.streamlit.app |
 > | Extra · Site de apoio | ✅ publicado em https://radar-expansao.lovelearning.com.br |
 
@@ -185,7 +185,34 @@ as 5 recomendadas, o top 10 e o semáforo do momento econômico.
 
 **Passo 6 — dashboard:** `streamlit run src/app/app.py` (detalhes e publicação na seção 5).
 
-**Passo seguinte** — automação no n8n: _(a preencher quando a etapa for concluída)_.
+**Passo 7 — automação no n8n:** importar os workflows de [`n8n/`](n8n/README.md) (sem credenciais; criar no n8n as
+credenciais `Radar · Postgres etl_radar` e `Radar · X-Radar-Token`) e ativar o **Radar · Cenário A**, que roda toda
+segunda às 06:00 (America/Sao_Paulo). O container de ETL que ele dispara está em [`infra/radar-etl/`](infra/radar-etl/)
+e no guia de instalação ([`docs/instalacao.md`](docs/instalacao.md), seção 4.1).
+
+### 6.1 Automação: cenário A × cenário B
+
+Os dois cenários do enunciado foram construídos e gravam na **mesma bronze**, com o mesmo contrato
+(`bronze.api_resposta` + `bronze.execucao`, separados por `origem_carga`), a mesma trava contra execução simultânea
+(`bronze.trava_carga`) e a **mesma transformação** (as regras SQL da silver e da gold, rodadas por
+`src/transformacao/executar.py`). A diferença é quem chama as APIs. Detalhes em [`spec.md`](spec.md#8-ingestão-e-automação-dois-cenários).
+
+| | **Cenário A** — n8n agenda, Python ingere | **Cenário B** — o n8n ingere |
+|---|---|---|
+| Workflow | **Radar · Cenário A**: agenda → `GET /saude` → `POST /rodar/cenario-a` → resultado (4 nós de trabalho) | **Radar · Cenário B**: trava → último período salvo → `/periodos` do IBGE → monta as chamadas → sub-workflow por chamada (GET + `INSERT`) → fecha a execução → `POST /rodar/transformar` → solta a trava |
+| Quem chama IBGE e BCB | `src/ingestao/` (Python, `requests`) no container de ETL | nós *HTTP Request* do n8n |
+| Lotes do IBGE | 1 ano × todos os municípios (divide por UF só se passar do limite) | sempre ano × UF (27 chamadas por ano), para respostas pequenas na memória do n8n |
+| Alcance | histórico completo + incremental semanal | anos recentes (`ANO_INICIO = 2022`) + incremental semanal |
+| Agenda | **ativo**: segunda 06:00 | **desligado** por padrão (manual); se ativado, segunda 07:00 |
+| Erros | código de saída do script → HTTP 500 → execução com erro no n8n; 409 (trava) registrado sem erro | retry de 3 tentativas por chamada; lote com erro marca o recurso como `erro` em `bronze.execucao`; a trava é solta mesmo com erro (e por um *error workflow* se o fluxo quebrar) |
+| Revisão em PR | código Python com `CONFIG` no topo | JSON exportado (mais difícil de revisar) |
+| Ponto forte | uma implementação para carga inicial e incremental; testável fora do n8n | toda a ingestão visível num fluxo só, chamada por chamada |
+| Ponto fraco | um container a mais para manter | lógica espalhada em nós; memória e número de chamadas exigem cuidado |
+
+**Escolha para a entrega: cenário A** como rotina oficial (agenda ativa). O cenário B fica pronto para demonstração e para a
+comparação: como as duas cargas convivem na bronze, a silver pode ser gerada só com uma origem
+(`python -m src.transformacao.executar --origem n8n` ou `--origem python`) e os resumos de controle comparados
+(`spec.md`, seção 8.5).
 
 ## 7. Estrutura do repositório
 
@@ -199,7 +226,7 @@ as 5 recomendadas, o top 10 e o semáforo do momento econômico.
 | `src/ingestao/` | Coleta das APIs → bronze |
 | `src/transformacao/` | Bronze → silver → gold |
 | `src/app/` | Dashboard Streamlit |
-| `n8n/` | Workflow de automação exportado (sem credenciais) |
+| `n8n/` | Workflows do n8n exportados (sem credenciais) e guia de importação |
 | `site/` | Site de apoio (documentação + vitrine de dados) |
 | `infra/` | Modelos de configuração do Supabase e do n8n, SQL inicial de papéis e script de backup |
 | `docs/instalacao.md` | Guia de instalação da infraestrutura |
