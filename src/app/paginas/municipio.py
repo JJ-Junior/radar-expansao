@@ -169,14 +169,16 @@ peso_grupo = criterios.groupby("grupo")["peso"].sum()
 col_grafico, col_tabela = st.columns([3, 2])
 with col_grafico:
     barras = [
-        (f"{rotulo} · {fmt.porcentagem(peso_grupo.get(chave), 0)}", nota_valor)
+        (f"{rotulo} · {fmt.porcentagem(peso_grupo.get(chave), 0)}", nota_valor,
+         fmt.TEXTO_CURTO_CRITERIO.get(chave, ""))
         for chave, rotulo, nota_valor in fmt.notas_por_criterio(cidade)
     ][::-1]
     figura = go.Figure(go.Bar(
         x=[b[1] for b in barras], y=[b[0] for b in barras], orientation="h",
         marker_color=fmt.COR_DADO, text=[fmt.numero(b[1]) for b in barras],
         textposition="outside", cliponaxis=False,
-        hovertemplate="%{y}: nota %{x:.1f}<extra></extra>",
+        customdata=[b[2] for b in barras],
+        hovertemplate="<b>%{y}</b>: nota %{x:.1f}<br>%{customdata}<extra></extra>",
     ))
     figura.add_vline(x=50, line_dash="dot", line_color="#8a929b",
                      annotation_text="mediana do universo", annotation_position="top")
@@ -197,6 +199,9 @@ with col_tabela:
         tabela_criterios, hide_index=True,
         column_config={
             "Peso": st.column_config.NumberColumn(format="%.0f%%"),
+            "Componente": st.column_config.TextColumn(
+                help="Passe o mouse nas barras do gráfico para ver o que cada um mede; o texto completo está "
+                     "em \"Como o ranking é calculado\"."),
             "Nota": st.column_config.ProgressColumn(min_value=0, max_value=100, format="%.1f",
                                                     color=fmt.COR_DADO),
         },

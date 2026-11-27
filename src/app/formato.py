@@ -91,6 +91,61 @@ COMPONENTES = {
     "mercado_formal": ("Mercado formal", "Salário médio mensal dos empregos formais"),
 }
 
+# O que compoe a nota: o MESMO texto do site de apoio (site/js/indicadores.js). Anos entre chaves
+# vem de site/dados/meta.json ("periodos"), como no site.
+TEXTO_CURTO_CRITERIO = {
+    "mercado": "População: mais moradores, mais clientes possíveis",
+    "poder_compra": "Renda por pessoa: quem pode pagar mensalidade",
+    "espaco_competitivo": "Menos academias por habitante dá nota maior",
+    "crescimento": "Quanto a população cresce por ano",
+    "riqueza": "PIB por habitante: nível e tendência",
+    "mercado_formal": "Salário médio dos empregos formais",
+}
+COMPOSICAO_NOTA = [  # (grupo, peso, sentido, o que mede, de onde vem, por que importa)
+    ("mercado", "25%", "maior é melhor",
+     "Quantas pessoas moram na cidade (população estimada mais recente).",
+     "IBGE, estimativa de população (tabela 6579), {populacao}.",
+     "Mais moradores querem dizer mais clientes possíveis para uma unidade."),
+    ("poder_compra", "25%", "maior é melhor",
+     "Renda média por pessoa das famílias, em R$ por mês.",
+     "IBGE, Censo {censo} (tabela 10295).",
+     "Mostra se os moradores conseguem pagar a mensalidade. Também é a trava das recomendadas."),
+    ("espaco_competitivo", "20%", "menor é melhor",
+     "Academias formais (CNAE 93.13-1, condicionamento físico) para cada 10 mil habitantes.",
+     "IBGE, Cadastro Central de Empresas (tabela 9418), {academias}, dividido pela população.",
+     "Menos academias por habitante deixa mais espaço para uma nova. A escala é invertida e os extremos são "
+     "limitados aos percentis 5% e 95%."),
+    ("crescimento", "15%", "maior é melhor",
+     "Crescimento anual da população desde o Censo {censo}.",
+     "IBGE, Censo {censo} (tabela 4714) e estimativa de população (tabela 6579).",
+     "Cidade que cresce traz clientes novos nos próximos anos."),
+    ("riqueza", "10%", "maior é melhor",
+     "PIB por habitante: o valor do último ano (metade do peso) e o crescimento médio anual em 5 anos "
+     "(a outra metade).",
+     "IBGE, PIB dos Municípios (tabela 5938), até {pib}, dividido pela população.",
+     "Uma economia local forte e em alta sustenta o consumo."),
+    ("mercado_formal", "5%", "maior é melhor",
+     "Salário médio mensal dos empregos formais, em R$.",
+     "IBGE, Cadastro Central de Empresas (tabela 9509), {salario}.",
+     "Emprego formal dá renda estável para um gasto que se repete todo mês."),
+]
+FRASE_COMPOSICAO = (
+    "Cada nota vai de 0 a 100 e é o percentil da cidade entre as que têm 50 mil habitantes ou mais: nota 80 quer "
+    "dizer que ela está à frente de 80% delas naquele critério. A nota final é a média ponderada pelos pesos."
+)
+PERIODOS_PADRAO = {"populacao": 2026, "censo": 2022, "pib": 2023, "academias": 2024, "salario": 2024}
+
+
+def composicao_nota(periodos: dict | None = None) -> list[dict]:
+    """Linhas do bloco "O que compoe a nota", com os anos da ultima exportacao."""
+    anos = {**PERIODOS_PADRAO, **{k: v for k, v in (periodos or {}).items() if v}}
+    return [
+        {"Componente": CRITERIOS[g], "Peso": peso, "Sentido": sentido, "O que mede": mede.format(**anos),
+         "De onde vem": fonte.format(**anos), "Por que importa": porque}
+        for g, peso, sentido, mede, fonte, porque in COMPOSICAO_NOTA
+    ]
+
+
 # Nome das pesquisas citadas em gold.ranking_criterio.fonte ("IBGE 6579" etc.)
 PESQUISAS_IBGE = {
     "6579": "Estimativas de população",

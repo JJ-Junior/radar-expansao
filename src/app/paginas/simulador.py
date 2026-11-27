@@ -306,7 +306,9 @@ if not tabela.empty:
         "distancia_km": st.column_config.NumberColumn("Distância (km)", format="%.0f"),
         "nota_final": st.column_config.ProgressColumn("Nota final", min_value=0, max_value=100, format="%.1f",
                                                       color=fmt.COR_DADO),
-        **{f"nota_{c}": st.column_config.NumberColumn(r, format="%.0f") for c, r in fmt.CRITERIOS.items()},
+        **{f"nota_{c}": st.column_config.NumberColumn(
+            r, format="%.0f", help=f"{fmt.TEXTO_CURTO_CRITERIO[c]}. Nota de 0 a 100 (percentil).")
+           for c, r in fmt.CRITERIOS.items()},
         "populacao": st.column_config.NumberColumn("População", format="localized"),
         "recomendada": st.column_config.TextColumn("Recomendada", width="small"),
     }

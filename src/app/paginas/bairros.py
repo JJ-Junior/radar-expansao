@@ -479,10 +479,14 @@ def escalas_da_cidade() -> tuple[dict, str, str | None]:
     ibge = ranking[(ranking["escala"] == "ibge")]
     tipo = resumo.get("escala_ibge_tipo", parametros.get("escala_ibge_tipo", "sem_coluna"))
     if tipo == "sem_coluna":  # view ainda sem as colunas novas: decide pelos dados
+        # mesma regra do pipeline: metade ou mais dos nomes e de bacia/regiao/zona ("Setor" e bairro em
+        # Goiania), ou o IBGE tem menos de 10% do numero de bairros populares
         nomes_ibge = ibge["unidade_nome"].astype(str)
-        grandes = not ibge.empty and float(pd.to_numeric(ibge["populacao"], errors="coerce").median()) > 20_000
-        tipo = None if ibge.empty else ("regiao" if grandes or nomes_ibge.str.contains(
-            r"^(bacia|regi[aã]o|zona|setor)\b", case=False, regex=True).any() else "bairro")
+        de_regiao = nomes_ibge.str.contains(r"^(bacia|regi[aã]o|zona)\b", case=False, regex=True).mean() >= 0.5
+        n_ibge = resumo.get("bairros_ibge") or ibge["unidade_id"].nunique()
+        n_popular = resumo.get("bairros_populares") or (ranking["escala"] == "popular").sum()
+        poucos = n_ibge < 0.1 * n_popular
+        tipo = None if ibge.empty else ("regiao" if de_regiao or poucos else "bairro")
     rotulos = {"popular": "Bairros populares"}
     if tipo and not ibge.empty:
         rotulos = {"ibge": ROTULO_ESCALA_IBGE.get(tipo, "Bairros do IBGE"), **rotulos}
@@ -619,11 +623,6 @@ fora = unidades[~unidades["elegivel"]]
 dica = "%{text}<extra></extra>"  # sem o nome do traco ao lado da caixa
 figura = go.Figure()
 barra = {"title": {"text": "Nota"}, "thickness": 12, "len": 0.6}
-contorno = (dados.malha_municipios_uf(municipio_id // 100_000) or {}).get(municipio_id)
-if contorno:  # limite do municipio, so como referencia
-    lon_c, lat_c = linhas_de_contorno(contorno)
-    figura.add_trace(go.Scattergeo(lon=lon_c, lat=lat_c, mode="lines", hoverinfo="skip", showlegend=False,
-                                   line={"color": "rgba(242,241,236,.45)", "width": 1}))
 com_geo = unidades[unidades["_geo"].notna()]
 for grupo, cinza in ((com_geo[~com_geo["elegivel"]], True), (com_geo[com_geo["elegivel"]], False)):
     if grupo.empty:

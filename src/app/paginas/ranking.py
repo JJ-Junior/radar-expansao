@@ -209,8 +209,8 @@ COLUNAS = {
                                                   format="%.1f", color=fmt.COR_DADO),
     "recomendada": st.column_config.TextColumn("Recomendada", width="small"),
     **{
-        f"nota_{chave}": st.column_config.NumberColumn(rotulo, format="%.0f",
-                                                       help=f"Nota de {rotulo.lower()} (0 a 100)")
+        f"nota_{chave}": st.column_config.NumberColumn(
+            rotulo, format="%.0f", help=f"{fmt.TEXTO_CURTO_CRITERIO[chave]}. Nota de 0 a 100 (percentil).")
         for chave, rotulo in fmt.CRITERIOS.items()
     },
     "alertas": st.column_config.TextColumn("Alertas"),

@@ -109,17 +109,17 @@ with col_rosca:
     st.plotly_chart(rosca, config={"displayModeBar": False},
                     alt="Rosca com o peso de cada um dos seis critérios.")
 
-st.markdown(
-    "- **Mercado (25%) + poder de compra (25%)** são a base: a academia precisa de gente **e** de "
-    "renda para pagar a mensalidade.\n"
-    "- **Espaço competitivo (20%)** separa o Radar de um ranking de cidades grandes: uma capital "
-    "pode ter muita gente e já estar cheia de academias.\n"
-    "- **Crescimento (15%)** mostra demanda nova; nunca pesa sozinho, porque crescer sem renda é "
-    "armadilha.\n"
-    "- **Riqueza local (10%)** junta o nível do PIB per capita e a tendência dele em 5 anos.\n"
-    "- **Mercado formal (5%)** é um ajuste fino: salário formal mais alto indica renda estável "
-    "para uma mensalidade recorrente."
-)
+# --- O que compoe a nota (mesmo texto do site de apoio) -----------------------------
+st.subheader("O que compõe a nota")
+linhas_nota = fmt.composicao_nota(dados.ler_meta_snapshot().get("periodos"))
+for par in range(0, len(linhas_nota), 2):  # cartoes de dois em dois: o texto aparece inteiro
+    for coluna, linha in zip(st.columns(2), linhas_nota[par:par + 2]):
+        with coluna.container(border=True, height="stretch"):
+            st.markdown(f"**{linha['Componente']}** · {linha['Peso']} · {linha['Sentido']}")
+            st.markdown(linha["O que mede"])
+            st.markdown(f"**Fonte:** {linha['De onde vem']}")
+            st.markdown(f"**Por que importa:** {linha['Por que importa']}")
+st.caption(fmt.FRASE_COMPOSICAO)
 
 # --- Regras ----------------------------------------------------------------------
 st.subheader("Regras do cálculo")
