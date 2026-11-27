@@ -47,12 +47,15 @@ COLUNAS = ["cnpj", "cnae_principal", "academia_principal", "academia_secundaria"
            "situacao", "data_inicio", "tipo_logradouro", "logradouro", "numero", "bairro", "cep", "uf",
            "municipio_receita", "cod_municipio", "data_referencia"]
 # nomes que a Receita grafa diferente do IBGE (normalizados, UF + nome Receita -> nome IBGE)
-GRAFIAS = {}
+GRAFIAS = {("RR", "SAO LUIZ"): "SAO LUIZ DO ANAUA", ("RN", "ARES"): "AREZ", ("TO", "FORTALEZA DO TABOCAO"): "TABOCAO",
+           ("TO", "SAO VALERIO DA NATIVIDADE"): "SAO VALERIO", ("RN", "BOA SAUDE"): "JANUARIO CICCO"}
+SEMELHANCA_NOME_MIN = 0.8   # aproximacao de nome (difflib) para o que nao casou exato
 # ====================================================================
 
 import argparse
 import base64
 import csv
+import difflib
 import io
 import json
 import os
@@ -120,6 +123,13 @@ def de_para_municipios(tmp):
     return {cod_rf: norm(nome) for cod_rf, nome in receita}, por_nome
 
 
+def _mais_parecido(uf, nome, por_nome):
+    """Codigo IBGE do municipio da UF com o nome mais parecido (difflib), se a semelhanca for alta."""
+    nomes = {n: cod for (u, n), cod in por_nome.items() if u == uf}
+    achado = difflib.get_close_matches(nome, list(nomes), n=1, cutoff=SEMELHANCA_NOME_MIN)
+    return nomes[achado[0]] if achado else ""
+
+
 def cmd_baixar():
     pasta_base = os.path.join(C.dir_dados(), "base")
     tmp = os.path.join(C.dir_dados(), "tmp", "cnpj")
@@ -171,7 +181,7 @@ def cmd_baixar():
         log(f"{nome}: {estado[nome]}; zip apagado")
 
     nome_rf, por_nome = de_para_municipios(tmp)
-    sem_ibge, total = {}, 0
+    sem_ibge, total, aproximado = {}, 0, {}
     saida = os.path.join(pasta_base, NOME_SAIDA)
     with open(parcial, encoding="utf-8") as f, open(saida + ".parcial", "w", newline="", encoding="utf-8") as out:
         r = csv.DictReader(f, delimiter=";")
@@ -180,6 +190,8 @@ def cmd_baixar():
         for row in r:
             nome = nome_rf.get(row["municipio_receita"], "")
             cod = por_nome.get((row["uf"], GRAFIAS.get((row["uf"], nome), nome)), "")
+            if not cod and nome:  # grafia diferente (ex.: PARATI x PARATY): nome mais parecido na mesma UF
+                cod = aproximado.setdefault((row["uf"], nome), _mais_parecido(row["uf"], nome, por_nome))
             if not cod:
                 k = (row["uf"], row["municipio_receita"], nome)
                 sem_ibge[k] = sem_ibge.get(k, 0) + 1
@@ -189,6 +201,7 @@ def cmd_baixar():
     resumo = {"linhas": total, "sem_codigo_ibge": sum(sem_ibge.values()),
               "municipios_sem_codigo_ibge": len(sem_ibge),
               "maiores_sem_codigo": sorted(([*k, v] for k, v in sem_ibge.items()), key=lambda x: -x[3])[:30],
+              "casados_por_aproximacao": sorted(f"{uf} {nome} -> {cod}" for (uf, nome), cod in aproximado.items() if cod),
               "minutos": round((time.time() - t_geral) / 60, 1), "arquivos": estado}
     json.dump(resumo, open(os.path.join(pasta_base, "academias_brasil_resumo.json"), "w", encoding="utf-8"),
               ensure_ascii=False, indent=2)
