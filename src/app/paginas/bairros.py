@@ -44,7 +44,7 @@
 # =============================================================================
 
 # ============================== CONFIG ==============================
-DADOS_FICTICIOS = True           # True ate a 03 aplicar o schema bairros no banco
+DADOS_FICTICIOS = False          # True so para testar o visual sem o banco
 VIEWS = {"resumo": "bairro_resumo", "ranking": "bairro_ranking", "setor": "bairro_setor",
          "academia": "bairro_academia", "pedido": "bairro_pedido"}
 FUNCAO_PEDIDO = "pedir_bairros"
@@ -150,7 +150,18 @@ def _resultado_api(municipio_id: int) -> dict:
     if resumo.empty:
         return {"resumo": None}
     return {"resumo": resumo.iloc[0].to_dict(), "ranking": ler_view("ranking", filtro),
-            "setor": ler_view("setor", filtro), "academia": ler_view("academia", filtro)}
+            "academia": ler_view("academia", filtro)}
+
+
+@st.cache_data(ttl=VALIDADE_CACHE_SEGUNDOS, show_spinner="Lendo os setores…")
+def _setores_api(municipio_id: int) -> pd.DataFrame:
+    """Setores so quando pedidos no mapa (uma capital tem dezenas de milhares)."""
+    return ler_view("setor", {"cod_municipio": f"eq.{municipio_id}", "select": "cd_setor,geojson"})
+
+
+def setores(municipio_id: int) -> pd.DataFrame:
+    """Contorno dos setores censitarios da cidade."""
+    return ficticio_resultado(municipio_id)["setor"] if DADOS_FICTICIOS else _setores_api(municipio_id)
 
 
 @st.cache_data(ttl=VALIDADE_CACHE_SEGUNDOS, show_spinner=False)
@@ -195,6 +206,7 @@ def limpar_cache() -> None:
     """Apaga o cache da API (depois que um pedido fica pronto)."""
     _resultado_api.clear()
     _prontas_api.clear()
+    _setores_api.clear()
 
 
 # ------------------------------------------------------------------ dados ficticios (provisorio)
@@ -439,8 +451,9 @@ if not concorrencia_ok:
         "sendo carregada; por enquanto a nota usa só público, renda e poder de compra concentrado (pesos "
         "redistribuídos), e o mapa não mostra as academias.", icon=":material/pending:")
 
-escala = st.segmented_control("Escala", list(ESCALAS), format_func=ESCALAS.get, default="ibge",
-                              key="bairros_escala") or "ibge"
+com_dados = [e for e in ESCALAS if (ranking["escala"] == e).any()] or list(ESCALAS)
+escala = st.segmented_control("Escala", list(ESCALAS), format_func=ESCALAS.get, default=com_dados[0],
+                              key=f"bairros_escala_{municipio_id}") or com_dados[0]
 unidades = ranking[ranking["escala"] == escala].copy()
 unidades["elegivel"] = unidades["elegivel"].astype(bool)
 elegiveis = unidades[unidades["elegivel"]].sort_values("posicao")
@@ -460,6 +473,11 @@ st.info(
     "localidade dos endereços do IBGE, sem limite oficial (no mapa, um ponto no centro de cada um).",
     icon=":material/info:",
 )
+if unidades.empty:
+    outra = next(iter(set(ESCALAS) - {escala}))
+    st.info(f"Esta cidade não tem {ESCALAS[escala].lower().replace('ibge', 'IBGE')} no Censo 2022. "
+            f"Veja a escala \"{ESCALAS[outra]}\".", icon=":material/search_off:")
+    st.stop()
 if elegiveis.empty:
     st.info(f"Nenhum bairro com {fmt.numero(pop_min)} habitantes ou mais nesta escala.", icon=":material/search_off:")
 
@@ -494,9 +512,10 @@ if contorno:  # limite do municipio, so como referencia
     lon_c, lat_c = linhas_de_contorno(contorno)
     figura.add_trace(go.Scattergeo(lon=lon_c, lat=lat_c, mode="lines", hoverinfo="skip", showlegend=False,
                                    line={"color": "rgba(242,241,236,.45)", "width": 1}))
-if ver_setores and not res["setor"].empty:
+tabela_setores = setores(municipio_id) if ver_setores else pd.DataFrame()
+if not tabela_setores.empty:
     lon_s, lat_s = [], []
-    for g in res["setor"]["geojson"].map(geometria).dropna():
+    for g in tabela_setores["geojson"].map(geometria).dropna():
         lo, la = linhas_de_contorno(g)
         lon_s += lo
         lat_s += la
@@ -514,7 +533,7 @@ for grupo, cinza in ((com_geo[~com_geo["elegivel"]], True), (com_geo[com_geo["el
         zmin=0, zmax=100, colorscale=[[0, "#3b4249"], [1, "#3b4249"]] if cinza else fmt.ESCALA_DADO,
         showscale=not cinza, colorbar=barra, marker={"line": {"color": "#0b0d0f", "width": 0.6}},
         text=grupo["_texto"].tolist(), hoverinfo="text"))
-sem_geo = unidades[unidades["_geo"].isna() & unidades["lat"].notna()]
+sem_geo = unidades[unidades["_geo"].isna() & unidades["lat"].notna() & unidades["elegivel"]]  # so os do ranking
 if not sem_geo.empty:
     maior = max(float(sem_geo["populacao"].max()), 1.0)
     figura.add_trace(go.Scattergeo(
