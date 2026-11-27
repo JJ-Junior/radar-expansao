@@ -58,7 +58,10 @@ MAX_NUMEROS_MAPA = 40           # bairros do ranking com o numero da posicao no 
 ALTURA_MAPA = 600
 PROPORCAO_MAPA = 1.5             # largura / altura do mapa (enquadramento inicial)
 FOLGA_MAPA = 0.06                # margem em volta dos bairros
+MARGEM_MINIMA_GRAUS = 0.012      # ~1,3 km de margem minima em volta
 ESCALAS = {"ibge": "Bairros do IBGE", "popular": "Bairros populares"}
+ROTULO_ESCALA_IBGE = {"bairro": "Bairros do IBGE", "regiao": "Regiões do IBGE (não são bairros)",
+                      "distrito": "Distritos do IBGE", "subdistrito": "Subdistritos do IBGE"}
 NOTAS = {"nota_mercado": "Público 20–59", "nota_renda": "Renda", "nota_espaco": "Pouca concorrência",
          "nota_densidade": "Poder de compra concentrado"}
 ROTULO_COMPONENTE = {"nota_mercado": "Público de 20 a 59 anos", "nota_renda": "Renda do responsável",
@@ -162,7 +165,7 @@ def _resultado_api(municipio_id: int) -> dict:
 @st.cache_data(ttl=VALIDADE_CACHE_SEGUNDOS, show_spinner="Lendo os setores…")
 def _setores_api(municipio_id: int) -> pd.DataFrame:
     """Setores so quando pedidos no mapa (uma capital tem dezenas de milhares)."""
-    return ler_view("setor", {"cod_municipio": f"eq.{municipio_id}", "select": "cd_setor,geojson"})
+    return ler_view("setor", {"cod_municipio": f"eq.{municipio_id}", "select": "cd_setor,bairro_ibge,populacao,renda_media_resp,geojson"})
 
 
 def setores(municipio_id: int) -> pd.DataFrame:
@@ -448,7 +451,8 @@ resumo, ranking = res["resumo"], res["ranking"]
 parametros = resumo.get("parametros") or {}
 parametros = json.loads(parametros) if isinstance(parametros, str) else parametros
 raio = float(parametros.get("raio_km", RAIO_PADRAO_KM))
-pop_min = int(parametros.get("pop_min", POPULACAO_MINIMA_PADRAO))
+pop_min_ibge = int(parametros.get("pop_min", POPULACAO_MINIMA_PADRAO))
+pop_min_popular = int(parametros.get("pop_min_popular", pop_min_ibge))
 concorrencia_ok = resumo.get("concorrencia") == "ok"
 
 if not concorrencia_ok:
@@ -457,14 +461,44 @@ if not concorrencia_ok:
         "sendo carregada; por enquanto a nota usa só público, renda e poder de compra concentrado (pesos "
         "redistribuídos), e o mapa não mostra as academias.", icon=":material/pending:")
 
-com_dados = [e for e in ESCALAS if (ranking["escala"] == e).any()] or list(ESCALAS)
-escala = st.segmented_control("Escala", list(ESCALAS), format_func=ESCALAS.get, default=com_dados[0],
-                              key=f"bairros_escala_{municipio_id}") or com_dados[0]
+
+def escalas_da_cidade() -> tuple[dict, str, str | None]:
+    """Rotulo de cada escala, a escala que abre primeiro e o aviso (gold.bairro_resumo, com reserva local)."""
+    ibge = ranking[(ranking["escala"] == "ibge")]
+    tipo = resumo.get("escala_ibge_tipo", parametros.get("escala_ibge_tipo", "sem_coluna"))
+    if tipo == "sem_coluna":  # view ainda sem as colunas novas: decide pelos dados
+        nomes_ibge = ibge["unidade_nome"].astype(str)
+        grandes = not ibge.empty and float(pd.to_numeric(ibge["populacao"], errors="coerce").median()) > 20_000
+        tipo = None if ibge.empty else ("regiao" if grandes or nomes_ibge.str.contains(
+            r"^(bacia|regi[aã]o|zona|setor)\b", case=False, regex=True).any() else "bairro")
+    rotulos = {"popular": "Bairros populares"}
+    if tipo and not ibge.empty:
+        rotulos = {"ibge": ROTULO_ESCALA_IBGE.get(tipo, "Bairros do IBGE"), **rotulos}
+    padrao = resumo.get("escala_padrao") or ("ibge" if tipo == "bairro" else "popular")
+    if padrao not in rotulos:
+        padrao = next(iter(rotulos))
+    aviso = resumo.get("aviso_escala")
+    if fmt.ausente(aviso) and tipo in ("regiao", "distrito", "subdistrito"):
+        aviso = (f"Em {nomes[municipio_id]}, o IBGE divide a cidade em {ROTULO_ESCALA_IBGE[tipo].split(' do')[0].lower()}, "
+                 "não em bairros. Por isso a página abre nos bairros populares, os nomes de bairro dos endereços.")
+    return rotulos, padrao, (None if fmt.ausente(aviso) else str(aviso))
+
+
+rotulos_escala, escala_padrao, aviso_escala = escalas_da_cidade()
+# required=True: clicar de novo na escala ja escolhida nao a desmarca (antes voltava em silencio para o IBGE)
+escala = st.segmented_control("Escala", list(rotulos_escala), format_func=rotulos_escala.get,
+                              default=escala_padrao, required=True,
+                              key=f"bairros_escala_{municipio_id}_{'_'.join(rotulos_escala)}")
+if escala not in rotulos_escala:
+    escala = escala_padrao
+if aviso_escala:
+    st.info(aviso_escala, icon=":material/info:")
+pop_min = pop_min_popular if escala == "popular" else pop_min_ibge
 unidades = ranking[ranking["escala"] == escala].copy()
 unidades["elegivel"] = unidades["elegivel"].astype(bool)
 elegiveis = unidades[unidades["elegivel"]].sort_values("posicao")
 fora = unidades[~unidades["elegivel"]]
-st.subheader(f"{rotulo(municipio_id)} · {ESCALAS[escala]}")
+st.subheader(f"{rotulo(municipio_id)} · {rotulos_escala[escala]}")
 
 base = resumo.get("data_base_cnpj")
 geocod, total_acad = resumo.get("academias_geocodificadas"), resumo.get("academias_base")
@@ -474,15 +508,15 @@ st.info(
     "onde a academia funciona"
     + (f"; {fmt.numero(geocod)} de {fmt.numero(total_acad)} foram localizadas no mapa"
        if concorrencia_ok and not fmt.ausente(geocod) and not fmt.ausente(total_acad) else "")
-    + f". A concorrência é contada num **raio de {fmt.numero(raio, 1)} km** do centro de cada bairro. Bairros com menos de "
-    f"{fmt.numero(pop_min)} habitantes ou só área rural ficam fora do ranking. Os bairros populares são os nomes de "
+    + f". A concorrência é contada num **raio de {fmt.numero(raio, 1)} km** do centro de cada bairro. Ficam fora do "
+    f"ranking os bairros do IBGE com menos de {fmt.numero(pop_min_ibge)} habitantes, os bairros populares com menos de "
+    f"{fmt.numero(pop_min_popular)} e as áreas rurais. Os bairros populares são os nomes de "
     "localidade dos endereços do IBGE, sem limite oficial (no mapa, um ponto no centro de cada um).",
     icon=":material/info:",
 )
 if unidades.empty:
-    outra = next(iter(set(ESCALAS) - {escala}))
-    st.info(f"Esta cidade não tem {ESCALAS[escala].lower().replace('ibge', 'IBGE')} no Censo 2022. "
-            f"Veja a escala \"{ESCALAS[outra]}\".", icon=":material/search_off:")
+    st.info(f"Esta cidade não tem {rotulos_escala[escala].lower().replace('ibge', 'IBGE')} no Censo 2022.",
+            icon=":material/search_off:")
     st.stop()
 if elegiveis.empty:
     st.info(f"Nenhum bairro com {fmt.numero(pop_min)} habitantes ou mais nesta escala.", icon=":material/search_off:")
@@ -518,6 +552,17 @@ def texto_hover(r) -> str:
     return "<br>".join(linhas)
 
 
+def texto_setor(r) -> str:
+    """Setor censitario: codigo, populacao e renda (Censo 2022)."""
+    linhas = [f"<b>Setor censitário {r['cd_setor']}</b>"]
+    if isinstance(r.get("bairro_ibge"), str) and r["bairro_ibge"]:
+        linhas.append(f"Dentro de: {r['bairro_ibge']}")
+    linhas += [f"População: {fmt.numero(r.get('populacao'))} hab.",
+               f"Renda média do responsável: {fmt.reais(r.get('renda_media_resp'), 0)}",
+               "<i>A cor do mapa é a nota do bairro, não do setor.</i>"]
+    return "<br>".join(linhas)
+
+
 def texto_academia(r) -> str:
     """Academia sem nenhum dado da empresa (LGPD): so o bairro do endereco fiscal."""
     linhas = ["<b>Academia (endereço fiscal)</b>"]
@@ -534,7 +579,9 @@ def enquadrar(lons: list, lats: list) -> tuple[list, list]:
     x0, x1 = np.radians(min(lons)), np.radians(max(lons))
     y0, y1 = (np.log(np.tan(np.pi / 4 + np.radians(v) / 2)) for v in (min(lats), max(lats)))  # mercator
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
-    largura, altura = max(x1 - x0, 1e-4) * (1 + 2 * FOLGA_MAPA), max(y1 - y0, 1e-4) * (1 + 2 * FOLGA_MAPA)
+    margem = np.radians(MARGEM_MINIMA_GRAUS)  # selos e circulos tem raio: nao encostam na borda
+    largura = (x1 - x0) + 2 * max((x1 - x0) * FOLGA_MAPA, margem)
+    altura = (y1 - y0) + 2 * max((y1 - y0) * FOLGA_MAPA, margem)
     largura, altura = max(largura, altura * PROPORCAO_MAPA), max(altura, largura / PROPORCAO_MAPA)
 
     def latitude(y):
@@ -548,7 +595,9 @@ with st.container(horizontal=True):
     ver_academias = st.toggle("Academias", value=concorrencia_ok, disabled=not concorrencia_ok,
                               key=f"bairros_ver_academias_{concorrencia_ok}")  # sem concorrencia, fica travado
     ver_setores = st.toggle("Setores do Censo", value=False, key="bairros_ver_setores",
-                            help="Contorno dos setores censitários, a menor área com dados do Censo 2022.")
+                            help="Desenha, só com contorno fino, os setores censitários: a menor área com dados do "
+                                 "Censo 2022, de onde vêm população e renda dos bairros. A cor continua sendo a nota "
+                                 "do bairro. Passe o mouse num setor para ver o código, a população e a renda dele.")
 st.caption("Passe o mouse (ou toque) num bairro para ver a nota e o que a compõe. O número é a posição no ranking.")
 
 unidades["_texto"] = [texto_hover(r) for _, r in unidades.iterrows()]
@@ -563,15 +612,6 @@ if contorno:  # limite do municipio, so como referencia
     lon_c, lat_c = linhas_de_contorno(contorno)
     figura.add_trace(go.Scattergeo(lon=lon_c, lat=lat_c, mode="lines", hoverinfo="skip", showlegend=False,
                                    line={"color": "rgba(242,241,236,.45)", "width": 1}))
-tabela_setores = setores(municipio_id) if ver_setores else pd.DataFrame()
-if not tabela_setores.empty:
-    lon_s, lat_s = [], []
-    for g in tabela_setores["geojson"].map(geometria).dropna():
-        lo, la = linhas_de_contorno(g)
-        lon_s += lo
-        lat_s += la
-    figura.add_trace(go.Scattergeo(lon=lon_s, lat=lat_s, mode="lines", hoverinfo="skip", showlegend=False,
-                                   line={"color": "rgba(242,241,236,.18)", "width": 0.5}))
 com_geo = unidades[unidades["_geo"].notna()]
 for grupo, cinza in ((com_geo[~com_geo["elegivel"]], True), (com_geo[com_geo["elegivel"]], False)):
     if grupo.empty:
@@ -594,6 +634,17 @@ if not sem_geo.empty:
                 "color": sem_geo["nota_final"].astype(float).tolist(),
                 "colorscale": fmt.ESCALA_DADO, "cmin": 0, "cmax": 100, "opacity": 0.9,
                 "showscale": com_geo.empty, "colorbar": barra}))
+tabela_setores = setores(municipio_id) if ver_setores else pd.DataFrame()
+if not tabela_setores.empty:  # por cima dos bairros, sem preenchimento: a cor continua sendo a nota do bairro
+    tabela_setores = tabela_setores.assign(_geo=tabela_setores["geojson"].map(geometria)).dropna(subset=["_geo"])
+    figura.add_trace(go.Choropleth(
+        geojson={"type": "FeatureCollection", "features": [
+            {"type": "Feature", "id": str(c), "geometry": g}
+            for c, g in zip(tabela_setores["cd_setor"], tabela_setores["_geo"])]},
+        locations=tabela_setores["cd_setor"].astype(str).tolist(), z=[0] * len(tabela_setores),
+        colorscale=[[0, "rgba(0,0,0,0)"], [1, "rgba(0,0,0,0)"]], showscale=False,
+        marker={"line": {"color": "rgba(242,241,236,.55)", "width": 0.4}},
+        text=[texto_setor(r) for _, r in tabela_setores.iterrows()], hovertemplate=dica))
 academias = res["academia"]
 if ver_academias and not academias.empty:
     figura.add_trace(go.Scattergeo(
@@ -609,9 +660,10 @@ if not numerados.empty:  # so o numero da posicao, num selo escuro; o nome fica 
         customdata=numerados["_texto"].tolist(), hovertemplate="%{customdata}<extra></extra>",
         textposition="middle center", textfont={"color": "#f2f1ec", "size": 11},
         marker={"size": 20, "color": "rgba(11,13,15,.78)", "line": {"color": "#f2f1ec", "width": 1}}))
-lons = unidades["lon"].dropna().astype(float).tolist()
-lats = unidades["lat"].dropna().astype(float).tolist()
-for g in com_geo["_geo"]:  # inclui o contorno inteiro dos bairros, nao so o centro
+enquadrados = elegiveis if not elegiveis.empty else unidades  # localidades rurais fora do ranking nao entram no zoom
+lons = enquadrados["lon"].dropna().astype(float).tolist()
+lats = enquadrados["lat"].dropna().astype(float).tolist()
+for g in enquadrados["_geo"].dropna():  # inclui o contorno inteiro dos bairros, nao so o centro
     for poligono in g["coordinates"]:
         lons += [p[0] for p in poligono[0]]
         lats += [p[1] for p in poligono[0]]
@@ -629,27 +681,35 @@ st.plotly_chart(figura, config={"displaylogo": False, "scrollZoom": True},
 
 # --- Ranking --------------------------------------------------------------------------
 colunas = {
-    "posicao": st.column_config.NumberColumn("Posição", format="%dº", width="small"),
-    "unidade_nome": st.column_config.TextColumn("Bairro", pinned=True),
+    "posicao": st.column_config.NumberColumn("Pos.", format="%dº", width="small"),
+    "unidade_nome": st.column_config.TextColumn("Bairro", pinned=True, width="medium"),
     "nota_final": st.column_config.ProgressColumn("Nota", min_value=0, max_value=100, format="%.1f",
-                                                  color=fmt.COR_DADO),
-    **{c: st.column_config.NumberColumn(r, format="%.0f") for c, r in NOTAS.items()},
-    "populacao": st.column_config.NumberColumn("População", format="localized"),
-    "pop_20_59": st.column_config.NumberColumn("20 a 59 anos", format="localized"),
-    "renda_media_resp": st.column_config.NumberColumn("Renda média resp. (R$)", format="localized"),
-    "acad_raio": st.column_config.NumberColumn(f"Academias no raio de {fmt.numero(raio, 1)} km", format="%d"),
-    "acad_raio_10k": st.column_config.NumberColumn("Por 10 mil hab. no raio", format="%.2f"),
-    "massa_renda_km2": st.column_config.NumberColumn("Massa de renda por km²", format="compact"),
-    "dist_centro_km": st.column_config.NumberColumn("Distância do centro (km)", format="%.1f"),
+                                                  color=fmt.COR_DADO, width="small"),
+    "populacao": st.column_config.NumberColumn("População", format="localized", width="small"),
+    "pop_20_59": st.column_config.NumberColumn("20 a 59 anos", format="localized", width="small"),
+    "renda_media_resp": st.column_config.NumberColumn("Renda (R$)", format="localized", width="small",
+                                                      help="Renda média do responsável pelo domicílio (Censo 2022)."),
+    "acad_raio": st.column_config.NumberColumn("Academias", format="%d", width="small",
+                                               help=f"Academias no raio de {fmt.numero(raio, 1)} km do centro do bairro."),
+    "acad_raio_10k": st.column_config.NumberColumn("Por 10 mil", format="%.2f", width="small",
+                                                   help="Academias no raio por 10 mil habitantes do raio."),
+}
+colunas_notas = {
+    "posicao": colunas["posicao"], "unidade_nome": colunas["unidade_nome"], "nota_final": colunas["nota_final"],
+    **{c: st.column_config.NumberColumn(ROTULO_COMPONENTE[c], format="%.0f", width="small") for c in NOTAS},
     "frase": st.column_config.TextColumn("Leitura", width="large"),
 }
 if not concorrencia_ok:
-    for coluna in ("nota_espaco", "acad_raio", "acad_raio_10k"):
+    for coluna in ("acad_raio", "acad_raio_10k"):
         colunas.pop(coluna)
+    colunas_notas.pop("nota_espaco")
 colunas = {c: v for c, v in colunas.items() if c in unidades}
+colunas_notas = {c: v for c, v in colunas_notas.items() if c in unidades}
 if not elegiveis.empty:
     st.dataframe(elegiveis[list(colunas)], column_config=colunas, hide_index=True,
                  alt="Ranking dos bairros com nota, população, renda e academias no raio.")
+    with st.expander("Notas por componente e leitura de cada bairro"):
+        st.dataframe(elegiveis[list(colunas_notas)], column_config=colunas_notas, hide_index=True)
 pesos = resumo.get("pesos") or {}
 pesos = json.loads(pesos) if isinstance(pesos, str) else pesos
 st.caption(
@@ -665,7 +725,8 @@ if not fora.empty:
                      column_config={c: colunas[c] for c in colunas_fora}, hide_index=True)
 st.download_button(
     "Baixar CSV dos bairros",
-    data=unidades[["elegivel", *colunas]].sort_values("posicao")
+    data=unidades[[c for c in dict.fromkeys(["elegivel", *colunas, *colunas_notas, "massa_renda_km2",
+                                             "dist_centro_km"]) if c in unidades]].sort_values("posicao")
     .to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig"),
     file_name=f"radar_expansao_bairros_{municipio_id}_{escala}.csv", mime="text/csv", icon=":material/download:",
 )
