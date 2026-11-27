@@ -598,7 +598,7 @@ def caixa_com_margem(lons: list, lats: list) -> tuple[float, float, float, float
 
 
 with st.container(horizontal=True, vertical_alignment="bottom"):
-    fundo = mapas.seletor_de_fundo("bairros_fundo_mapa", mapas.RUAS)
+    fundo = mapas.seletor_de_fundo("bairros_fundo_mapa", mapas.CONTORNOS)
     ver_academias = st.toggle("Academias", value=concorrencia_ok, disabled=not concorrencia_ok,
                               key=f"bairros_ver_academias_{concorrencia_ok}")  # sem concorrencia, fica travado
     ver_setores = st.toggle("Setores do Censo", value=False, key="bairros_ver_setores",
