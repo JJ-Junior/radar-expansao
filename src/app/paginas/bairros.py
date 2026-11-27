@@ -54,6 +54,7 @@ TIMEOUT_SEGUNDOS = 20
 VALIDADE_CACHE_SEGUNDOS = 600
 RAIO_PADRAO_KM, POPULACAO_MINIMA_PADRAO = 1.5, 5000   # se o resumo nao trouxer os parametros
 MAX_OPCOES_BUSCA = 60
+COR_LINHA_ESCOLHIDA = "rgba(196, 240, 59, 0.22)"   # bairro clicado no mapa
 MAX_NUMEROS_MAPA = 40           # bairros do ranking com o numero da posicao no mapa
 ALTURA_MAPA = 600
 PROPORCAO_MAPA = 1.5             # largura / altura do mapa (enquadramento inicial)
@@ -87,6 +88,7 @@ import plotly.graph_objects as go
 import requests
 import streamlit as st
 
+import acoes
 import dados
 import formato as fmt
 
@@ -348,6 +350,12 @@ except requests.RequestException as erro:
     falha_api(erro, "listar as cidades já calculadas")
 
 # --- Escolha da cidade (busca sem acento) -----------------------------------------
+da_url = acoes.municipio_novo_da_url("bairros_url_aplicado")   # ?municipio=3506003 (so na primeira vez)
+ir_para = st.session_state.pop(acoes.CHAVE_BAIRROS, None) or da_url  # botao "Ver bairros" de outra pagina
+if ir_para in nomes:  # antes de desenhar os campos: limpa a busca e escolhe a cidade
+    st.session_state["bairros_busca"] = ""
+    st.session_state["bairros_cidade_"] = ir_para
+    st.session_state["bairros_extra"] = ir_para
 with st.container(border=True):
     col_busca, col_cidade = st.columns([2, 3], vertical_alignment="bottom")
     with col_busca:
@@ -360,15 +368,19 @@ with st.container(border=True):
             ["_depois", "populacao"], ascending=[True, False])
         opcoes = achadas["municipio_id"].astype(int).head(MAX_OPCOES_BUSCA).tolist()
     else:
-        opcoes = prontas or [CIDADE_PADRAO]
+        extra = st.session_state.get("bairros_extra")
+        opcoes = (prontas or [CIDADE_PADRAO]) + ([extra] if extra in nomes and extra not in prontas else [])
     with col_cidade:
         if not opcoes:
             st.selectbox("Cidade", ["Nenhuma cidade com esse nome"], disabled=True)
             st.stop()
         municipio_id = int(st.selectbox(
             "Cidade" + ("" if alvo else " (já calculadas)"), opcoes, key=f"bairros_cidade_{alvo}",
-            index=opcoes.index(CIDADE_PADRAO) if CIDADE_PADRAO in opcoes else 0,
+            # sem index quando a cidade ja foi posta no session_state (link ou "Ver bairros"): evita aviso do Streamlit
+            **({} if st.session_state.get(f"bairros_cidade_{alvo}") in opcoes
+               else {"index": opcoes.index(CIDADE_PADRAO) if CIDADE_PADRAO in opcoes else 0}),
             format_func=lambda i: rotulo(i) + ("  ✓" if i in prontas else "")))
+acoes.gravar_na_url(municipio_id)  # o endereco copiado abre esta mesma cidade
 
 try:
     res = resultado(municipio_id)
@@ -623,13 +635,14 @@ for grupo, cinza in ((com_geo[~com_geo["elegivel"]], True), (com_geo[com_geo["el
         z=[0] * len(grupo) if cinza else grupo["nota_final"].astype(float).tolist(),
         zmin=0, zmax=100, colorscale=[[0, "#3b4249"], [1, "#3b4249"]] if cinza else fmt.ESCALA_DADO,
         showscale=not cinza, colorbar=barra, marker={"line": {"color": "#0b0d0f", "width": 0.6}},
-        text=grupo["_texto"].tolist(), hovertemplate=dica))
+        text=grupo["_texto"].tolist(), hovertemplate=dica, customdata=grupo["unidade_id"].astype(str).tolist()))
 sem_geo = unidades[unidades["_geo"].isna() & unidades["lat"].notna() & unidades["elegivel"]]  # so os do ranking
 if not sem_geo.empty:
     maior = max(float(sem_geo["populacao"].max()), 1.0)
     figura.add_trace(go.Scattergeo(
         lon=sem_geo["lon"].astype(float).tolist(), lat=sem_geo["lat"].astype(float).tolist(), mode="markers",
         text=sem_geo["_texto"].tolist(), hovertemplate=dica, showlegend=False,
+        customdata=sem_geo["unidade_id"].astype(str).tolist(),
         marker={"size": (14 + 24 * np.sqrt(sem_geo["populacao"].astype(float) / maior)).tolist(),
                 "color": sem_geo["nota_final"].astype(float).tolist(),
                 "colorscale": fmt.ESCALA_DADO, "cmin": 0, "cmax": 100, "opacity": 0.9,
@@ -657,7 +670,8 @@ if not numerados.empty:  # so o numero da posicao, num selo escuro; o nome fica 
     figura.add_trace(go.Scattergeo(
         lon=numerados["lon"].astype(float).tolist(), lat=numerados["lat"].astype(float).tolist(),
         mode="markers+text", showlegend=False, text=[str(int(p)) for p in numerados["posicao"]],
-        customdata=numerados["_texto"].tolist(), hovertemplate="%{customdata}<extra></extra>",
+        hovertext=numerados["_texto"].tolist(), hovertemplate="%{hovertext}<extra></extra>",
+        customdata=numerados["unidade_id"].astype(str).tolist(),
         textposition="middle center", textfont={"color": "#f2f1ec", "size": 11},
         marker={"size": 20, "color": "rgba(11,13,15,.78)", "line": {"color": "#f2f1ec", "width": 1}}))
 enquadrados = elegiveis if not elegiveis.empty else unidades  # localidades rurais fora do ranking nao entram no zoom
@@ -670,14 +684,42 @@ for g in enquadrados["_geo"].dropna():  # inclui o contorno inteiro dos bairros,
 if lons:
     faixa_lon, faixa_lat = enquadrar(lons, lats)
     figura.update_geos(lonaxis_range=faixa_lon, lataxis_range=faixa_lat)
+figura.update_traces(selector={"type": "choropleth"}, selected={"marker": {"opacity": 1}}, unselected={"marker": {"opacity": 1}})
+figura.update_traces(selector={"type": "scattergeo"}, selected={"marker": {"opacity": 1}, "textfont": {"color": "#f2f1ec"}},
+                     unselected={"marker": {"opacity": 1}, "textfont": {"color": "#f2f1ec"}})  # o clique nao apaga o mapa
 figura.update_geos(projection_type="mercator", projection_scale=1, visible=False, bgcolor="rgba(0,0,0,0)")
 figura.update_layout(separators=",.", height=ALTURA_MAPA, margin={"l": 0, "r": 0, "t": 0, "b": 0},
                      paper_bgcolor="rgba(0,0,0,0)", dragmode="pan",
                      legend={"orientation": "h", "y": 0.01, "x": 0.01, "bgcolor": "rgba(11,13,15,.6)"},
                      hoverlabel={"bgcolor": "#151a1f", "bordercolor": "#262d35", "align": "left",
                                  "font": {"color": "#f2f1ec", "size": 13}, "namelength": -1})
-st.plotly_chart(figura, config={"displaylogo": False, "scrollZoom": True},
-                alt=f"Mapa dos bairros de {rotulo(municipio_id)} coloridos pela nota, com o número da posição.")
+evento = st.plotly_chart(figura, config={"displaylogo": False, "scrollZoom": True}, on_select="rerun",
+                         selection_mode="points", key=f"bairros_mapa_{municipio_id}_{escala}",
+                         alt=f"Mapa dos bairros de {rotulo(municipio_id)} coloridos pela nota, com o número da posição.")
+unidade_clicada = acoes.clicado(evento)
+clicou_algo = bool(getattr(evento, "selection", {}) and evento.selection.get("points"))
+escolhida = unidades[unidades["unidade_id"].astype(str) == str(unidade_clicada)] if unidade_clicada else unidades.iloc[0:0]
+if escolhida.empty:
+    st.caption("Você clicou numa academia ou num setor. Clique no número ou na área de um bairro para ver o cartão dele."
+               if clicou_algo else "Clique num bairro do mapa (no número ou na área) para ver o cartão dele e "
+               "destacá-lo na tabela.")
+else:
+    b = escolhida.iloc[0]
+    with st.container(border=True):
+        posicao_txt = f"{int(b['posicao'])}º · " if b["elegivel"] and not fmt.ausente(b["posicao"]) else ""
+        st.markdown(f"#### {posicao_txt}{b['unidade_nome']}")
+        if isinstance(b.get("frase"), str) and b["frase"]:
+            st.caption(b["frase"][:1].upper() + b["frase"][1:] + ".")
+        with st.container(horizontal=True):
+            st.metric("Nota final", fmt.nota(b["nota_final"]) if b["elegivel"] else "fora do ranking", border=True)
+            st.metric("População", fmt.numero(b["populacao"]), border=True)
+            st.metric("20 a 59 anos", fmt.numero(b["pop_20_59"]), border=True)
+            st.metric("Renda média do responsável", fmt.reais(b["renda_media_resp"], 0), border=True)
+            if concorrencia_ok and not fmt.ausente(b.get("acad_raio")):
+                st.metric(f"Academias no raio de {fmt.numero(raio, 1)} km", fmt.numero(b["acad_raio"]),
+                          border=True, help=f"{fmt.numero(b['acad_raio_10k'], 2)} por 10 mil habitantes do raio.")
+        if b["elegivel"]:
+            st.caption(" · ".join(f"{ROTULO_COMPONENTE[c]}: {componente(b, c)}" for c in NOTAS))
 
 # --- Ranking --------------------------------------------------------------------------
 colunas = {
@@ -706,7 +748,13 @@ if not concorrencia_ok:
 colunas = {c: v for c, v in colunas.items() if c in unidades}
 colunas_notas = {c: v for c, v in colunas_notas.items() if c in unidades}
 if not elegiveis.empty:
-    st.dataframe(elegiveis[list(colunas)], column_config=colunas, hide_index=True,
+    tabela_ranking = elegiveis[list(colunas)]
+    if not escolhida.empty and escolhida.index[0] in tabela_ranking.index:
+        marcada = escolhida.index[0]
+        tabela_ranking = tabela_ranking.style.apply(
+            lambda linha: [f"background-color: {COR_LINHA_ESCOLHIDA}" if linha.name == marcada else ""] * len(linha),
+            axis=1)
+    st.dataframe(tabela_ranking, column_config=colunas, hide_index=True,
                  alt="Ranking dos bairros com nota, população, renda e academias no raio.")
     with st.expander("Notas por componente e leitura de cada bairro"):
         st.dataframe(elegiveis[list(colunas_notas)], column_config=colunas_notas, hide_index=True)

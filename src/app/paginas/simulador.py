@@ -60,6 +60,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import acoes
 import dados
 import formato as fmt
 
@@ -202,6 +203,7 @@ def poligonos(df: pd.DataFrame, **estilo) -> go.Choropleth | None:
     geojson = {"type": "FeatureCollection", "features": [
         {"type": "Feature", "id": int(i), "geometry": contornos[int(i)]} for i in com_malha["municipio_id"]]}
     return go.Choropleth(geojson=geojson, locations=com_malha["municipio_id"].astype(int).tolist(),
+                         customdata=com_malha["municipio_id"].astype(int).tolist(),
                          text=hover(com_malha), hoverinfo="text", **estilo)
 
 
@@ -218,7 +220,8 @@ def pontos(df: pd.DataFrame, com_nota: bool) -> go.Scattergeo | None:
     else:
         marcador = {"size": 5, "color": "#8a929b", "opacity": 0.6}
     return go.Scattergeo(lon=sem_malha["longitude"].tolist(), lat=sem_malha["latitude"].tolist(), mode="markers",
-                         marker=marcador, text=hover(sem_malha), hoverinfo="text", showlegend=False)
+                         marker=marcador, text=hover(sem_malha), hoverinfo="text", showlegend=False,
+                         customdata=sem_malha["municipio_id"].astype(int).tolist())
 
 
 borda = {"line": {"color": "#0b0d0f", "width": 0.5}}
@@ -273,9 +276,17 @@ figura.update_layout(
     separators=",.", height=ALTURA_MAPA, margin={"l": 0, "r": 0, "t": 0, "b": 0},
     legend={"orientation": "h", "y": 0.01, "x": 0.01}, paper_bgcolor="rgba(0,0,0,0)", dragmode="pan",
 )
-st.plotly_chart(figura, config={"displaylogo": False, "scrollZoom": True},
-                alt=f"Mapa da região de {fmt.numero(raio)} km em volta de {centro['municipio_nome']}, com "
-                    "o contorno de cada município colorido pela nota do ranking.")
+figura.update_traces(selector={"type": "choropleth"}, selected={"marker": {"opacity": 1}}, unselected={"marker": {"opacity": 1}})
+figura.update_traces(selector={"type": "scattergeo"}, selected={"marker": {"opacity": 1}, "textfont": {"color": "#f2f1ec"}},
+                     unselected={"marker": {"opacity": 1}, "textfont": {"color": "#f2f1ec"}})  # o clique nao apaga o resto
+evento = st.plotly_chart(figura, config={"displaylogo": False, "scrollZoom": True}, on_select="rerun",
+                         selection_mode="points", key=f"simulador_mapa_{centro_id}_{raio}_{incluir_pequenas}",
+                         alt=f"Mapa da região de {fmt.numero(raio)} km em volta de {centro['municipio_nome']}, com "
+                             "o contorno de cada município colorido pela nota do ranking.")
+clicado = acoes.codigo_valido(acoes.clicado(evento))
+no_universo = set(universo["municipio_id"].astype(int))
+acoes.barra_de_acoes(clicado, rotulos.get(clicado, str(clicado)), "simulador_acoes",
+                     cidade=clicado in no_universo)
 
 # --- Ranking local ----------------------------------------------------------------
 st.subheader("Melhores candidatas no raio")

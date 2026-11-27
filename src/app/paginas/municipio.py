@@ -60,6 +60,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import acoes
 import dados
 import formato as fmt
 
@@ -76,6 +77,15 @@ rotulos = {
     r.municipio_id: f"{r.municipio_nome} ({r.uf_sigla}) · {r.posicao_brasil}º"
     for r in ranking.itertuples()
 }
+da_url = acoes.municipio_novo_da_url("municipio_url_aplicado")  # ?municipio=3506003
+if da_url is not None:
+    if da_url in rotulos:
+        st.session_state[CHAVE_ESCOLHIDO] = da_url
+    else:
+        st.info("A cidade do link não tem nota no ranking (só entram cidades com 50 mil habitantes ou mais). "
+                "Os bairros dela podem ser vistos na página Bairros.", icon=":material/info:")
+        if st.button("Ver bairros dessa cidade", icon=":material/holiday_village:"):
+            acoes.ver_bairros(da_url)
 escolhido = st.session_state.get(CHAVE_ESCOLHIDO, opcoes[0])
 if escolhido not in rotulos:
     escolhido = opcoes[0]
@@ -95,10 +105,15 @@ municipio_id = st.selectbox(
     help="Só cidades com 50 mil habitantes ou mais têm nota no ranking.",
 )
 
+acoes.gravar_na_url(municipio_id)
 cidade = ranking.loc[ranking["municipio_id"] == municipio_id].iloc[0]
 ind = indicadores.loc[indicadores["municipio_id"] == municipio_id].iloc[0]
 
-st.header(f"{cidade['municipio_nome']} · {cidade['uf_sigla']}")
+with st.container(horizontal=True, vertical_alignment="center"):
+    st.header(f"{cidade['municipio_nome']} · {cidade['uf_sigla']}", width="stretch")
+    if st.button("Ver bairros", icon=":material/holiday_village:", type="primary",
+                 help="Ranking dos bairros desta cidade (calculado sob demanda)."):
+        acoes.ver_bairros(int(municipio_id))
 st.caption(
     f"Região {fmt.REGIOES.get(cidade['regiao_sigla'], cidade['regiao_sigla'])} · "
     f"região intermediária de {cidade.get('regiao_intermediaria_nome') or fmt.TRACO} · "

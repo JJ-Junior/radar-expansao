@@ -53,6 +53,7 @@ import numpy as np
 import plotly.express as px
 import streamlit as st
 
+import acoes
 import dados
 import formato as fmt
 
@@ -177,13 +178,20 @@ grafico = px.bar(
     labels={"nota_final": "Nota final", "y": ""},
     color_discrete_sequence=[fmt.COR_DADO],
 )
+grafico.update_traces(customdata=top["municipio_id"].astype(int).tolist())  # lista simples: o clique devolve o codigo
 grafico.update_traces(textposition="outside", cliponaxis=False,
                       hovertemplate="%{y}: nota %{x:.1f}<extra></extra>")
 grafico.update_layout(separators=",.", xaxis_range=[0, 100], height=40 * len(top) + 60,
                       margin={"l": 0, "r": 20, "t": 30, "b": 0},
                       title={"text": f"Top {len(top)} do recorte", "font": {"size": 15}})
-st.plotly_chart(grafico, config={"displayModeBar": False},
-                alt=f"Barras com a nota final das {len(top)} primeiras cidades do recorte.")
+grafico.update_traces(selected={"marker": {"opacity": 1}}, unselected={"marker": {"opacity": 1}})  # o clique nao apaga o resto
+evento = st.plotly_chart(grafico, config={"displayModeBar": False}, on_select="rerun", selection_mode="points",
+                         key="ranking_barras",
+                         alt=f"Barras com a nota final das {len(top)} primeiras cidades do recorte.")
+clicada = acoes.codigo_valido(acoes.clicado(evento))
+nome_clicada = (top["municipio_nome"] + " (" + top["uf_sigla"] + ")")[top["municipio_id"] == clicada]
+acoes.barra_de_acoes(clicada, nome_clicada.iloc[0] if not nome_clicada.empty else "", "ranking_acoes",
+                     dica="Clique numa barra para ver a ficha ou os bairros da cidade.", onde="no gráfico")
 
 # --- Tabela --------------------------------------------------------------------
 COLUNAS = {

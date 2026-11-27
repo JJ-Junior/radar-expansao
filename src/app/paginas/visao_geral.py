@@ -53,6 +53,7 @@ import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
+import acoes
 import dados
 import formato as fmt
 
@@ -202,6 +203,7 @@ with col_mapa:
             "colorbar": {"title": {"text": "Nota"}, "thickness": 12, "len": 0.6},
         },
         text=texto_hover, hoverinfo="text", name="Cidades do universo",
+        customdata=mapa["municipio_id"].astype(int).tolist(),
     ))
     destaque = mapa[mapa["recomendado_top5"]].sort_values("ordem_recomendacao")
     # Rotulo a esquerda quando ha outra recomendada perto, a leste (evita sobrepor nomes).
@@ -219,6 +221,7 @@ with col_mapa:
         + destaque["municipio_nome"],
         textposition=posicao_rotulo, textfont={"color": "#f2f1ec", "size": 13},
         hovertext=texto_hover[destaque.index], hoverinfo="text", name="Recomendadas",
+        customdata=destaque["municipio_id"].astype(int).tolist(),
     ))
     eixo = {"visible": False, "showgrid": False, "zeroline": False}
     figura.update_layout(
@@ -229,11 +232,19 @@ with col_mapa:
         legend={"orientation": "h", "y": 0.02, "x": 0.01},
         plot_bgcolor="rgba(0,0,0,0)", dragmode="pan",
     )
-    st.plotly_chart(
-        figura, config={"displaylogo": False, "scrollZoom": True},
+    figura.update_traces(selected={"marker": {"opacity": 1}, "textfont": {"color": "#f2f1ec"}},
+                         unselected={"marker": {"opacity": 1}, "textfont": {"color": "#f2f1ec"}})  # o clique nao apaga o resto
+    evento = st.plotly_chart(
+        figura, config={"displaylogo": False, "scrollZoom": True}, on_select="rerun", selection_mode="points",
+        key="visao_geral_mapa",
         alt="Mapa do Brasil com as cidades avaliadas: tamanho do ponto é a população, "
             "cor é a nota final; as recomendadas aparecem em laranja.",
     )
+    clicada = acoes.codigo_valido(acoes.clicado(evento))
+    nome_clicada = mapa.loc[mapa["municipio_id"] == clicada]
+    acoes.barra_de_acoes(clicada, "" if nome_clicada.empty else
+                         f"{nome_clicada.iloc[0]['municipio_nome']} ({nome_clicada.iloc[0]['uf_sigla']})",
+                         "visao_geral_acoes")
 
 with col_kpis:
     calculado = ranking["calculado_em"].max()
