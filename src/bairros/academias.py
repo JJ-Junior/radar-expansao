@@ -107,34 +107,43 @@ def geocodificar(cod, p, ac, end, geo):
     quadra_casa = cod in C.NUMERACAO_QUADRA
     partir = partir_quadra if quadra_casa else numero_simples
 
-    e = end[["cep", "quadra", "numero", "titulo_logr", "nome_logr", "lat", "lon", "cd_setor_final", "localidade",
-             "especie"]].copy()
-    e["q"] = e["quadra"].astype(object).map(_inteiro)
-    e["c"] = e["numero"].astype(object).map(_inteiro)
-    e["logr"] = (e["titulo_logr"].astype(str) + " " + e["nome_logr"].astype(str)).str.strip().astype("category")
+    # so os enderecos dos CEPs e logradouros das academias (cidades grandes: evita copiar milhoes de linhas)
     ceps_ac = set(ac["cep"].astype(str).str.replace(r"\D", "", regex=True))
     toks_ac = {" ".join(sorted(tokens(x))) for x in ac["logradouro"]}
-    # so os grupos de CEP/logradouro que interessam (economiza memoria nas cidades grandes)
-    por_cep = {k: g for k, g in e[e["cep"].isin(ceps_ac)].groupby("cep", observed=True)}
-    logr_unicos = pd.Series(e["logr"].cat.categories)
-    tok_de = dict(zip(logr_unicos, logr_unicos.map(lambda x: " ".join(sorted(tokens(x))))))
-    e["logr_tok"] = e["logr"].map(tok_de).astype("category")
-    por_logr = {k: g for k, g in e[e["logr_tok"].isin(toks_ac)].groupby("logr_tok", observed=True) if k}
-    res = e[e["especie"] == "1"]
-    grade_res = {}
-    for la, lo, loc in zip(res["lat"], res["lon"], res["localidade"]):
-        grade_res.setdefault((round(la, 2), round(lo, 2)), []).append((la, lo, loc))
-    lat_min, lat_max, lon_min, lon_max = e.lat.min(), e.lat.max(), e.lon.min(), e.lon.max()
+    logr_cat = (end["titulo_logr"].astype(str) + " " + end["nome_logr"].astype(str)).str.strip().astype("category")
+    cats = pd.Series(logr_cat.cat.categories)
+    tok_de = dict(zip(cats, cats.map(lambda x: " ".join(sorted(tokens(x))))))
+    codigos_ok = [i for i, c in enumerate(cats) if tok_de[c] in toks_ac]
+    mascara = logr_cat.cat.codes.isin(codigos_ok) | end["cep"].isin(ceps_ac)
+    e = end.loc[mascara, ["cep", "quadra", "numero", "lat", "lon", "cd_setor_final", "localidade"]].copy()
+    e["logr"] = logr_cat[mascara].astype(str)
+    del logr_cat
+    for c in ["cep", "quadra", "numero", "cd_setor_final", "localidade"]:
+        e[c] = e[c].astype(str)
+    e["logr_tok"] = e["logr"].map(tok_de)
+    e["q"] = e["quadra"].map(_inteiro)
+    e["c"] = e["numero"].map(_inteiro)
+    por_cep = {k: g for k, g in e[e["cep"].isin(ceps_ac)].groupby("cep")}
+    por_logr = {k: g for k, g in e[e["logr_tok"].isin(toks_ac)].groupby("logr_tok") if k}
+    # grade dos enderecos residenciais (indices em vez de listas Python de milhoes de pontos)
+    res = end.loc[end["especie"] == "1", ["lat", "lon", "localidade"]].reset_index(drop=True)
+    res_lat, res_lon, res_loc = res["lat"].to_numpy(), res["lon"].to_numpy(), res["localidade"].astype(str).to_numpy()
+    grade_res = res.groupby([res["lat"].map(lambda v: round(v, 2)), res["lon"].map(lambda v: round(v, 2))]).indices
+    del res
+    lat_min, lat_max, lon_min, lon_max = end.lat.min(), end.lat.max(), end.lon.min(), end.lon.max()
     polis = poligonos(geo, "cd_setor")
 
     def localidade_proxima(la, lo):
         melhor, dmin = "", 9e9
         for dy in (-0.01, 0, 0.01):
             for dx in (-0.01, 0, 0.01):
-                for a, b, loc in grade_res.get((round(la + dy, 2), round(lo + dx, 2)), []):
-                    d = (a - la) ** 2 + (b - lo) ** 2
-                    if d < dmin:
-                        dmin, melhor = d, loc
+                idx = grade_res.get((round(la + dy, 2), round(lo + dx, 2)))
+                if idx is None:
+                    continue
+                d = (res_lat[idx] - la) ** 2 + (res_lon[idx] - lo) ** 2
+                k = int(d.argmin())
+                if d[k] < dmin:
+                    dmin, melhor = float(d[k]), res_loc[idx[k]]
         return melhor
 
     def escolher_rua(cand, logr_cnpj):
