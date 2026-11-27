@@ -18,6 +18,9 @@ const CORES = ["--pt-1", "--pt-2", "--pt-3", "--pt-4", "--pt-5"];
 const ROTULOS_MAPA = 6;
 const MOLDURA = 1.3;                              // o mapa mostra 30% além do raio
 const PASTA_MALHA = "dados/malha/municipios";
+// Fundo "Mapa de ruas": tiles públicos do OpenStreetMap, sem token (no tema escuro o CSS escurece a imagem).
+// Para trocar de provedor, mude só esta constante e o crédito em index.html (.sim__credito).
+const FUNDO_RUAS = { url: (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`, zoomMax: 19 };
 const prefereMenos = window.matchMedia("(prefers-reduced-motion: reduce)");
 const cor = (nome) => getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
 const facilitar = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
@@ -42,6 +45,8 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar, menu = null }) {
   const saidaRaio = el("sim-raio-valor");
   const incluirPequenas = el("sim-pequenas");
   const abas = el("sim-abas");
+  const botoesFundo = el("sim-fundo");
+  const camadaTiles = el("sim-tiles");
 
   const ufs = feicoes(topoUfs);
   const divisas = topojson.mesh(topoUfs, objetoDe(topoUfs), (a, b) => a !== b);
@@ -56,6 +61,8 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar, menu = null }) {
   let centro = estado.recomendadas[0]?.municipio_id ?? estado.ranking[0].municipio_id;
   let raio = RAIO_PADRAO;
   let vista = "mapa";
+  let fundo = "contornos";                            // "contornos" (padrão) | "ruas"
+  const tilesCache = new Map();                       // url -> <img>
   let dentro = [];                                  // índices dentro do raio (ranqueadas primeiro)
   const distancia = new Float32Array(n);
 
@@ -205,8 +212,10 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar, menu = null }) {
       for (const [i, caminho] of caminhos) {
         const m = todas[i], noRaio = distancia[i] <= raio;
         let preenche = null, a = 0;
-        if (m.ranking) { preenche = corDe(m); a = noRaio ? 0.92 : 0.16; }
-        else if (pequenas) { preenche = paleta.tinta3; a = noRaio ? 0.32 : 0.08; }
+        // sobre o mapa de ruas o preenchimento fica semitransparente, para as ruas aparecerem
+        const ruas = fundo === "ruas";
+        if (m.ranking) { preenche = corDe(m); a = noRaio ? (ruas ? 0.55 : 0.92) : (ruas ? 0.06 : 0.16); }
+        else if (pequenas) { preenche = paleta.tinta3; a = noRaio ? (ruas ? 0.25 : 0.32) : (ruas ? 0.04 : 0.08); }
         if (!preenche) continue;
         ctx.globalAlpha = a * malhaAtual; ctx.fillStyle = preenche; ctx.fill(caminho);
       }
@@ -350,6 +359,7 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar, menu = null }) {
     desenharLista(regiao);
     desenharResumo(regiao);
     desenharLegenda();
+    desenharTiles();
     if (compartilhar) atualizarEndereco();
   }
 
@@ -405,6 +415,36 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar, menu = null }) {
       `A soma considera só lacunas positivas de todos os municípios do raio, inclusive os menores que 50 mil hab. Distância em linha reta entre os centros dos municípios.`;
   }
 
+  /** Tiles do mapa de ruas no enquadramento atual (mesma Web Mercator do d3; se falharem, ficam só os contornos). */
+  function desenharTiles() {
+    const ativo = fundo === "ruas" && vista === "mapa" && projecao;
+    palco.classList.toggle("sim__palco--ruas", !!ativo);
+    botoesFundo.hidden = vista !== "mapa";
+    if (!ativo) return;
+    const k = projecao.scale() * 2 * Math.PI;         // largura do mundo em px
+    const [tx, ty] = projecao.translate();
+    const z = Math.max(0, Math.min(FUNDO_RUAS.zoomMax, Math.round(Math.log2(k / 256))));
+    const n = 2 ** z, tam = k / n, x0 = tx - k / 2, y0 = ty - k / 2;
+    const imgs = [];
+    for (let j = Math.max(0, Math.floor(-y0 / tam)); j <= Math.min(n - 1, Math.floor((altura - y0) / tam)); j++) {
+      for (let i = Math.floor(-x0 / tam); i <= Math.floor((largura - x0) / tam); i++) {
+        const url = FUNDO_RUAS.url(z, ((i % n) + n) % n, j);
+        let img = tilesCache.get(url);
+        if (!img) {
+          img = new Image();
+          img.alt = ""; img.decoding = "async"; img.referrerPolicy = "strict-origin-when-cross-origin";
+          img.onerror = () => { img.style.visibility = "hidden"; };
+          img.src = url;
+          tilesCache.set(url, img);
+        }
+        Object.assign(img.style, { left: `${x0 + i * tam}px`, top: `${y0 + j * tam}px`, width: `${tam + 0.5}px`, height: `${tam + 0.5}px` });
+        imgs.push(img);
+      }
+    }
+    camadaTiles.replaceChildren(...imgs);
+    if (tilesCache.size > 400) for (const [u, im] of tilesCache) if (!im.isConnected) tilesCache.delete(u);
+  }
+
   function desenharLegenda() {
     const alvoLegenda = el("sim-legenda");
     if (!alvoLegenda) return;
@@ -456,6 +496,14 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar, menu = null }) {
     compartilhar = true; atualizarEndereco();
     try { await navigator.clipboard.writeText(location.href); b.textContent = "Link copiado"; } catch { b.textContent = "Copie o endereço da barra"; }
     setTimeout(() => { b.textContent = "Copiar link da simulação"; }, 2500);
+  });
+  botoesFundo.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-fundo]");
+    if (!b || b.dataset.fundo === fundo) return;
+    fundo = b.dataset.fundo;
+    for (const x of botoesFundo.querySelectorAll("[data-fundo]")) x.setAttribute("aria-pressed", x === b);
+    desenharTiles();
+    desenhar();
   });
   abas.addEventListener("click", (e) => {
     const b = e.target.closest("[role=tab]");

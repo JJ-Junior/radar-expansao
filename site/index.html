@@ -279,12 +279,20 @@
         </div>
         <div class="sim__grade">
           <div class="sim__mapa">
-            <div class="abas-explorar" id="sim-abas" role="tablist" aria-label="Forma de ver a região">
-              <button type="button" role="tab" aria-selected="true" tabindex="0" data-vista="mapa" aria-controls="sim-palco">Mapa da região</button>
-              <button type="button" role="tab" aria-selected="false" tabindex="-1" data-vista="ranking" aria-controls="sim-palco">Ranking local</button>
+            <div class="sim__barra">
+              <div class="abas-explorar" id="sim-abas" role="tablist" aria-label="Forma de ver a região">
+                <button type="button" role="tab" aria-selected="true" tabindex="0" data-vista="mapa" aria-controls="sim-palco">Mapa da região</button>
+                <button type="button" role="tab" aria-selected="false" tabindex="-1" data-vista="ranking" aria-controls="sim-palco">Ranking local</button>
+              </div>
+              <div class="abas-explorar sim__fundo" id="sim-fundo" role="group" aria-label="Fundo do mapa">
+                <button type="button" aria-pressed="false" data-fundo="ruas">Mapa de ruas</button>
+                <button type="button" aria-pressed="true" data-fundo="contornos">Só contornos</button>
+              </div>
             </div>
             <div class="explorar__palco sim__palco" id="sim-palco" role="tabpanel">
+              <div class="sim__tiles" id="sim-tiles" aria-hidden="true"></div>
               <canvas id="sim-canvas" role="img" aria-label="Municípios da região pintados pela nota; a mesma informação está na lista ao lado"></canvas>
+              <p class="sim__credito">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors</p>
             </div>
             <div class="mapa__legenda explorar__legenda" id="sim-legenda"></div>
           </div>

@@ -649,6 +649,21 @@ button, select, input { font: inherit; color: inherit; }
 .sim__grade { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; align-items: start; }
 .sim__mapa { display: grid; gap: 16px; justify-items: start; }
 .explorar__palco.sim__palco { aspect-ratio: 1 / 1; max-height: 640px; }
+.sim__barra { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.abas-explorar [aria-pressed] { border: 0; background: transparent; border-radius: 999px; padding: 8px 16px; cursor: pointer; font-family: var(--mono); font-size: .74rem; letter-spacing: .06em; text-transform: uppercase; color: var(--tinta-2); }
+.abas-explorar [aria-pressed="true"] { background: var(--tinta); color: var(--fundo); }
+.abas-explorar [aria-pressed]:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+.sim__fundo[hidden] { display: none; }
+/* mapa de ruas (tiles do OpenStreetMap) por baixo do canvas; só aparece com o fundo "ruas" na vista de mapa */
+.sim__tiles { position: absolute; inset: 0; overflow: hidden; opacity: 0; transition: opacity .4s ease; pointer-events: none; }
+.sim__tiles img { position: absolute; max-width: none; user-select: none; }
+.sim__palco--ruas .sim__tiles { opacity: 1; }
+/* no tema escuro, o mapa claro do OSM vira escuro (inverte e devolve a matiz) */
+:root:not([data-theme="light"]) .sim__tiles { filter: invert(1) hue-rotate(180deg) brightness(.8) contrast(.85) saturate(.6); }
+.sim__credito { display: none; position: absolute; right: 0; bottom: 0; margin: 0; padding: 2px 8px; font-size: .64rem; color: var(--tinta-2); background: color-mix(in srgb, var(--fundo) 75%, transparent); border-top-left-radius: 6px; }
+.sim__credito a { color: inherit; }
+.sim__palco--ruas .sim__credito { display: block; }
+@media (prefers-reduced-motion: reduce) { .sim__tiles { transition: none; } }
 .sim__lado { display: grid; gap: 16px; min-width: 0; }
 .sim__frase { margin: 0 0 16px; color: var(--tinta-2); }
 .sim__frase b { color: var(--tinta); }
