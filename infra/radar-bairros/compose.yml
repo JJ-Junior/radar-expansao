@@ -1,0 +1,46 @@
+# =============================================================================
+# Radar de Expansao - container radar-bairros (worker de "bairros sob demanda")
+# =============================================================================
+# Pasta propria no servidor com: Dockerfile, constraints.txt, .dockerignore,
+# worker.py, compose.yml, .env (chmod 600, a partir do .env.example) e:
+#   git clone --branch <branch> --single-branch <url-do-repositorio> repo
+#   mkdir -p dados logs
+#   docker compose build && docker compose up -d
+# Nao recebe chamadas: le a fila bairros.pedido no Postgres (sem "ports:").
+# Atualizar o codigo: git -C repo pull --ff-only && docker compose restart
+# Remover: docker compose down e apagar a pasta.
+# =============================================================================
+
+name: radar-bairros
+
+services:
+  radar-bairros:
+    build: .
+    image: radar-bairros:local
+    container_name: radar-bairros
+    restart: unless-stopped
+    user: "${RADAR_BAIRROS_UID:-1000}:${RADAR_BAIRROS_GID:-1000}"
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      TZ: America/Sao_Paulo
+    volumes:
+      - ./repo:/app:ro        # codigo do projeto, somente leitura
+      - ./dados:/dados        # cache dos arquivos do IBGE (tmp/ e apagado a cada pedido)
+      - ./logs:/logs          # um log por pedido
+    read_only: true
+    tmpfs:
+      - /tmp
+    mem_limit: 1536m
+    stop_grace_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks: [radar]
+
+networks:
+  radar:
+    external: true

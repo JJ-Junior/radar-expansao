@@ -1,0 +1,6 @@
+# So os requirements do clone entram no contexto do build (o codigo e montado em /app)
+repo/**
+!repo/requirements*.txt
+dados
+logs
+.env
