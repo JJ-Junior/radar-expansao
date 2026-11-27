@@ -3,6 +3,7 @@
 import { carregarDados, carregarMalhas } from "./dados.js";
 import { animarHero, atualizarGatilhos, contar, iniciarMovimento, ligarAncoras, medirCabecalho, revelarAoRolar, rolarAte } from "./movimento.js";
 import { criarRadarHero } from "./hero-radar.js";
+import { criarPitch } from "./pitch.js";
 import { criarMacro } from "./macro.js";
 import { criarMapaRegioes } from "./mapa-regioes.js";
 import { criarCards } from "./cards.js";
@@ -78,6 +79,7 @@ function montarLetreiro(estado, { atual, linhaAtual, agora }) {
 // ---------------------------------------------------------------- início
 async function iniciar() {
   ligarTema();
+  criarPitch();
   iniciarMovimento();
   ligarAncoras();
 

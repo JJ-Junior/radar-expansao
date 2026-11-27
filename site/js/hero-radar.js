@@ -2,6 +2,7 @@
 // (pontos reais: centro de cada município, tamanho = população). Canvas puro, sem vídeo.
 
 import { feicoes, objetoDe } from "./geo.js";
+import { posicionarBotaoPitch } from "./pitch.js";
 
 const VELOCIDADE = 0.85;          // radianos por segundo (~7 s por volta)
 const LARGURA_RASTRO = 1.1;       // abertura do rastro da varredura, em radianos
@@ -48,6 +49,7 @@ export function criarRadarHero({ canvas, topoUfs, cidades }) {
     const [[x0, y0], [x1, y1]] = d3.geoPath(projecao).bounds(brasil);
     cx = (x0 + x1) / 2; cy = (y0 + y1) / 2;
     raio = Math.hypot(x1 - x0, y1 - y0) / 2;
+    posicionarBotaoPitch(canvas.offsetLeft + cx, canvas.offsetTop + cy);   // play do pitch no centro do radar
 
     // camada fixa: anéis, raios e o desenho do Brasil
     sctx.setTransform(dpr, 0, 0, dpr, 0, 0);

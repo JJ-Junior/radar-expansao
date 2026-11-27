@@ -66,6 +66,7 @@
       "./js/menu-municipio.js": "./js/menu-municipio.js?v=__VERSAO__",
       "./js/metodologia.js": "./js/metodologia.js?v=__VERSAO__",
       "./js/movimento.js": "./js/movimento.js?v=__VERSAO__",
+      "./js/pitch.js": "./js/pitch.js?v=__VERSAO__",
       "./js/recomendacao.js": "./js/recomendacao.js?v=__VERSAO__",
       "./js/simulador.js": "./js/simulador.js?v=__VERSAO__"
     }
@@ -93,7 +94,6 @@
         </span>
       </a>
       <nav class="topo__nav" aria-label="Seções">
-        <a href="#pitch">Pitch</a>
         <a href="#agora">Quando</a>
         <a href="#mapa">Onde</a>
         <a href="#top">Top cidades</a>
@@ -120,6 +120,10 @@
     <!-- HERO ---------------------------------------------------------------------->
     <section class="hero" id="inicio" aria-labelledby="titulo-hero">
       <canvas class="hero__radar" id="hero-radar" aria-hidden="true"></canvas>
+      <button class="pitch-play" type="button" id="pitch-abrir" aria-haspopup="dialog" aria-controls="pitch-modal">
+        <span class="pitch-play__circulo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg></span>
+        <span class="pitch-play__rotulo">Assista ao pitch · 4 min</span>
+      </button>
       <div class="largura hero__grade">
         <div class="hero__texto">
           <p class="rotulo">Radar de Expansão · rede de academias</p>
@@ -157,25 +161,6 @@
     <div class="letreiro" aria-label="Indicadores do momento" role="region">
       <div class="letreiro__trilho" id="letreiro"></div>
     </div>
-
-    <!-- PITCH EM VÍDEO ------------------------------------------------------------------>
-    <section class="secao secao--pitch" id="pitch" aria-labelledby="titulo-pitch">
-      <div class="largura">
-        <header class="secao__cabecalho" data-revela>
-          <p class="rotulo">Pitch em vídeo</p>
-          <h2 id="titulo-pitch">O Radar em 4 minutos</h2>
-          <p class="secao__lede">O problema, a solução, a arquitetura e a recomendação de hoje, com legenda.</p>
-        </header>
-        <figure class="pitch">
-          <video class="pitch__video" controls preload="metadata" playsinline
-                 poster="img/pitch-poster.jpg?v=__VERSAO__" aria-label="Pitch do Radar de Expansão, 4 minutos e 33 segundos, com legenda gravada no vídeo">
-            <source src="video/pitch-radar-expansao.mp4?v=__VERSAO__" type="video/mp4">
-            <p>Seu navegador não toca vídeo aqui. <a href="video/pitch-radar-expansao.mp4?v=__VERSAO__">Baixe o pitch em MP4</a>.</p>
-          </video>
-          <figcaption class="pitch__legenda">4 min 33 s · legenda no próprio vídeo · <a href="video/pitch-radar-expansao.mp4?v=__VERSAO__" download>baixar MP4 (30 MB)</a></figcaption>
-        </figure>
-      </div>
-    </section>
 
     <!-- 01 QUANDO ---------------------------------------------------------------------->
     <section class="secao" id="agora" aria-labelledby="titulo-agora">
@@ -515,6 +500,21 @@
       </div>
     </div>
   </footer>
+
+  <!-- Pitch em vídeo (abre pelo play do radar do topo ou pelo endereço #pitch) -->
+  <dialog class="pitch-modal" id="pitch-modal" aria-label="Pitch do Radar de Expansão em vídeo, 4 minutos e 33 segundos">
+    <div class="pitch-modal__caixa">
+      <div class="pitch-modal__topo">
+        <p class="pitch-modal__titulo">Pitch · O Radar em 4 minutos</p>
+        <button class="pitch-modal__fechar" type="button" data-fechar aria-label="Fechar o vídeo">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></svg>
+        </button>
+      </div>
+      <video class="pitch-modal__video" id="pitch-video" controls playsinline preload="none"
+             poster="img/pitch-poster.jpg?v=__VERSAO__" data-src="video/pitch-radar-expansao.mp4?v=__VERSAO__"></video>
+      <p class="pitch-modal__rodape">Legenda no próprio vídeo · <a href="video/pitch-radar-expansao.mp4?v=__VERSAO__" download>baixar MP4 (30 MB)</a></p>
+    </div>
+  </dialog>
 
   <noscript><p class="previa">Este site precisa de JavaScript para carregar os dados.</p></noscript>
 </body>
