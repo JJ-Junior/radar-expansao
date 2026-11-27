@@ -15,7 +15,7 @@ const CORES = ["--seq-1", "--seq-2", "--seq-3", "--seq-4", "--seq-5", "--seq-6"]
 const ROTULOS_POR_NIVEL = { brasil: 0, regiao: 3, uf: 5, intermediaria: 8, imediata: 12 };
 const prefereMenos = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-export function criarMapaRegioes({ topos, estado, aoSelecionar }) {
+export function criarMapaRegioes({ topos, estado, aoSelecionar, menu = null }) {
   const d3 = window.d3;
   const topojson = window.topojson;
   const svg = d3.select("#mapa-svg").attr("viewBox", `0 0 ${L} ${A}`);
@@ -127,7 +127,7 @@ export function criarMapaRegioes({ topos, estado, aoSelecionar }) {
         { rotulo: "Nota final", valor: decimal(r.nota_final, 1), detalhe: `${r.posicao_brasil}º no Brasil` },
         { rotulo: "População", valor: compacto(c.populacao), detalhe: c.regiao_imediata_nome ?? "" },
       ],
-      nota: "Clique para abrir a ficha.",
+      nota: `Clique para abrir a ficha${menu ? "; botão direito ou toque longo: mais opções" : ""}.`,
     });
   }
 
@@ -242,6 +242,11 @@ export function criarMapaRegioes({ topos, estado, aoSelecionar }) {
       || `<li class="discreto">Nenhuma cidade com 50 mil habitantes ou mais neste recorte.</li>`;
   }
   lista.addEventListener("click", (e) => { const b = e.target.closest("button[data-id]"); if (b) aoSelecionar(Number(b.dataset.id)); });
+  // botão direito / toque longo nas cidades do mapa e nos nomes da lista
+  if (menu) {
+    menu.ligar(gCidades.node(), (e) => { const d = e.target.__data__; if (d?.c) esconderDica(); return d?.c?.municipio_id ?? null; });
+    menu.ligar(lista, (e) => Number(e.target.closest("[data-id]")?.dataset.id) || null);
+  }
 
   // ------------------------------------------------------------ história guiada pelo scroll
   const melhor = (lista, minimo = 1) => {

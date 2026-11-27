@@ -57,7 +57,7 @@ function enxame(itens, folga = 0.6) {
 
 const quantil = (valores, p) => window.d3.quantileSorted(valores, p);
 
-export function criarExplorar({ estado, topoUfs, aoSelecionar }) {
+export function criarExplorar({ estado, topoUfs, aoSelecionar, menu = null }) {
   const d3 = window.d3;
   const topojson = window.topojson;
   const palco = document.getElementById("explorar-palco");
@@ -430,7 +430,7 @@ export function criarExplorar({ estado, topoUfs, aoSelecionar }) {
         { rotulo: "Crescimento", valor: fracaoAoAno(c.crescimento_pop_aa) },
         { rotulo: "População", valor: compacto(c.populacao) },
       ],
-      nota: "Clique para abrir a ficha.",
+      nota: `Clique para abrir a ficha${menu ? "; botão direito ou toque longo: mais opções" : ""}.`,
     }));
   }
   canvas.addEventListener("pointermove", (e) => {
@@ -441,6 +441,12 @@ export function criarExplorar({ estado, topoUfs, aoSelecionar }) {
     if (i >= 0) dicaDa(i); else esconderDica();
   });
   canvas.addEventListener("pointerleave", () => { sobMouse = -1; esconderDica(); if (!quadro) desenhar(); });
+  menu?.ligar(canvas, (e) => {
+    const caixa = canvas.getBoundingClientRect();
+    const i = pontoEm(e.clientX - caixa.left, e.clientY - caixa.top);
+    if (i >= 0) esconderDica();
+    return i >= 0 ? cidades[i].municipio_id : null;
+  });
   canvas.addEventListener("click", (e) => {
     const caixa = canvas.getBoundingClientRect();
     const i = pontoEm(e.clientX - caixa.left, e.clientY - caixa.top);

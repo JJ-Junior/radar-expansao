@@ -8,6 +8,7 @@ import { criarMapaRegioes } from "./mapa-regioes.js";
 import { criarCards } from "./cards.js";
 import { criarExplorar } from "./explorar.js";
 import { criarSimulador } from "./simulador.js";
+import { criarMenuMunicipio } from "./menu-municipio.js";
 import { criarFicha } from "./ficha.js";
 import { criarBusca } from "./busca.js";
 import { desenharCamadas, desenharCriterios } from "./metodologia.js";
@@ -92,6 +93,7 @@ async function iniciar() {
   medirCabecalho();
 
   const ficha = criarFicha({ estado, aoSelecionar: selecionar });
+  const menu = criarMenuMunicipio({ estado, aoSelecionar: (id) => selecionar(id) });
 
   /** Abre a ficha, atualiza o endereço e o título da aba. */
   function selecionar(id, { rolar = true, historico = true } = {}) {
@@ -136,10 +138,10 @@ async function iniciar() {
   try {
     const { ufs } = await carregarMalhas(["ufs"]);
     criarRadarHero({ canvas: document.getElementById("hero-radar"), topoUfs: ufs, cidades: estado.universo });
-    criarExplorar({ estado, topoUfs: ufs, aoSelecionar: selecionar });
-    simulador = criarSimulador({ estado, topoUfs: ufs, aoSelecionar: selecionar });
+    criarExplorar({ estado, topoUfs: ufs, aoSelecionar: selecionar, menu });
+    simulador = criarSimulador({ estado, topoUfs: ufs, aoSelecionar: selecionar, menu });
     const outras = await carregarMalhas(["regioes", "intermediarias", "imediatas"]);
-    criarMapaRegioes({ topos: { ufs, ...outras }, estado, aoSelecionar: selecionar });
+    criarMapaRegioes({ topos: { ufs, ...outras }, estado, aoSelecionar: selecionar, menu });
   } catch (erro) {
     const aviso = document.getElementById("mapa-carregando");
     if (aviso) aviso.textContent = `Não foi possível carregar o mapa (${erro.message}).`;

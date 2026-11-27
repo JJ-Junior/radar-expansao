@@ -586,6 +586,20 @@ button, select, input { font: inherit; color: inherit; }
   * { transition: none !important; }
 }
 
+/* ---------------------------------------------------------------- menu de contexto do município (js/menu-municipio.js) */
+.menu-mun { position: fixed; left: 0; top: 0; z-index: 95; min-width: 270px; max-width: min(320px, calc(100vw - 16px));
+  background: var(--superficie); color: var(--tinta); border: 1px solid var(--linha-forte); border-radius: var(--raio);
+  box-shadow: var(--sombra); padding: 8px; display: grid; gap: 2px; }
+.menu-mun[hidden] { display: none; }
+.menu-mun__titulo { margin: 4px 8px 8px; font-weight: 700; font-size: .9rem; }
+.menu-mun__item { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 10px 8px; min-height: 44px;
+  border: 0; border-radius: 8px; background: transparent; color: inherit; font: inherit; font-size: .9rem; text-align: left; text-decoration: none; cursor: pointer; }
+.menu-mun__item span { white-space: nowrap; }
+.menu-mun__item small { font-family: var(--mono); font-size: .66rem; letter-spacing: .04em; color: var(--tinta-3); white-space: nowrap; }
+.menu-mun__item:hover, .menu-mun__item:focus-visible { background: var(--superficie-2); }
+.menu-mun__item:focus-visible { outline: 2px solid var(--foco); outline-offset: -2px; }
+.menu-mun__item:hover span, .menu-mun__item:focus-visible span { color: var(--limao-texto); }
+
 /* ---------------------------------------------------------------- tooltip único (js/dica.js) */
 .dica { position: fixed; left: 0; top: 0; z-index: 90; pointer-events: none; max-width: min(360px, calc(100vw - 16px));
   background: var(--superficie); color: var(--tinta); border: 1px solid var(--linha-forte); border-radius: var(--raio);

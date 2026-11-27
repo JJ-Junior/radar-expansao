@@ -30,7 +30,7 @@ export function distanciaKm(lat1, lon1, lat2, lon2) {
   return 2 * 6371 * Math.asin(Math.sqrt(a));
 }
 
-export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
+export function criarSimulador({ estado, topoUfs, aoSelecionar, menu = null }) {
   const d3 = window.d3;
   const topojson = window.topojson;
   const el = (id) => document.getElementById(id);
@@ -519,10 +519,20 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
         { rotulo: "Lacuna de academias*", valor: lacunaTexto(m.lacuna_academias), detalhe: "estimativa" },
         { rotulo: "População", valor: compacto(m.populacao), detalhe: `${compacto(m.populacao_projetada)} em ${anoProjecao}*` },
       ].filter(Boolean),
-      nota: "Clique para abrir a ficha. * estimativa simples.",
+      nota: `Clique para abrir a ficha${menu ? "; botão direito ou toque longo: mais opções" : ""}. * estimativa simples.`,
     }));
   });
   canvas.addEventListener("pointerleave", () => { sobMouse = -1; esconderDica(); if (!quadro) desenhar(); });
+  // botão direito / toque longo num município (mapa ou ranking local) e nos nomes da lista ao lado
+  if (menu) {
+    menu.ligar(canvas, (e) => {
+      const caixa = canvas.getBoundingClientRect();
+      const i = alvoEm(e.clientX - caixa.left, e.clientY - caixa.top);
+      if (i >= 0) esconderDica();
+      return i >= 0 ? todas[i].municipio_id : null;
+    });
+    menu.ligar(el("sim-lista"), (e) => Number(e.target.closest("[data-id]")?.dataset.id) || null);
+  }
   canvas.addEventListener("click", (e) => {
     const caixa = canvas.getBoundingClientRect();
     const i = alvoEm(e.clientX - caixa.left, e.clientY - caixa.top);
