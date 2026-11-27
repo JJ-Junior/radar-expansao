@@ -12,7 +12,7 @@ Vitrine de expansão para o diretor da rede de academias, numa página só, cont
 8. **Critérios:** o perfil que o Radar procura (cada setor = peso).
 9. **Método:** fórmula, regras, semáforo e limitações.
 10. **Dados:** as camadas do Lakehouse.
-11. **Chamada** para o dashboard e o repositório.
+11. **Chamada** para o dashboard publicado (https://radar-expansao.streamlit.app) e o repositório; o link do dashboard também fica no topo, no simulador e no rodapé.
 
 **Não é o dashboard oficial** (esse é o Streamlit em `src/app/`): é a porta de entrada pública do projeto.
 
@@ -48,7 +48,7 @@ site/
 │   ├── geo.js            utilidades das malhas TopoJSON
 │   ├── cards.js          as recomendadas e o ranking geral (grade; carrossel no celular)
 │   ├── explorar.js       as 687 cidades como pontos em canvas, cinco vistas com transição
-│   ├── simulador.js      simule sua região: cidade central + raio (?centro=&raio=), mapa e ranking local
+│   ├── simulador.js      simule sua região: cidade central + raio (?centro=&raio=), mapa com o contorno dos municípios e ranking local
 │   ├── dica.js           tooltip único do site (hover, foco, toque; Esc fecha)
 │   ├── recomendacao.js   explica a lista de recomendadas (trava de renda, uma por região imediata)
 │   ├── grafico-radar.js  gráfico-radar das 6 notas (SVG)
@@ -114,6 +114,7 @@ numa subpasta ou no servidor local de teste.
 - **Desempenho:**
   - o radar do topo só anima quando está visível e a aba está ativa;
   - as malhas mais pesadas carregam depois do resto da página;
+  - o simulador baixa a malha municipal só das UFs que o mapa mostra (e guarda para as próximas simulações); enquanto ela não chega, ou se falhar, as cidades aparecem como pontos;
   - não há vídeo nem imagem grande.
 - **Cores:** marca (verde-limão), dado (escala azul e laranja das cidades) e estado (semáforo) vêm de tokens separados. O semáforo sempre usa ícone + texto, nunca só a cor.
 - **Teclado:** filtros, busca (setas, Enter, Esc), trilha do mapa, cards e listas funcionam pelo teclado.

@@ -2,6 +2,8 @@
 // Mostra as cidades do ranking dentro do raio (posição no raio e no Brasil, nota, distância, lacuna de academias),
 // num mapa com zoom e círculo; a vista "Ranking local" rearranja os mesmos pontos numa fila pela nota (850 ms).
 // Distância em linha reta entre centroides (haversine, spec 9.4). Endereço: ?centro=<código IBGE>&raio=<km>.
+// Com a malha municipal do IBGE (dados/malha/municipios/<UF>.topo.json, só as UFs que o mapa mostra), cada município
+// vira um polígono pintado pela nota; sem ela (ou enquanto carrega) ficam os pontos nos centroides.
 
 import { compacto, decimal, inteiro, normalizar } from "./formato.js";
 import { conteudoDica, esconderDica, mostrarDica } from "./dica.js";
@@ -15,6 +17,7 @@ const LIMIARES = [45, 52, 59, 66];
 const CORES = ["--pt-1", "--pt-2", "--pt-3", "--pt-4", "--pt-5"];
 const ROTULOS_MAPA = 6;
 const MOLDURA = 1.3;                              // o mapa mostra 30% além do raio
+const PASTA_MALHA = "dados/malha/municipios";
 const prefereMenos = window.matchMedia("(prefers-reduced-motion: reduce)");
 const cor = (nome) => getComputedStyle(document.documentElement).getPropertyValue(nome).trim();
 const facilitar = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
@@ -65,6 +68,18 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
   let sobMouse = -1;
   let paleta = {};
 
+  // malha municipal: carregada por UF, sob demanda, e guardada (null = não carregou: fica o ponto)
+  const caixasUf = ufs.features.map((f) => ({ cod: Number(f.properties?.codarea ?? f.id), caixa: d3.geoBounds(f) }));
+  const malhaUf = new Map();                        // código da UF -> Map(municipio_id -> { f, caixa })
+  const pedidos = new Map();
+  let quadroGeo = null;                             // o que o mapa mostra, em longitude/latitude
+  let caminhos = new Map();                         // índice -> Path2D do município, na projeção atual
+  let caixasPx = new Map();                         // índice -> [x0, y0, x1, y1] (para achar o município sob o ponteiro)
+  let divisasMun = null;                            // todas as divisas municipais num caminho só
+  let malhaAtual = 0, malhaDe = 0, malhaPara = 0;   // opacidade da malha (anima junto com os pontos)
+  let chaveQuadro = "";
+  let recarga = false;
+
   // ------------------------------------------------------------ cálculo da região
   function calcular() {
     const c = estado.porId.get(centro);
@@ -80,11 +95,61 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
   function lerCores() {
     paleta = Object.fromEntries(CORES.map((k) => [k, cor(k)]));
     Object.assign(paleta, { limao: cor("--limao-texto"), tinta: cor("--tinta"), tinta3: cor("--tinta-3"), halo: cor("--halo"),
-      linha: cor("--linha-forte"), divisa: cor("--mapa-divisa-fina"), fonte: `600 12px ${cor("--mono") || "monospace"}` });
+      linha: cor("--linha-forte"), divisa: cor("--mapa-divisa-fina"), divisaForte: cor("--mapa-divisa"),
+      fonte: `600 12px ${cor("--mono") || "monospace"}` });
   }
   const corDe = (m) => (m.ranking ? paleta[CORES[d3.bisectRight(LIMIARES, m.ranking.nota_final)]] : paleta.tinta3);
 
-  function layoutMapa(regiao) {
+  const tocaQuadro = (c) => c[0][0] <= quadroGeo.leste && c[1][0] >= quadroGeo.oeste && c[0][1] <= quadroGeo.norte && c[1][1] >= quadroGeo.sul;
+
+  function carregarUf(cod) {
+    if (!pedidos.has(cod)) {
+      pedidos.set(cod, fetch(`${PASTA_MALHA}/${String(cod).padStart(2, "0")}.topo.json`)
+        .then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+        .then((topo) => {
+          const mapa = new Map();
+          for (const f of feicoes(topo).features) mapa.set(Number(f.id), { f, caixa: d3.geoBounds(f) });
+          malhaUf.set(cod, mapa);
+        })
+        .catch(() => malhaUf.set(cod, null)));       // sem a malha da UF, os pontos continuam
+    }
+    return pedidos.get(cod);
+  }
+
+  /** Monta os polígonos dos municípios que aparecem no quadro; se faltar alguma UF, pede e redesenha quando chegar. */
+  function montarMalha() {
+    const necessarias = caixasUf.filter((u) => tocaQuadro(u.caixa)).map((u) => u.cod);
+    const faltam = necessarias.filter((c) => !malhaUf.has(c));
+    caminhos = new Map(); caixasPx = new Map(); divisasMun = null;
+    if (faltam.length) {
+      Promise.all(faltam.map(carregarUf)).then(() => {
+        if (recarga) return;
+        recarga = true;
+        requestAnimationFrame(() => { recarga = false; if (vista === "mapa") aplicar(); });
+      });
+      return;
+    }
+    const gerador = d3.geoPath(projecao);
+    divisasMun = new Path2D();
+    for (const cod of necessarias) {
+      const mapa = malhaUf.get(cod);
+      if (!mapa) continue;
+      for (const [id, { f, caixa }] of mapa) {
+        if (!tocaQuadro(caixa)) continue;
+        const i = indicePorId.get(id);
+        if (i === undefined) continue;
+        const d = gerador(f);
+        if (!d) continue;
+        const caminho = new Path2D(d);
+        caminhos.set(i, caminho);
+        divisasMun.addPath(caminho);
+        const [x0, y1] = projecao(caixa[0]), [x1, y0] = projecao(caixa[1]);
+        caixasPx.set(i, [x0, y0, x1, y1]);
+      }
+    }
+  }
+
+  function layoutMapa(regiao, { malha = true } = {}) {
     const c = estado.porId.get(centro);
     const circulo = d3.geoCircle().center([c.longitude, c.latitude]).radius(raio / 111.195)();
     // enquadra um pouco além do raio, para as cidades de fora aparecerem esmaecidas em volta
@@ -92,6 +157,9 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
     projecao = d3.geoMercator().fitExtent([[16, 16], [largura - 16, altura - 16]], moldura);
     caminhoCanvas = d3.geoPath(projecao, ctx);
     circuloGeo = circulo;
+    const [oeste, norte] = projecao.invert([0, 0]), [leste, sul] = projecao.invert([largura, altura]);
+    quadroGeo = { oeste, norte, leste, sul };
+    if (malha) montarMalha();
     const zoom = Math.max(1, Math.min(6, 300 / raio));
     const raioPop = d3.scaleSqrt().domain([0, 2e6]).range([0, 7 * Math.sqrt(zoom)]).clamp(true);
     const p = { x: new Float32Array(n), y: new Float32Array(n), r: new Float32Array(n), a: new Float32Array(n) };
@@ -100,14 +168,14 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
       const m = todas[i];
       [p.x[i], p.y[i]] = projecao([m.longitude, m.latitude]);
       p.r[i] = Math.max(m.ranking ? 2.5 : 1.6, raioPop(m.populacao ?? 0));
-      const visivel = m.ranking || mostrarPequenas;
+      const visivel = (m.ranking || mostrarPequenas) && !caminhos.has(i);   // com polígono, o ponto dá lugar a ele
       p.a[i] = !visivel ? 0 : distancia[i] <= raio ? 1 : 0.18;
     }
     return p;
   }
 
   function layoutRanking(regiao) {
-    const p = layoutMapa(regiao);
+    const p = layoutMapa(regiao, { malha: false });
     const lista = [...regiao.ranqueadas, ...(incluirPequenas.checked ? regiao.pequenas : [])];
     const m = { topo: 32, base: 48, esq: Math.min(230, largura * 0.4), dir: Math.min(110, largura * 0.2) };
     const linhaH = Math.min(40, (altura - m.topo - m.base) / Math.max(1, lista.length));
@@ -130,9 +198,23 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
   function desenhar() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, largura, altura);
+    // municípios pintados pela nota: no raio, cheios; fora, esmaecidos; < 50 mil em cinza se a opção estiver ligada
+    const comMalha = malhaAtual > 0.01 && caminhos.size > 0;
+    if (comMalha) {
+      const pequenas = incluirPequenas.checked;
+      for (const [i, caminho] of caminhos) {
+        const m = todas[i], noRaio = distancia[i] <= raio;
+        let preenche = null, a = 0;
+        if (m.ranking) { preenche = corDe(m); a = noRaio ? 0.92 : 0.16; }
+        else if (pequenas) { preenche = paleta.tinta3; a = noRaio ? 0.32 : 0.08; }
+        if (!preenche) continue;
+        ctx.globalAlpha = a * malhaAtual; ctx.fillStyle = preenche; ctx.fill(caminho);
+      }
+      ctx.globalAlpha = malhaAtual; ctx.lineWidth = 0.6; ctx.strokeStyle = paleta.divisa; ctx.stroke(divisasMun);
+    }
     // fundo do mapa (some na vista de ranking)
     ctx.globalAlpha = vista === "mapa" ? 1 : 0.12;
-    ctx.lineWidth = 1; ctx.strokeStyle = paleta.divisa; ctx.beginPath(); caminhoCanvas(divisas); ctx.stroke();
+    ctx.lineWidth = 1; ctx.strokeStyle = comMalha ? paleta.divisaForte : paleta.divisa; ctx.beginPath(); caminhoCanvas(divisas); ctx.stroke();
     ctx.strokeStyle = paleta.linha; ctx.beginPath(); caminhoCanvas(contorno); ctx.stroke();
     if (vista === "mapa") {
       ctx.fillStyle = paleta.limao; ctx.globalAlpha = 0.06;
@@ -194,27 +276,41 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
     const ocupados = [];
     const cabe = (c) => c.x >= 2 && c.x + c.w <= largura - 2 && c.y >= 2 && c.y + c.h <= altura - 2 &&
       !ocupados.some((o) => c.x < o.x + o.w && c.x + c.w > o.x && c.y < o.y + o.h && c.y + c.h > o.y);
-    const anel = (i, corAnel, rotulo) => {
-      ctx.lineWidth = 2.5; ctx.strokeStyle = corAnel;
-      ctx.beginPath(); ctx.arc(atual.x[i], atual.y[i], atual.r[i] + 3, 0, Math.PI * 2); ctx.stroke();
-      if (!rotulo) return;
-      const w = ctx.measureText(rotulo).width, h = 14, x = atual.x[i], y = atual.y[i], d = atual.r[i] + 8;
+    // com a malha, o destaque é o contorno do município; sem ela, um anel em volta do ponto
+    const anel = (i, corAnel, rotulo, espessura = 2.5) => {
+      const caminho = vista === "mapa" && malhaAtual > 0.5 ? caminhos.get(i) : null;
+      ctx.lineWidth = espessura; ctx.strokeStyle = corAnel; ctx.globalAlpha = 1;
+      if (caminho) ctx.stroke(caminho);
+      else { ctx.beginPath(); ctx.arc(atual.x[i], atual.y[i], atual.r[i] + 3, 0, Math.PI * 2); ctx.stroke(); }
+      if (rotulo) pendentes.push([i, rotulo, !!caminho]);
+    };
+    // rótulos depois de todos os contornos, para nenhum contorno passar por cima de um nome
+    const pendentes = [];
+    const escrever = ([i, rotulo, comCaminho]) => {
+      const w = ctx.measureText(rotulo).width, h = 14, x = atual.x[i], y = atual.y[i], d = comCaminho ? 6 : atual.r[i] + 8;
       const lugar = [{ x: x + d, y: y - h / 2 }, { x: x - d - w, y: y - h / 2 }, { x: x - w / 2, y: y - d - h }, { x: x - w / 2, y: y + d }]
         .map((c) => ({ ...c, w, h })).find(cabe);
       if (!lugar) return;
-      ocupados.push(lugar);
+      ocupados.push({ x: lugar.x - 3, y: lugar.y - 3, w: lugar.w + 6, h: lugar.h + 6 });   // folga para o halo do texto
       ctx.lineJoin = "round";
       ctx.lineWidth = 4; ctx.strokeStyle = paleta.halo; ctx.strokeText(rotulo, lugar.x, lugar.y + 11);
       ctx.fillStyle = paleta.tinta; ctx.fillText(rotulo, lugar.x, lugar.y + 11);
     };
     if (vista === "mapa") {
       const ic = indicePorId.get(centro);
-      if (ic !== undefined) anel(ic, paleta.tinta, `CENTRO: ${todas[ic].municipio_nome.toUpperCase()}`);
+      // o rótulo do centro tem prioridade; o contorno dele é desenhado por último, por cima dos vizinhos
+      if (ic !== undefined) anel(ic, paleta.tinta, `CENTRO: ${todas[ic].municipio_nome.toUpperCase()}`, 3);
       dentroRanqueadas.slice(0, ROTULOS_MAPA).forEach((i, k) => {
         if (i !== ic) anel(i, paleta.limao, `${k + 1}. ${todas[i].municipio_nome.toUpperCase()}`);
       });
+      if (ic !== undefined && caminhos.has(ic) && malhaAtual > 0.5) {
+        anel(ic, paleta.halo, null, 6);               // halo escuro/claro por baixo: o contorno aparece sobre qualquer cor
+        anel(ic, paleta.tinta, null, 2.5);
+        ctx.fillStyle = paleta.tinta; ctx.beginPath(); ctx.arc(atual.x[ic], atual.y[ic], 3.5, 0, Math.PI * 2); ctx.fill();
+      }
+      pendentes.forEach(escrever);
     }
-    if (sobMouse >= 0) anel(sobMouse, paleta.tinta, null);
+    if (sobMouse >= 0) anel(sobMouse, paleta.tinta, null, 2);
   }
 
   function passo(agora) {
@@ -224,6 +320,7 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
       const de = origem[k], para = alvo[k], at = atual[k];
       for (let i = 0; i < n; i++) at[i] = de[i] + (para[i] - de[i]) * e;
     }
+    malhaAtual = malhaDe + (malhaPara - malhaDe) * e;
     desenhar();
     quadro = t < 1 ? requestAnimationFrame(passo) : null;
   }
@@ -234,8 +331,14 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
     dentro = [...regiao.ranqueadas, ...regiao.pequenas];
     dentroRanqueadas = regiao.ranqueadas;
     alvo = vista === "mapa" ? layoutMapa(regiao) : layoutRanking(regiao);
+    // a malha some no ranking e, quando o quadro muda (outro centro ou raio), reaparece já na posição nova
+    const chave = `${centro}|${raio}|${largura}|${altura}`;
+    malhaPara = vista === "mapa" && caminhos.size ? 1 : 0;
+    malhaDe = chave !== chaveQuadro ? 0 : malhaAtual;
+    chaveQuadro = chave;
     if (quadro) cancelAnimationFrame(quadro);
     if (!animar || prefereMenos.matches) {
+      malhaAtual = malhaPara;
       for (const k of ["x", "y", "r", "a"]) atual[k].set(alvo[k]);
       quadro = null;
       desenhar();
@@ -246,6 +349,7 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
     }
     desenharLista(regiao);
     desenharResumo(regiao);
+    desenharLegenda();
     if (compartilhar) atualizarEndereco();
   }
 
@@ -301,6 +405,16 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
       `A soma considera só lacunas positivas de todos os municípios do raio, inclusive os menores que 50 mil hab. Distância em linha reta entre os centros dos municípios.`;
   }
 
+  function desenharLegenda() {
+    const alvoLegenda = el("sim-legenda");
+    if (!alvoLegenda) return;
+    alvoLegenda.innerHTML = `Nota final
+      <div class="escala">${CORES.map((c) => `<i style="background:var(${c})"></i>`).join("")}</div>
+      <div style="display:flex;justify-content:space-between"><span>&lt; ${LIMIARES[0]}</span><span>${LIMIARES.at(-1)}+</span></div>
+      ${incluirPequenas.checked ? `<div style="margin-top:8px"><span class="ponto ponto--cinza"></span>menos de 50 mil hab. (sem nota)</div>` : ""}
+      <div style="margin-top:4px"><span class="ponto ponto--anel"></span>as ${ROTULOS_MAPA} melhores do raio</div>`;
+  }
+
   // ------------------------------------------------------------ endereço compartilhável
   // o endereço só ganha ?centro=&raio= quando a simulação é do usuário (mexeu nos controles ou abriu um link)
   let compartilhar = false;
@@ -330,7 +444,11 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
     campo.value = nomeCentro();
   });
   controleRaio.min = RAIO_MIN; controleRaio.max = RAIO_MAX; controleRaio.step = 10;
-  controleRaio.addEventListener("input", () => { compartilhar = true; raio = Number(controleRaio.value); saidaRaio.textContent = `${raio} km`; aplicar({ animar: false }); });
+  let quadroRaio = null;
+  controleRaio.addEventListener("input", () => {
+    compartilhar = true; raio = Number(controleRaio.value); saidaRaio.textContent = `${raio} km`;
+    if (!quadroRaio) quadroRaio = requestAnimationFrame(() => { quadroRaio = null; aplicar({ animar: false }); });
+  });
   controleRaio.addEventListener("change", () => aplicar());
   incluirPequenas.addEventListener("change", () => aplicar());
   el("sim-copiar").addEventListener("click", async (e) => {
@@ -358,6 +476,20 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
   });
 
   // ponteiro: tooltip único e clique abre a ficha
+  function municipioEm(px, py) {
+    if (vista !== "mapa" || malhaAtual < 0.5) return -1;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    let achou = -1;
+    for (const [i, [x0, y0, x1, y1]] of caixasPx) {
+      if (px < x0 || px > x1 || py < y0 || py > y1) continue;
+      if (ctx.isPointInPath(caminhos.get(i), px * dpr, py * dpr)) { achou = i; if (distancia[i] <= raio) break; }
+    }
+    return achou;
+  }
+  function alvoEm(px, py) {
+    const i = pontoEm(px, py);
+    return i >= 0 ? i : municipioEm(px, py);
+  }
   function pontoEm(px, py) {
     let melhor = -1, dist = Infinity;
     for (let i = 0; i < n; i++) {
@@ -369,13 +501,16 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
   }
   canvas.addEventListener("pointermove", (e) => {
     const caixa = canvas.getBoundingClientRect();
-    const i = pontoEm(e.clientX - caixa.left, e.clientY - caixa.top);
+    const i = alvoEm(e.clientX - caixa.left, e.clientY - caixa.top);
     if (i !== sobMouse) { sobMouse = i; if (!quadro) desenhar(); }
     canvas.style.cursor = i >= 0 ? "pointer" : "default";
     if (i < 0) { esconderDica(); return; }
     const m = todas[i];
-    mostrarDica({ left: caixa.left + atual.x[i] - atual.r[i], right: caixa.left + atual.x[i] + atual.r[i], top: caixa.top + atual.y[i] - atual.r[i],
-      bottom: caixa.top + atual.y[i] + atual.r[i], width: atual.r[i] * 2, height: atual.r[i] * 2 }, conteudoDica({
+    const ancora = atual.a[i] >= 0.5
+      ? { left: caixa.left + atual.x[i] - atual.r[i], right: caixa.left + atual.x[i] + atual.r[i], top: caixa.top + atual.y[i] - atual.r[i],
+        bottom: caixa.top + atual.y[i] + atual.r[i], width: atual.r[i] * 2, height: atual.r[i] * 2 }
+      : e;                                           // polígono: a dica segue o ponteiro
+    mostrarDica(ancora, conteudoDica({
       titulo: `${m.municipio_nome} · ${m.uf_sigla}`,
       chip: m.ranking?.recomendado_top5 ? { texto: `Recomendada nº ${m.ranking.ordem_recomendacao}`, estado: "verde" } : (m.ranking ? null : { texto: "sem nota" }),
       linhas: [
@@ -390,7 +525,7 @@ export function criarSimulador({ estado, topoUfs, aoSelecionar }) {
   canvas.addEventListener("pointerleave", () => { sobMouse = -1; esconderDica(); if (!quadro) desenhar(); });
   canvas.addEventListener("click", (e) => {
     const caixa = canvas.getBoundingClientRect();
-    const i = pontoEm(e.clientX - caixa.left, e.clientY - caixa.top);
+    const i = alvoEm(e.clientX - caixa.left, e.clientY - caixa.top);
     if (i >= 0) { esconderDica(); aoSelecionar(todas[i].municipio_id); }
   });
 
