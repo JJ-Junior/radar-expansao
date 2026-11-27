@@ -280,6 +280,35 @@ docker compose build && docker compose up -d
   `docker compose run --rm radar-etl python -m src.ingestao.carga_inicial`.
 - **Remover:** `docker compose down` e apagar a pasta.
 
+### 4.2 Container `radar-app` (espelho autohospedado do dashboard)
+
+O dashboard oficial roda no Streamlit Cloud. O espelho é o **mesmo app** num container do servidor e lê a gold pelo mesmo
+caminho: API REST com a chave anon + o JWT `web_leitor`, só que pelo gateway **dentro da rede Docker**
+(`http://supabase-kong:8000`). O container não recebe nenhuma credencial do Postgres. Modelos em
+[`infra/radar-app/`](../infra/radar-app/).
+
+```bash
+mkdir -p ~/radar/app && cd ~/radar/app
+cp <caminho-do-repositorio>/infra/radar-app/{Dockerfile,compose.yml,constraints.txt,.dockerignore} .
+cp <caminho-do-repositorio>/infra/radar-app/.env.example .env
+chmod 600 .env
+# no .env: SUPABASE_ANON_KEY (ANON_KEY do Supabase), SUPABASE_CHAVE_LEITURA (JWT web_leitor),
+#          RADAR_APP_UID/GID (saída de id -u e id -g)
+git clone --branch <branch> --single-branch <url-do-repositorio> repo
+docker compose build && docker compose up -d
+```
+
+- **Versões:** a imagem instala o `requirements.txt` do projeto (o mesmo do Streamlit Cloud). As dependências indiretas
+  ficam presas ao `constraints.txt` (as versões do ambiente testado).
+- **Rede:** sem `ports:`, só na rede `radar`, em `http://radar-app:8501`. Health em `/_stcore/health`. O websocket do
+  Streamlit usa `/_stcore/stream`.
+- **Limites:** `mem_limit 512m`, disco do container só leitura (o `HOME` fica num tmpfs), logs rotativos,
+  `restart: unless-stopped`.
+- **Publicar:** no túnel do Cloudflare, crie um *Public Hostname* `<url-publica-do-espelho>` com serviço
+  `HTTP` → `radar-app:8501`, sem path. O WebSocket já vem ligado no domínio (*Network → WebSockets*).
+- **Atualizar o código:** `git -C repo pull --ff-only && docker compose restart`. O file watcher fica desligado, então o
+  código novo só entra com o restart.
+
 ---
 
 ## 5. Acesso remoto seguro

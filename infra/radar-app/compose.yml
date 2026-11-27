@@ -1,0 +1,42 @@
+# =============================================================================
+# Radar de Expansao - container radar-app (espelho autohospedado do dashboard)
+# =============================================================================
+# Pasta propria no servidor com: Dockerfile, constraints.txt, .dockerignore,
+# compose.yml, .env (chmod 600, a partir do .env.example) e:
+#   git clone --branch <branch> --single-branch <url-do-repositorio> repo
+#   docker compose build && docker compose up -d
+# Sem "ports:": so a rede "radar" alcanca o app (http://radar-app:8501); a
+# publicacao e feita pelo tunel (hostname publico -> http://radar-app:8501).
+# Atualizar o codigo: git -C repo pull --ff-only && docker compose restart
+# =============================================================================
+
+name: radar-app
+
+services:
+  radar-app:
+    build: .
+    image: radar-app:local
+    container_name: radar-app
+    restart: unless-stopped
+    user: "${RADAR_APP_UID:-1000}:${RADAR_APP_GID:-1000}"
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      TZ: America/Sao_Paulo
+    volumes:
+      - ./repo:/app:ro        # codigo do projeto, somente leitura
+    read_only: true
+    tmpfs:
+      - /tmp                  # HOME do container (Streamlit grava ~/.streamlit)
+    mem_limit: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks: [radar]
+
+networks:
+  radar:
+    external: true
