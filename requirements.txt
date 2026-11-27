@@ -1,14 +1,18 @@
+# Versões fixas: as mesmas testadas no ambiente local (Python 3.12).
+# O Streamlit Cloud instala este arquivo; escolha Python 3.12 em Advanced settings.
+
 # Ingestão (bronze)
-requests>=2.32
-python-dotenv>=1.0
+requests==2.34.2
+python-dotenv==1.2.4
 
 # Banco (Supabase / Postgres)
-psycopg2-binary>=2.9
-SQLAlchemy>=2.0
+psycopg2-binary==2.9.13
+SQLAlchemy==2.1.9
 
 # Transformação e análise
-pandas>=2.2
+pandas==3.1.1
+numpy==2.5.5
 
 # Dashboard
-streamlit>=1.67
-plotly>=5.24
+streamlit==1.67.0
+plotly==7.2.0
