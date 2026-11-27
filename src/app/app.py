@@ -13,7 +13,7 @@
 # =============================================================================
 #
 # OBJETIVO: abrir o dashboard do Radar: configura a pagina, monta o menu com as
-#           6 paginas e avisa na tela de onde vieram os dados (API ou copia).
+#           7 paginas e avisa na tela de onde vieram os dados (API ou copia).
 # ENTRADA:  camada gold (via src/app/dados.py)
 # SAIDA:    paginas web do dashboard; nao grava nada
 #
@@ -70,6 +70,7 @@ paginas = [
     st.Page("paginas/ranking.py", title="Ranking", icon=":material/leaderboard:"),
     st.Page("paginas/municipio.py", title="Município", icon=":material/location_city:"),
     st.Page("paginas/simulador.py", title="Simulador de região", icon=":material/travel_explore:"),
+    st.Page("paginas/bairros.py", title="Bairros", icon=":material/holiday_village:"),
     st.Page("paginas/contexto_macro.py", title="Momento econômico", icon=":material/monitoring:"),
     st.Page("paginas/metodologia.py", title="Como o ranking é calculado",
             icon=":material/menu_book:"),
