@@ -121,7 +121,7 @@ button, select, input { font: inherit; color: inherit; }
 .marca__squad { font-weight: 600; color: var(--tinta-3); }
 .marca__curto { display: none; }
 .marca__icone { width: 28px; height: 28px; color: var(--limao-texto); }
-.topo__nav { margin-left: auto; display: flex; gap: 24px; font-family: var(--mono); font-size: .78rem; text-transform: uppercase; letter-spacing: .1em; }
+.topo__nav { margin-left: auto; display: flex; gap: 18px; font-family: var(--mono); font-size: .78rem; text-transform: uppercase; letter-spacing: .1em; }
 .topo__nav a { text-decoration: none; color: var(--tinta-2); }
 .topo__nav a:hover { color: var(--limao-texto); }
 .botao-tema { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--linha-forte); background: transparent; display: grid; place-items: center; cursor: pointer; }
@@ -131,13 +131,13 @@ button, select, input { font: inherit; color: inherit; }
 .topo__dash svg { width: 16px; height: 16px; flex: none; }
 .topo__dash:hover { filter: brightness(1.05); }
 .topo__dash:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
-/* menu + dashboard não cabem com o texto: entre 961 e 1280 px o dashboard fica só o ícone; abaixo, o menu sai */
-@media (max-width: 1280px) and (min-width: 961px), (max-width: 520px) {
+/* menu + dashboard não cabem com o texto: entre 1041 e 1360 px o dashboard fica só o ícone; abaixo, o menu sai */
+@media (max-width: 1360px) and (min-width: 1041px), (max-width: 520px) {
   .topo__dash { width: 38px; padding: 0; justify-content: center; }
   .topo__dash-texto, .topo__dash-seta { display: none; }
 }
-@media (max-width: 1180px) { .topo__nav { gap: 16px; } }
-@media (max-width: 960px) { .topo__nav { display: none; } .topo__dash { margin-left: auto; } }
+@media (max-width: 1280px) { .topo__nav { gap: 10px; letter-spacing: .06em; } }
+@media (max-width: 1040px) { .topo__nav { display: none; } .topo__dash { margin-left: auto; } }
 @media (max-width: 520px) { .topo__interno { gap: 12px; } }
 /* sem espaço para tudo numa linha: o squad desce para uma segunda linha menor */
 @media (max-width: 1180px) {
@@ -214,6 +214,12 @@ button, select, input { font: inherit; color: inherit; }
 
 /* ---------------------------------------------------------------- seções */
 .secao { padding: clamp(72px, 11vw, 140px) 0; background: var(--fundo); color: var(--tinta); position: relative; }
+/* pitch em vídeo: 16:9 responsivo, sem autoplay */
+.pitch { margin: 0; display: grid; gap: 12px; }
+.pitch__video { display: block; width: 100%; max-width: 1120px; aspect-ratio: 16 / 9; height: auto; border-radius: var(--raio); background: #000; border: 1px solid var(--linha); box-shadow: var(--sombra); }
+.pitch__video:focus-visible { outline: 3px solid var(--foco); outline-offset: 4px; }
+.pitch__legenda { font-family: var(--mono); font-size: .74rem; color: var(--tinta-3); letter-spacing: .04em; }
+.pitch__legenda a { color: var(--limao-texto); }
 .secao + .secao { border-top: 1px solid var(--linha); }
 .secao__cabecalho { max-width: 820px; margin-bottom: clamp(40px, 5vw, 56px); }
 .secao h2 { font-family: var(--display); font-weight: 900; text-transform: uppercase; font-size: clamp(2.8rem, 7.5vw, 6.4rem); line-height: .88; margin-bottom: 24px; }

@@ -93,6 +93,7 @@
         </span>
       </a>
       <nav class="topo__nav" aria-label="Seções">
+        <a href="#pitch">Pitch</a>
         <a href="#agora">Quando</a>
         <a href="#mapa">Onde</a>
         <a href="#top">Top cidades</a>
@@ -156,6 +157,25 @@
     <div class="letreiro" aria-label="Indicadores do momento" role="region">
       <div class="letreiro__trilho" id="letreiro"></div>
     </div>
+
+    <!-- PITCH EM VÍDEO ------------------------------------------------------------------>
+    <section class="secao secao--pitch" id="pitch" aria-labelledby="titulo-pitch">
+      <div class="largura">
+        <header class="secao__cabecalho" data-revela>
+          <p class="rotulo">Pitch em vídeo</p>
+          <h2 id="titulo-pitch">O Radar em 4 minutos</h2>
+          <p class="secao__lede">O problema, a solução, a arquitetura e a recomendação de hoje, com legenda.</p>
+        </header>
+        <figure class="pitch">
+          <video class="pitch__video" controls preload="metadata" playsinline
+                 poster="img/pitch-poster.jpg?v=__VERSAO__" aria-label="Pitch do Radar de Expansão, 4 minutos e 33 segundos, com legenda gravada no vídeo">
+            <source src="video/pitch-radar-expansao.mp4?v=__VERSAO__" type="video/mp4">
+            <p>Seu navegador não toca vídeo aqui. <a href="video/pitch-radar-expansao.mp4?v=__VERSAO__">Baixe o pitch em MP4</a>.</p>
+          </video>
+          <figcaption class="pitch__legenda">4 min 33 s · legenda no próprio vídeo · <a href="video/pitch-radar-expansao.mp4?v=__VERSAO__" download>baixar MP4 (30 MB)</a></figcaption>
+        </figure>
+      </div>
+    </section>
 
     <!-- 01 QUANDO ---------------------------------------------------------------------->
     <section class="secao" id="agora" aria-labelledby="titulo-agora">
