@@ -41,7 +41,7 @@
 # =============================================================================
 
 # ============================== CONFIG ==============================
-VERSAO = "bairros-1.0"
+VERSAO = "bairros-1.1"
 LOTE_INSERT = 1000
 # ====================================================================
 
@@ -174,7 +174,8 @@ def processar(cod, sem_banco=False):
               "pop_setores": res["pop_setores"], "pop_rateada": res["pop_rateada"], "concorrencia": res["concorrencia"],
               "data_base_cnpj": data_base, **est,
               **{k: res[k] for k in ["centro_lat", "centro_lon", "centro_origem", "bairros_ibge", "bairros_ibge_ranking",
-                                     "bairros_populares", "bairros_populares_ranking", "pesos"]},
+                                     "bairros_populares", "bairros_populares_ranking", "pesos",
+                                     "escala_padrao", "escala_ibge_tipo", "aviso_escala"]},
               "parametros": {**res["parametros"], "versao": VERSAO}}
     ranking = ranking.assign(posicao=ranking["posicao"].astype("Int64"), setores=ranking["setores"].astype("Int64"),
                              acad_unidade=ranking["acad_unidade"].astype("Int64"),

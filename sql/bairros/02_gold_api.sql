@@ -29,9 +29,11 @@ CREATE OR REPLACE VIEW gold.bairro_resumo AS
 SELECT cod_municipio, municipio_nome, uf_sigla, processado_em, duracao_s, pop_oficial, pop_setores, pop_rateada,
        concorrencia, data_base_cnpj, academias_base, academias_geocodificadas, niveis_geocod,
        centro_lat, centro_lon, centro_origem, bairros_ibge, bairros_ibge_ranking,
-       bairros_populares, bairros_populares_ranking, pesos, parametros
+       bairros_populares, bairros_populares_ranking, pesos, parametros,
+       coalesce(escala_padrao, CASE WHEN bairros_ibge_ranking > 0 THEN 'ibge' ELSE 'popular' END) AS escala_padrao,
+       escala_ibge_tipo, aviso_escala
   FROM bairros.resumo;
-COMMENT ON VIEW gold.bairro_resumo IS 'Resumo e conferencias de cada municipio processado (so leitura).';
+COMMENT ON VIEW gold.bairro_resumo IS 'Resumo e conferencias de cada municipio processado; escala_padrao e aviso_escala dizem qual escala mostrar (so leitura).';
 
 CREATE OR REPLACE VIEW gold.bairro_setor AS
 SELECT cod_municipio, cd_setor, bairro_ibge, urbano, populacao, pop_20_59, renda_media_resp, renda_imputada, geojson
@@ -94,7 +96,7 @@ BEGIN
     -- ja calculado, dentro da validade e com a base de academias vigente: nao entra na fila
     -- (resultado "pendente" feito antes da carga do CNPJ, ou com base de outro mes, pode ser pedido de novo)
     IF EXISTS (SELECT 1 FROM bairros.resumo r
-                WHERE r.cod_municipio = v_cod AND r.processado_em > now() - validade
+                WHERE r.cod_municipio = v_cod AND r.processado_em > now() - validade AND r.escala_padrao IS NOT NULL
                   AND coalesce(r.data_base_cnpj, '') = coalesce((SELECT max(a.data_referencia) FROM bairros.academia a), '')) THEN
         RETURN QUERY SELECT 'pronto'::text, NULL::bigint, NULL::integer, 0, 'resultado disponivel'::text;
         RETURN;

@@ -896,3 +896,5 @@ Ranking de bairros (mesma lógica de percentis do ranking de cidades; só unidad
 59 anos 30 % · renda média do responsável 25 % · academias (93.13-1 principal) por 10 mil hab. num raio de 1,5 km, menor é
 melhor, 30 % · massa de renda por km² 15 %. Sem a base de academias, o ranking sai marcado `concorrencia = 'pendente'`,
 com os outros pesos reescalonados para somar 100 %.
+
+Escala mostrada por padrão (`bairros.resumo.escala_padrao`, exposta em `gold.bairro_resumo`): a escala oficial do IBGE só é o padrão quando é de bairros de verdade. Ela cai para os bairros populares, com uma frase em `aviso_escala` para a tela, quando: (a) metade ou mais dos nomes começa por bacia, região, zona ou similar (Bauru cadastrou no Censo 2022 12 bacias hidrográficas como "bairros", com 16 mil a 72 mil hab.); (b) há menos unidades do IBGE que 10 % das localidades do CNEFE; (c) o município não tem bairro e a escala usa distritos ou subdistritos (São Paulo); (d) não há escala oficial (Santana de Parnaíba). `escala_ibge_tipo` = `bairro`, `regiao`, `distrito`, `subdistrito` ou nulo. Parâmetros no CONFIG de `src/bairros/indicadores.py`.

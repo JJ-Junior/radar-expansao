@@ -36,6 +36,9 @@
 #   2. sem base de academias, o ranking sai provisorio (pesos reescalonados)
 #   3. municipio sem bairro no IBGE (ex.: Sao Paulo): a escala oficial usa os
 #      distritos (ou subdistritos com nome); o tipo fica em resumo.parametros
+#   4. a escala oficial nem sempre e de bairros (Bauru cadastrou bacias
+#      hidrograficas): nome de regiao ou poucas unidades -> a escala padrao
+#      vira a popular e o resumo leva um aviso para a tela
 #
 # COMO RODAR: nao roda sozinho; e chamado por src/bairros/processar.py
 # =============================================================================
@@ -45,6 +48,10 @@ LIMITE_FORTE, LIMITE_FRACO = 70, 30   # nota para "forte em" / "fraco em" na fra
 NAO_BAIRRO = "ZONA RURAL|SEM LOCALIDADE|FORA DE (BAIRRO|DISTRITO|SUBDISTRITO)"
 ROTULOS = {"mercado": "público de 20 a 59 anos", "renda": "renda do responsável",
            "espaco": "pouca concorrência no raio de 1,5 km", "densidade": "poder de compra concentrado"}
+# "bairro" do IBGE que nao e bairro (ex.: Bauru cadastrou bacias hidrograficas): nome de regiao no inicio...
+NOME_REGIAO_IBGE = r"^(BACIA|SUB ?BACIA|MICROBACIA|REGIAO|MACRORREGIAO|MICRORREGIAO|MACROZONA|ZONA|UNIDADE DE PLANEJAMENTO|AREA DE PLANEJAMENTO)\b"
+FRACAO_NOMES_REGIAO = 0.5    # ...em metade ou mais das unidades
+RAZAO_MIN_UNIDADES = 0.10    # ou poucas unidades: menos de 10% do numero de localidades do CNEFE
 # ====================================================================
 
 import re
@@ -101,6 +108,34 @@ def escala_oficial(st):
     if st["nm_subdist"].notna().any() and st["nm_subdist"].nunique() > 1:
         return "subdistrito", "cd_subdist", "nm_subdist"
     return None, None, None
+
+
+AVISOS = {
+    "regiao": "Em {mun}, a divisão em \"bairros\" cadastrada no IBGE é de regiões ({ex}), não de bairros como o "
+              "morador conhece. Por isso o padrão aqui são os bairros populares, tirados dos endereços do Censo.",
+    "distrito": "{mun} não tem bairros no IBGE; esta escala usa os distritos ({ex}), que são bem maiores que um "
+                "bairro. Por isso o padrão aqui são os bairros populares, tirados dos endereços do Censo.",
+    "subdistrito": "{mun} não tem bairros no IBGE; esta escala usa os subdistritos ({ex}), que são bem maiores que "
+                   "um bairro. Por isso o padrão aqui são os bairros populares, tirados dos endereços do Censo.",
+    "sem": "{mun} não tem bairros cadastrados no IBGE; só a escala de bairros populares (endereços do Censo) está disponível.",
+}
+
+
+def avaliar_escala_ibge(tipo, nomes, n_popular, n_popular_ranking, nome_mun=""):
+    """Diz se a escala oficial e de bairros de verdade e qual escala mostrar por padrao.
+    Devolve (tipo para a tela: bairro|regiao|distrito|subdistrito|None, escala padrao, aviso ou None)."""
+    nomes = [n for n in nomes if n and not re.search(NAO_BAIRRO, n.upper())]
+    exemplos = ", ".join(titulo(n) for n in nomes[:2])
+    if tipo == "bairro" and nomes:
+        regiao = sum(bool(re.search(NOME_REGIAO_IBGE, chave(n))) for n in nomes) / len(nomes) >= FRACAO_NOMES_REGIAO
+        poucas = n_popular_ranking > 0 and len(nomes) < RAZAO_MIN_UNIDADES * n_popular
+        if not (regiao or poucas):
+            return "bairro", "ibge", None
+        tipo = "regiao"
+    if not tipo:
+        return None, "popular", AVISOS["sem"].format(mun=nome_mun or "Este município")
+    padrao = "popular" if n_popular_ranking > 0 else "ibge"
+    return tipo, padrao, AVISOS[tipo].format(mun=nome_mun or "Este município", ex=exemplos)
 
 
 def definir_centro(st, end):
@@ -243,7 +278,10 @@ def calcular(cod, st, end, geo, renda_bairro, pts, concorrencia, nome_mun=""):
         "geojson": [simplificar(geos.get(s), C.TOLERANCIA_SIMPLIFICAR, C.CASAS_GEOJSON) for s in st["cd_setor"]],
     })
     pop_ibge = float(r.loc[r["escala"] == "ibge", "populacao"].sum())
+    nomes_ibge = list(b.loc[b["unidade_id"] != "fora", "nome"].astype(str)) if tipo_oficial else []
+    tipo_tela, padrao, aviso = avaliar_escala_ibge(tipo_oficial, nomes_ibge, len(u), int(u["elegivel"].sum()), nome_mun)
     resumo = {
+        "escala_padrao": padrao, "escala_ibge_tipo": tipo_tela, "aviso_escala": aviso,
         "pop_setores": int(st["pop"].sum()),
         "pop_rateada": int(round(float(u["pop"].sum()))),
         "pop_bairros_ibge": int(round(pop_ibge)) if n_ibge else None,

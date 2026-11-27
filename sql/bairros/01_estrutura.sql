@@ -76,6 +76,10 @@ CREATE TABLE IF NOT EXISTS bairros.resumo (
     pesos                     jsonb,
     parametros                jsonb                 -- raio, populacao minima, versao
 );
+-- escala a mostrar por padrao: a oficial do IBGE nem sempre e de bairros (Bauru cadastrou bacias hidrograficas)
+ALTER TABLE bairros.resumo ADD COLUMN IF NOT EXISTS escala_padrao    text CHECK (escala_padrao IN ('ibge', 'popular'));
+ALTER TABLE bairros.resumo ADD COLUMN IF NOT EXISTS escala_ibge_tipo text;  -- bairro | regiao | distrito | subdistrito | null
+ALTER TABLE bairros.resumo ADD COLUMN IF NOT EXISTS aviso_escala     text;  -- frase para a tela quando a escala IBGE nao e de bairros
 
 -- Ranking por municipio x escala x unidade ------------------------------------
 CREATE TABLE IF NOT EXISTS bairros.ranking (

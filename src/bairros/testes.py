@@ -48,7 +48,7 @@ import pandas as pd
 
 from src.bairros import config as C
 from src.bairros.academias import numero_simples, partir_quadra
-from src.bairros.indicadores import chave, percentil, pesos
+from src.bairros.indicadores import avaliar_escala_ibge, chave, percentil, pesos
 
 falhas = []
 
@@ -72,6 +72,16 @@ def regras():
     checar("percentil menor-melhor inverte", list(percentil(pd.Series([10, 20, 30]), True)) == [100, 50, 0])
     checar("chave normaliza acentos", chave("Água  da Grama") == "AGUA DA GRAMA")
     checar("raio e populacao minima do CONFIG", C.RAIO_KM == 1.5 and C.POP_MIN == 5000)
+    bacias = ["BACIA DO CORREGO AGUA DA GRAMA", "BACIA DO RIBEIRAO VARGEM LIMPA", "BACIA DO CORREGO BARREIRINHO"]
+    checar("escala IBGE de bacias cai para a popular", avaliar_escala_ibge("bairro", bacias, 30, 5)[:2] == ("regiao", "popular"))
+    reais = [f"BAIRRO {i}" for i in range(20)]
+    checar("escala IBGE de bairros reais fica como padrao", avaliar_escala_ibge("bairro", reais, 40, 10) == ("bairro", "ibge", None))
+    checar("poucas unidades IBGE (menos de 10% das localidades) cai para a popular",
+           avaliar_escala_ibge("bairro", reais[:5], 400, 10)[:2] == ("regiao", "popular"))
+    checar("distritos (Sao Paulo) caem para a popular, com aviso", avaliar_escala_ibge("distrito", reais, 2000, 400)[1:2] == ("popular",)
+           and avaliar_escala_ibge("distrito", reais, 2000, 400)[2])
+    checar("sem escala IBGE: popular", avaliar_escala_ibge(None, [], 80, 8)[:2] == (None, "popular"))
+    checar("setor de Goiania (Setor Bueno) e bairro", avaliar_escala_ibge("bairro", ["SETOR BUENO", "SETOR OESTE"] * 5, 20, 5)[1] == "ibge")
 
 
 def bauru():
@@ -86,6 +96,9 @@ def bauru():
     el = r[r["elegivel"]]
     checar("notas entre 0 e 100", el["nota_final"].between(0, 100).all())
     checar("so unidades com 5 mil hab. ou mais no ranking", (el["populacao"] >= C.POP_MIN).all())
+    checar("Bauru: escala IBGE (bacias) nao e o padrao; padrao = popular, com aviso",
+           (resumo["escala_ibge_tipo"], resumo["escala_padrao"]) == ("regiao", "popular") and bool(resumo["aviso_escala"]),
+           (resumo["escala_ibge_tipo"], resumo["escala_padrao"]))
     for esc in ["ibge", "popular"]:
         e = el[el["escala"] == esc]
         checar(f"Bauru: posicoes {esc} 1..n sem buraco", sorted(e["posicao"]) == list(range(1, len(e) + 1)))
