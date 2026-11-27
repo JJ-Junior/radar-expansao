@@ -361,7 +361,7 @@ button, select, input { font: inherit; color: inherit; }
 .top__trilho { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
 @media (max-width: 1240px) { .top__trilho { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 .top__navegar { display: none; }
-.cartao-cidade__barras { display: none; }
+.cartao-cidade__barras, .cartao-cidade__ajuda { display: none; }
 .cartao-cidade { background: var(--superficie); border-radius: var(--raio); padding: 24px 16px 16px; display: grid; grid-template-rows: auto auto 1fr auto; gap: 16px; min-width: 0; box-shadow: inset 0 0 0 1px transparent; transition: box-shadow .2s; }
 .cartao-cidade:hover, .cartao-cidade:focus-within { box-shadow: inset 0 0 0 1px var(--limao-texto); }
 .cartao-cidade__cabeca { display: grid; gap: 8px; }
@@ -409,6 +409,8 @@ button, select, input { font: inherit; color: inherit; }
   .cartao-cidade__nome { font-size: 1.6rem; min-height: 0; }
   .cartao-cidade__numeros { order: 1; padding: 12px 0; border-bottom: 1px solid var(--linha); }
   .cartao-cidade__radar { display: none; }
+  /* no celular não há a dica do radar: um link leva à explicação de cada nota, no método */
+  .cartao-cidade__ajuda { order: 2; display: inline-flex; align-items: center; min-height: 44px; justify-self: start; font-family: var(--mono); font-size: .7rem; letter-spacing: .06em; text-transform: uppercase; color: var(--limao-texto); }
   .cartao-cidade__barras { order: 2; display: grid; gap: 6px; list-style: none; margin: 0; padding: 0; font-family: var(--mono); font-size: .66rem; }
   .cartao-cidade__barras li { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) 2.2em; align-items: center; gap: 8px; }
   .cartao-cidade__barras span { color: var(--tinta-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -525,6 +527,17 @@ button, select, input { font: inherit; color: inherit; }
 /* ---------------------------------------------------------------- 06 método */
 .formula { font-family: var(--mono); font-size: clamp(.78rem, 1.3vw, .98rem); background: var(--superficie); border-left: 3px solid var(--limao); border-radius: var(--raio-p); padding: 24px 24px; overflow-x: auto; color: var(--tinta-2); margin: 0 0 32px; line-height: 1.8; }
 .formula b { color: var(--limao-texto); font-weight: 600; }
+/* O que compõe a nota: uma linha por critério */
+.compoe { margin: 0 0 40px; scroll-margin-top: calc(var(--topo) + 24px); }
+.compoe__titulo { font-family: var(--display); font-weight: 800; font-size: 1.6rem; text-transform: uppercase; margin: 0 0 16px; }
+.compoe__lista { list-style: none; padding: 0; margin: 0; display: grid; border-top: 1px solid var(--linha); }
+.compoe__item { display: grid; grid-template-columns: minmax(150px, .8fr) minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.1fr); gap: 8px 24px; padding: 16px 0; border-bottom: 1px solid var(--linha); font-size: .92rem; color: var(--tinta-2); }
+.compoe__nome { font-weight: 700; color: var(--tinta); display: flex; flex-direction: column; gap: 4px; }
+.compoe__peso { font-family: var(--mono); font-size: .76rem; color: var(--limao-texto); font-weight: 600; }
+.compoe__item p { margin: 0; }
+.compoe__item small { display: block; font-family: var(--mono); font-size: .64rem; letter-spacing: .1em; text-transform: uppercase; color: var(--tinta-3); margin-bottom: 2px; }
+.compoe__percentil { margin: 16px 0 0; color: var(--tinta-2); max-width: 90ch; }
+@media (max-width: 900px) { .compoe__item { grid-template-columns: minmax(0, 1fr); gap: 8px; } }
 .cartoes-regra { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 32px; }
 .cartao-regra--destaque { border-color: var(--limao); background: color-mix(in srgb, var(--limao) 8%, var(--superficie)); }
 .cartao-regra { background: var(--superficie); border-radius: var(--raio); padding: 24px; }
@@ -621,6 +634,7 @@ button, select, input { font: inherit; color: inherit; }
 .dica__estado { display: inline-flex; align-items: center; gap: 8px; font-size: .74rem; color: var(--tinta-2); white-space: nowrap; }
 .dica__estado .ponto-estado { width: 8px; height: 8px; }
 .dica__nota { margin: 8px 0 0; font-size: .7rem; color: var(--tinta-3); }
+.dica__sub { grid-column: 1 / -1; margin: -2px 0 4px; font-size: .72rem; color: var(--tinta-3); line-height: 1.3; }
 
 /* ---------------------------------------------------------------- 05 simule sua região */
 .sim__controles { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 16px 24px; margin-bottom: 24px; }

@@ -1,7 +1,7 @@
 // Critérios (painel em estilo radar: setor = peso), fórmula da nota e camadas do Lakehouse.
 // Pesos, descrições e fontes vêm de ranking_criterio.json; nada é fixado aqui além da ordem de exibição.
 
-import { COMPONENTES, nomeComponente } from "./indicadores.js";
+import { COMPONENTES, CRITERIOS, FRASE_PERCENTIL, nomeComponente, pesoDoCriterio, textosCriterios } from "./indicadores.js";
 import { decimal, inteiro } from "./formato.js";
 import { quantidadeRecomendada, travaDeRenda } from "./recomendacao.js";
 import { movimentoLigado } from "./movimento.js";
@@ -79,6 +79,23 @@ export function desenharCriterios({ estado }) {
     const disparo = { trigger: "#ideal-radar", start: "top 75%", once: true };
     gsap.from("#ideal-radar .setor-grupo", { scale: 0, svgOrigin: "0 0", opacity: 0, duration: 0.9, ease: "back.out(1.4)", stagger: 0.1, scrollTrigger: disparo });
     gsap.from("#ideal-lista li", { y: 24, opacity: 0, duration: 0.6, ease: "power3.out", stagger: 0.08, scrollTrigger: { ...disparo } });
+  }
+
+  // ------------------------------------------------------------ o que compõe a nota (um item por critério do prd)
+  const textos = textosCriterios(estado.meta);
+  const lista = document.getElementById("compoe-lista");
+  if (lista) {
+    lista.innerHTML = CRITERIOS.map((k) => {
+      const t = textos[k.criterio];
+      const peso = Math.round((pesoDoCriterio(estado.criterios, k.criterio) ?? 0) * 100);
+      return `<li class="compoe__item">
+        <span class="compoe__nome">${k.nome}<span class="compoe__peso">peso ${peso}% · ${t.sentido}</span></span>
+        <p><small>O que mede</small>${t.mede}</p>
+        <p><small>De onde vem</small>${t.fonte}</p>
+        <p><small>Por que importa</small>${t.porque}</p>
+      </li>`;
+    }).join("");
+    document.getElementById("compoe-percentil").textContent = FRASE_PERCENTIL;
   }
 
   // ------------------------------------------------------------ fórmula
