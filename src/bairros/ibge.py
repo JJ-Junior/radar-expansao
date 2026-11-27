@@ -178,7 +178,8 @@ def carregar(cod, p, meta):
     bas = bas[bas["CD_MUN"] == cod]
     st = pd.DataFrame({
         "cd_setor": bas["CD_SETOR"], "situacao": bas["SITUACAO"], "area_km2": _num(bas["AREA_KM2"]),
-        "cd_dist": bas["CD_DIST"], "cd_bairro": bas["CD_BAIRRO"].replace(".", None),
+        "cd_dist": bas["CD_DIST"], "nm_dist": bas["NM_DIST"], "cd_subdist": bas["CD_SUBDIST"],
+        "nm_subdist": bas["NM_SUBDIST"].replace(".", None), "cd_bairro": bas["CD_BAIRRO"].replace(".", None),
         "nm_bairro": bas["NM_BAIRRO"].replace(".", None), "pop": _num(bas["v0001"]),
         "dom_ocupados": _num(bas["v0007"]),
     })

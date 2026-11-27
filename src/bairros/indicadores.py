@@ -34,13 +34,15 @@
 #      "bairros populares" = localidade do endereco no CNEFE, com a populacao
 #      de cada setor rateada pelos enderecos residenciais
 #   2. sem base de academias, o ranking sai provisorio (pesos reescalonados)
+#   3. municipio sem bairro no IBGE (ex.: Sao Paulo): a escala oficial usa os
+#      distritos (ou subdistritos com nome); o tipo fica em resumo.parametros
 #
 # COMO RODAR: nao roda sozinho; e chamado por src/bairros/processar.py
 # =============================================================================
 
 # ============================== CONFIG ==============================
 LIMITE_FORTE, LIMITE_FRACO = 70, 30   # nota para "forte em" / "fraco em" na frase
-NAO_BAIRRO = "ZONA RURAL|SEM LOCALIDADE|FORA DE BAIRRO"
+NAO_BAIRRO = "ZONA RURAL|SEM LOCALIDADE|FORA DE (BAIRRO|DISTRITO|SUBDISTRITO)"
 ROTULOS = {"mercado": "público de 20 a 59 anos", "renda": "renda do responsável",
            "espaco": "pouca concorrência no raio de 1,5 km", "densidade": "poder de compra concentrado"}
 # ====================================================================
@@ -87,6 +89,18 @@ def preparar_setores(st, renda_bairro):
     st["resp_uso"] = st["responsaveis"].fillna(st["dom_ocupados"])
     st["massa_renda"] = (st["resp_uso"] * st["renda_uso"]).fillna(0)
     return st
+
+
+def escala_oficial(st):
+    """Unidade oficial do IBGE abaixo do municipio: bairro; sem bairro (ex.: Sao Paulo), distrito; depois
+    subdistrito com nome. Devolve (tipo, coluna de codigo, coluna de nome) ou (None, None, None)."""
+    if st["cd_bairro"].notna().any():
+        return "bairro", "cd_bairro", "nm_bairro"
+    if st["nm_dist"].nunique() > 1:
+        return "distrito", "cd_dist", "nm_dist"
+    if st["nm_subdist"].notna().any() and st["nm_subdist"].nunique() > 1:
+        return "subdistrito", "cd_subdist", "nm_subdist"
+    return None, None, None
 
 
 def definir_centro(st, end):
@@ -162,11 +176,12 @@ def calcular(cod, st, end, geo, renda_bairro, pts, concorrencia):
     st["lat_res"] = st["cd_setor"].map(cent[("lat", "mean")])
     st["lon_res"] = st["cd_setor"].map(cent[("lon", "mean")])
     st["n_res"] = st["cd_setor"].map(cent[("lat", "count")]).fillna(0)
-    st["chave_b"] = st["cd_bairro"].fillna("fora")
-    st["nome_b"] = st["nm_bairro"].fillna("(fora de bairro)")
+    tipo_oficial, cd_of, nm_of = escala_oficial(st)
+    st["chave_b"] = (st[cd_of] if cd_of else pd.Series(None, index=st.index, dtype=object)).fillna("fora")
+    st["nome_b"] = (st[nm_of] if nm_of else pd.Series(None, index=st.index, dtype=object)).fillna(f"(fora de {tipo_oficial or 'bairro'})")
     n_ibge = n_ibge_rank = 0
     geos = {ft["properties"]["cd_setor"]: ft["geometry"] for ft in geo["features"]}
-    if st["cd_bairro"].notna().any():
+    if tipo_oficial:
         b = st.groupby("chave_b").apply(lambda g: pd.Series({
             "nome": g["nome_b"].iloc[0], "setores": len(g), "pop": g["pop"].sum(), "pop_20_59": g["pop_20_59"].sum(),
             "dom_ocupados": g["dom_ocupados"].sum(), "resp": g["resp_uso"].sum(), "massa": g["massa_renda"].sum(),
@@ -218,7 +233,7 @@ def calcular(cod, st, end, geo, renda_bairro, pts, concorrencia):
                  "nota_espaco", "nota_densidade", "nota_final", "frase", "concorrencia", "lat", "lon", "geojson"]]
 
     setores = pd.DataFrame({
-        "cod_municipio": int(cod), "cd_setor": st["cd_setor"], "bairro_ibge": st["nm_bairro"],
+        "cod_municipio": int(cod), "cd_setor": st["cd_setor"], "bairro_ibge": st[nm_of] if nm_of else None,
         "urbano": st["situacao"] == "Urbana", "populacao": st["pop"], "pop_20_59": st["pop_20_59"],
         "renda_media_resp": st["renda_uso"].round(2), "renda_imputada": st["renda_imputada"],
         "geojson": [simplificar(geos.get(s), C.TOLERANCIA_SIMPLIFICAR, C.CASAS_GEOJSON) for s in st["cd_setor"]],
@@ -233,6 +248,6 @@ def calcular(cod, st, end, geo, renda_bairro, pts, concorrencia):
         "bairros_ibge": n_ibge, "bairros_ibge_ranking": n_ibge_rank,
         "bairros_populares": int(len(u)), "bairros_populares_ranking": int(u["elegivel"].sum()),
         "pesos": {k: round(v, 4) for k, v in w.items()},
-        "parametros": {"raio_km": C.RAIO_KM, "pop_min": C.POP_MIN},
+        "parametros": {"raio_km": C.RAIO_KM, "pop_min": C.POP_MIN, "escala_ibge_tipo": tipo_oficial},
     }
     return ranking, setores, resumo
