@@ -120,7 +120,7 @@
     <!-- HERO ---------------------------------------------------------------------->
     <section class="hero" id="inicio" aria-labelledby="titulo-hero">
       <canvas class="hero__radar" id="hero-radar" aria-hidden="true"></canvas>
-      <button class="pitch-play" type="button" id="pitch-abrir" aria-haspopup="dialog" aria-controls="pitch-modal">
+      <button class="pitch-play" type="button" id="pitch-abrir" aria-haspopup="dialog" aria-controls="pitch-modal" aria-label="Assista ao pitch, 4 minutos">
         <span class="pitch-play__circulo" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg></span>
         <span class="pitch-play__rotulo">Assista ao pitch · 4 min</span>
       </button>
@@ -133,6 +133,10 @@
             <span class="linha"><span>está <span class="destaque">pronto.</span></span></span>
           </h1>
           <p class="hero__lede" id="hero-lede">Seis critérios do IBGE varrem as cidades com 50 mil habitantes ou mais. Juros, inflação e dólar dizem se a hora é agora.</p>
+          <!-- celular: o radar fica abaixo do texto, então o pitch ganha também esta pílula (some acima de 767 px) -->
+          <button class="pitch-pilula" type="button" data-abrir-pitch aria-haspopup="dialog" aria-controls="pitch-modal">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>Assista ao pitch · 4 min
+          </button>
 
           <div class="busca" id="busca">
             <label class="busca__rotulo" for="busca-campo">Buscar uma cidade</label>

@@ -8,7 +8,8 @@ export function criarPitch() {
   const video = document.getElementById("pitch-video");
   if (!botao || !modal || !video) return;
 
-  let pedidoPlay = null;                          // play() ainda pendente quando o modal fecha não pode voltar a tocar
+  let pedidoPlay = null;
+  let origem = botao;                             // quem abriu o modal recebe o foco de volta                          // play() ainda pendente quando o modal fecha não pode voltar a tocar
 
   function abrir({ tocar = false } = {}) {
     if (!video.getAttribute("src")) { video.src = video.dataset.src; video.preload = "metadata"; }
@@ -21,10 +22,13 @@ export function criarPitch() {
     video.pause();
     pedidoPlay?.then(() => { if (!modal.open) video.pause(); });
     if (location.hash === "#pitch") history.replaceState(history.state, "", location.pathname + location.search);
-    botao.focus({ preventScroll: true });
+    origem.focus({ preventScroll: true });
+    origem = botao;
   }
 
-  botao.addEventListener("click", () => abrir({ tocar: true }));
+  for (const b of [botao, ...document.querySelectorAll("[data-abrir-pitch]")]) {
+    b.addEventListener("click", () => { origem = b; abrir({ tocar: true }); });
+  }
   modal.querySelector("[data-fechar]").addEventListener("click", () => modal.close());
   modal.addEventListener("close", aoFechar);
   // clique no fundo escurecido (fora da caixa) fecha

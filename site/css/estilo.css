@@ -183,6 +183,15 @@ button, select, input { font: inherit; color: inherit; }
   .hero > .largura:last-child { order: 2; }
 }
 
+/* pílula do pitch no topo, só no celular (abaixo de 768 px) */
+.pitch-pilula { display: none; align-items: center; gap: 8px; margin: -12px 0 28px; padding: 10px 16px; min-height: 44px; border-radius: 999px;
+  border: 1.5px solid var(--limao); background: transparent; color: var(--limao-texto); cursor: pointer;
+  font-family: var(--mono); font-size: .74rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
+.pitch-pilula svg { width: 14px; height: 14px; }
+.pitch-pilula:hover { background: color-mix(in srgb, var(--limao) 12%, transparent); }
+.pitch-pilula:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
+@media (max-width: 767px) { .pitch-pilula { display: inline-flex; } .pitch-play__rotulo { display: none; } }
+
 /* modal do pitch */
 .pitch-modal { width: min(1120px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 32px); padding: 0; border: 1px solid var(--linha-forte); border-radius: var(--raio);
   background: var(--superficie); color: var(--tinta); box-shadow: var(--sombra); overflow: auto; }
