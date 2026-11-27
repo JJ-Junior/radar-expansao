@@ -38,9 +38,39 @@ export function criarPitch() {
   // clique no fundo escurecido (fora da caixa) fecha
   modal.addEventListener("click", (e) => { if (e.target === modal) fechar(); });
 
+  posicionarPlayTitulo();
+  document.fonts?.ready.then(posicionarPlayTitulo);
+  let espera;
+  window.addEventListener("resize", () => { clearTimeout(espera); espera = setTimeout(posicionarPlayTitulo, 120); });
+
   const peloEndereco = () => { if (location.hash === "#pitch") abrir(); };
   window.addEventListener("hashchange", peloEndereco);
   peloEndereco();
+}
+
+/**
+ * Celular: o play do título fica à direita do título, na altura da linha com mais sobra, sem tocar em nenhuma letra:
+ * o botão começa depois do fim de TODAS as linhas que cruzam a altura dele. Usa offsetLeft/offsetTop (não mudam com a
+ * animação de entrada do título). Se não couber em nenhuma linha, o botão não aparece.
+ */
+export function posicionarPlayTitulo() {
+  const botao = document.getElementById("pitch-titulo");
+  const texto = botao?.closest(".hero__texto");
+  const linhas = [...document.querySelectorAll(".hero__titulo .linha > span")];
+  if (!botao || !texto || !linhas.length) return;
+  const D = 44, FOLGA = 8;                        // diâmetro (área de toque mínima) e respiro das letras
+  const caixas = linhas.map((s) => ({ topo: s.offsetTop, base: s.offsetTop + s.offsetHeight, fim: s.offsetLeft + s.offsetWidth }));
+  let melhor = null;
+  for (const c of caixas) {
+    const y = (c.topo + c.base) / 2;
+    const x0 = Math.max(...caixas.filter((o) => o.topo < y + D / 2 && o.base > y - D / 2).map((o) => o.fim)) + FOLGA;
+    const sobra = texto.clientWidth - (x0 + D);
+    if (sobra >= 0 && (!melhor || sobra > melhor.sobra)) melhor = { x: x0 + D / 2 + Math.min(sobra / 2, D / 2), y, sobra };
+  }
+  botao.classList.toggle("pitch-titulo--posicionado", !!melhor);
+  if (!melhor) return;
+  botao.style.setProperty("--pt-x", `${Math.round(melhor.x)}px`);
+  botao.style.setProperty("--pt-y", `${Math.round(melhor.y)}px`);
 }
 
 /** Põe o botão no centro do radar (o hero-radar avisa onde fica o centro). */

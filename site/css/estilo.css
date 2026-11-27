@@ -146,6 +146,8 @@ button, select, input { font: inherit; color: inherit; }
   .marca__squad { font-size: .62em; letter-spacing: .06em; margin-top: 2px; }
 }
 @media (max-width: 360px) { .marca__longo { display: none; } .marca__curto { display: inline; } }
+/* telas muito estreitas (320 px): o nome encolhe para não encostar no botão do dashboard */
+@media (max-width: 340px) { .marca { font-size: 1.2rem; } .marca__icone { width: 24px; height: 24px; } }
 
 .previa { display: flex; justify-content: center; align-items: center; gap: 12px; padding: 8px 16px; font-size: .8rem; background: var(--fundo-2); color: var(--tinta-2); border-top: 1px solid var(--linha); text-align: center; }
 .previa[hidden] { display: none; }
@@ -183,14 +185,24 @@ button, select, input { font: inherit; color: inherit; }
   .hero > .largura:last-child { order: 2; }
 }
 
-/* pílula do pitch no topo, só no celular (abaixo de 768 px) */
-.pitch-pilula { display: none; align-items: center; gap: 8px; margin: -12px 0 28px; padding: 10px 16px; min-height: 44px; border-radius: 999px;
-  border: 1.5px solid var(--limao); background: transparent; color: var(--limao-texto); cursor: pointer;
-  font-family: var(--mono); font-size: .74rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; }
-.pitch-pilula svg { width: 14px; height: 14px; }
-.pitch-pilula:hover { background: color-mix(in srgb, var(--limao) 12%, transparent); }
-.pitch-pilula:focus-visible { outline: 3px solid var(--foco); outline-offset: 2px; }
-@media (max-width: 767px) { .pitch-pilula { display: inline-flex; } .pitch-play__rotulo { display: none; } }
+/* celular (abaixo de 768 px): play ao lado do título, no espaço livre à direita das linhas (left/top vêm do pitch.js);
+   fica fora do fluxo, então não empurra o título; o play sobre o radar some nessa faixa */
+.pitch-titulo { display: none; position: absolute; z-index: 3; left: var(--pt-x, 0); top: var(--pt-y, 0); transform: translate(-50%, -50%);
+  padding: 0; border: 0; background: none; cursor: pointer; color: var(--tinta); }
+.pitch-titulo .pitch-play__circulo { width: 44px; height: 44px; border-width: 1.5px; }
+.pitch-titulo .pitch-play__circulo svg { width: 18px; height: 18px; margin-left: 3px; }
+/* anel do título pulsa menos, para não passar por cima das letras vizinhas */
+.pitch-titulo .pitch-play__circulo::after { animation-name: pitch-pulso-curto; border-width: 1.5px; }
+@keyframes pitch-pulso-curto { from { transform: scale(1); opacity: .55; } to { transform: scale(1.22); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .pitch-titulo .pitch-play__circulo::after { animation: none; transform: none; opacity: .3; } }
+.pitch-titulo:focus-visible { outline: none; }
+.pitch-titulo:focus-visible .pitch-play__circulo { outline: 3px solid var(--foco); outline-offset: 4px; }
+.pitch-titulo:hover .pitch-play__circulo { transform: scale(1.06); }
+@media (max-width: 767px) {
+  .hero__texto { position: relative; }
+  .pitch-titulo.pitch-titulo--posicionado { display: block; }
+  .pitch-play { display: none; }
+}
 
 /* modal do pitch */
 .pitch-modal { width: min(1120px, calc(100vw - 32px)); max-width: none; max-height: calc(100vh - 32px); padding: 0; border: 1px solid var(--linha-forte); border-radius: var(--raio);
