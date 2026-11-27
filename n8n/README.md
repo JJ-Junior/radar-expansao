@@ -30,8 +30,19 @@ mesma trava (`bronze.trava_carga`) e a mesma transformação (`src/transformacao
    - nó **Grava cada resposta** → escolha o workflow **Radar · Cenário B · grava resposta** (no arquivo está o marcador
      `ID_DO_SUBWORKFLOW_GRAVAR`);
    - **Settings → Error workflow** → **Radar · Cenário B · erro** (marcador `ID_DO_WORKFLOW_DE_ERRO`).
-4. Ative o **Radar · Cenário A** (agenda de segunda 06:00, fuso `America/Sao_Paulo`). Deixe o **Radar · Cenário B** inativo e
+4. **Publique (ative)** o **Radar · Cenário B · grava resposta** e o **Radar · Cenário B · erro**: no n8n 2.x um
+   workflow só pode chamar sub-workflows publicados. Nenhum dos dois tem agenda; só rodam quando o cenário B os chama.
+5. Ative o **Radar · Cenário A** (agenda de segunda 06:00, fuso `America/Sao_Paulo`). Deixe o **Radar · Cenário B** inativo e
    rode-o pelo botão *Execute workflow*; para agendá-lo, basta ativá-lo (segunda 07:00, uma hora depois do A).
+
+## Estado no servidor do projeto
+
+| Workflow | Situação |
+|---|---|
+| Radar · Cenário A | **ativo** — rotina oficial, segunda 06:00 (America/Sao_Paulo) |
+| Radar · Cenário B | **inativo** — demonstração e comparação, roda manual |
+| Radar · Cenário B · grava resposta | publicado (chamado só pelo cenário B) |
+| Radar · Cenário B · erro | publicado (*error workflow* do cenário B) |
 
 ## Parâmetros do cenário B (nó **Config**)
 

@@ -40,8 +40,15 @@ Workflows importáveis, uma execução real do A, uma execução de teste do B g
 - **Memória:** em vez de um *Loop* no fluxo principal, que guardaria todos os JSON na execução, cada chamada virou um
   sub-workflow que não salva execução bem-sucedida.
 - **Respostas do BCB:** 404 é "nada novo", não erro; e resposta que não é JSON (HTML com status 200) vira erro, igual ao A.
+- **Sandbox do nó Code:** a primeira execução de teste do B parou no nó que monta as URLs, porque o *Code* do n8n 2.x roda
+  num sandbox sem `URLSearchParams`. Trocado por `encodeURIComponent`; o *error workflow* soltou a trava, como previsto.
+- **Sub-workflow publicado:** o n8n 2.x só permite chamar sub-workflow publicado (ativo); o guia de importação passou a dizer isso.
 - **Lotes com a silver:** conferido que os lotes por UF do B e por ano do A não duplicam fatos na silver (chave
   município + indicador + ano).
+
+## Resultado
+Cenário A real: sucesso em 23 s (sem novidade). Cenário B de teste: 368 respostas gravadas com `origem_carga = 'n8n'`
+em 3 min 48 s, sem erro, com o mesmo ranking e os testes da gold passando.
 
 ## Lições
 - No n8n, uma resposta JSON em lista vira vários itens: para manter "uma chamada = uma linha na bronze", o nó HTTP devolve a

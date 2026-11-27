@@ -9,7 +9,7 @@
 > | 3 · Camada bronze (ingestão em Python) | ✅ concluída: 13 recursos carregados no banco do projeto; incremental sem duplicar |
 > | 4 · Camada silver (modelo estrela) | ✅ concluída: 5 dimensões, 2 fatos, 12 testes de qualidade passando |
 > | 5 · Camada gold (ranking, contexto macro, semáforo) | ✅ concluída: tabelas de consumo + parâmetros do ranking + coordenadas e estimativas do simulador de região (P9) + semáforo com janela móvel até o último fechamento, 25 testes de qualidade passando |
-> | 6 · n8n | 🟡 workflows dos cenários A e B prontos em `n8n/`; execução de validação e print em andamento |
+> | 6 · n8n | ✅ cenário A agendado (segunda 06:00) e cenário B validado; workflows exportados em `n8n/` |
 > | 7 · Dashboard Streamlit | ✅ app com 6 páginas (inclui o simulador de região) lendo a gold pela API REST, com cópia de contingência; publicado em https://radar-expansao.streamlit.app |
 > | Extra · Site de apoio | ✅ publicado em https://radar-expansao.lovelearning.com.br |
 
@@ -208,6 +208,16 @@ Os dois cenários do enunciado foram construídos e gravam na **mesma bronze**, 
 | Revisão em PR | código Python com `CONFIG` no topo | JSON exportado (mais difícil de revisar) |
 | Ponto forte | uma implementação para carga inicial e incremental; testável fora do n8n | toda a ingestão visível num fluxo só, chamada por chamada |
 | Ponto fraco | um container a mais para manter | lógica espalhada em nós; memória e número de chamadas exigem cuidado |
+
+**Validação (27/11/2026, servidor do projeto):**
+
+| Execução | Resultado | Duração | Bronze |
+|---|---|---|---|
+| Cenário A (real) | sucesso: carga `sem_novidade` nos 14 recursos + silver/gold | 23 s | nenhuma resposta nova (`origem_carga = 'python'`: 73) |
+| Cenário B (teste, 1ª carga do n8n) | sucesso: 14 recursos, 368 chamadas, 0 erro, transformação 200, trava solta | 3 min 48 s | +368 respostas com `origem_carga = 'n8n'` |
+
+Depois do cenário B, o ranking, as 5 recomendadas e o semáforo ficaram iguais, e os 25 testes de qualidade da gold
+seguiram passando: a silver não duplica fatos quando as duas origens trazem o mesmo dado.
 
 **Escolha para a entrega: cenário A** como rotina oficial (agenda ativa). O cenário B fica pronto para demonstração e para a
 comparação: como as duas cargas convivem na bronze, a silver pode ser gerada só com uma origem

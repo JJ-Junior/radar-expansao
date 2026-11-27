@@ -2,12 +2,6 @@
   "name": "Radar · Cenário A",
   "nodes": [
     {
-      "parameters": {
-        "content": "## Radar · Cenário A\nO n8n **agenda e dispara**; quem chama o IBGE e o BCB e grava na bronze é o Python do container de ETL (`origem_carga = 'python'`).\n\n1. Segunda às 06:00 (America/Sao_Paulo)\n2. `GET /saude` do container (livre/ocupado)\n3. `POST /rodar/cenario-a` com o header da credencial **Radar · X-Radar-Token**: carga incremental + silver/gold, com a trava do banco\n4. 200 = sucesso · 409 = trava/ocupado (registrado, sem erro) · resto = registrado em `bronze.execucao` e a execução falha",
-        "height": 260,
-        "width": 560,
-        "color": 7
-      },
       "id": "27102caf-b0bb-54fd-8da4-e801fad5cd48",
       "name": "Nota · Cenário A",
       "type": "n8n-nodes-base.stickyNote",
@@ -15,9 +9,23 @@
       "position": [
         -260,
         -260
-      ]
+      ],
+      "parameters": {
+        "content": "## Radar · Cenário A\nO n8n **agenda e dispara**; quem chama o IBGE e o BCB e grava na bronze é o Python do container de ETL (`origem_carga = 'python'`).\n\n1. Segunda às 06:00 (America/Sao_Paulo)\n2. `GET /saude` do container (livre/ocupado)\n3. `POST /rodar/cenario-a` com o header da credencial **Radar · X-Radar-Token**: carga incremental + silver/gold, com a trava do banco\n4. 200 = sucesso · 409 = trava/ocupado (registrado, sem erro) · resto = registrado em `bronze.execucao` e a execução falha",
+        "height": 260,
+        "width": 560,
+        "color": 7
+      }
     },
     {
+      "id": "2d1d9c4d-4bfb-5b71-9367-0b62b047724d",
+      "name": "Segunda 06:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -200,
+        100
+      ],
       "parameters": {
         "rule": {
           "interval": [
@@ -32,37 +40,37 @@
             }
           ]
         }
-      },
-      "id": "2d1d9c4d-4bfb-5b71-9367-0b62b047724d",
-      "name": "Segunda 06:00",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        -200,
-        100
-      ]
+      }
     },
     {
+      "id": "c270f848-c495-5ab8-b345-040c08086c6f",
+      "name": "radar-etl livre?",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 5000,
+      "onError": "continueErrorOutput",
+      "position": [
+        20,
+        100
+      ],
       "parameters": {
         "url": "http://radar-etl:9000/saude",
         "options": {
           "timeout": 10000
         }
-      },
-      "id": "c270f848-c495-5ab8-b345-040c08086c6f",
-      "name": "radar-etl livre?",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        20,
-        100
-      ],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 5000,
-      "onError": "continueErrorOutput"
+      }
     },
     {
+      "id": "8c0ecb5f-c551-5a2f-96a0-fda76b796e9e",
+      "name": "Livre?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        0
+      ],
       "parameters": {
         "conditions": {
           "options": {
@@ -86,17 +94,18 @@
         },
         "looseTypeValidation": true,
         "options": {}
-      },
-      "id": "8c0ecb5f-c551-5a2f-96a0-fda76b796e9e",
-      "name": "Livre?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        240,
-        0
-      ]
+      }
     },
     {
+      "id": "58fbe426-a498-570c-a6c7-3b9ed797184c",
+      "name": "Dispara cenário A",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueErrorOutput",
+      "position": [
+        460,
+        -100
+      ],
       "parameters": {
         "method": "POST",
         "url": "http://radar-etl:9000/rodar/cenario-a",
@@ -113,23 +122,22 @@
           }
         }
       },
-      "id": "58fbe426-a498-570c-a6c7-3b9ed797184c",
-      "name": "Dispara cenário A",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        460,
-        -100
-      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "CREDENCIAL_TOKEN",
           "name": "Radar · X-Radar-Token"
         }
-      },
-      "onError": "continueErrorOutput"
+      }
     },
     {
+      "id": "33e9b4db-c6f9-5fa1-aab9-cf0d22ef8159",
+      "name": "Resultado",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        680,
+        -100
+      ],
       "parameters": {
         "rules": {
           "values": [
@@ -164,20 +172,9 @@
           "fallbackOutput": "extra",
           "renameFallbackOutput": "outro código"
         }
-      },
-      "id": "33e9b4db-c6f9-5fa1-aab9-cf0d22ef8159",
-      "name": "Resultado",
-      "type": "n8n-nodes-base.switch",
-      "typeVersion": 3.2,
-      "position": [
-        680,
-        -100
-      ]
+      }
     },
     {
-      "parameters": {
-        "jsCode": "const r = $json.body ?? {};\nreturn [{ json: {\n  status: r.status,\n  resultado_carga: r.resultado_carga,\n  recursos: (r.bronze ?? []).length,\n  respostas_novas: (r.bronze ?? []).reduce((s, b) => s + (b.respostas_novas ?? 0), 0),\n  etapas: (r.etapas ?? []).map(e => `${e.comando}: saida ${e.codigo_saida} em ${e.duracao_s} s`),\n  duracao_s: r.duracao_s,\n  commit: r.commit,\n  log: r.log,\n} }];\n"
-      },
       "id": "9e038d30-dd12-577d-94f0-149bf4448009",
       "name": "Resumo do sucesso",
       "type": "n8n-nodes-base.code",
@@ -185,12 +182,12 @@
       "position": [
         900,
         -200
-      ]
+      ],
+      "parameters": {
+        "jsCode": "const r = $json.body ?? {};\nreturn [{ json: {\n  status: r.status,\n  resultado_carga: r.resultado_carga,\n  recursos: (r.bronze ?? []).length,\n  respostas_novas: (r.bronze ?? []).reduce((s, b) => s + (b.respostas_novas ?? 0), 0),\n  etapas: (r.etapas ?? []).map(e => `${e.comando}: saida ${e.codigo_saida} em ${e.duracao_s} s`),\n  duracao_s: r.duracao_s,\n  commit: r.commit,\n  log: r.log,\n} }];\n"
+      }
     },
     {
-      "parameters": {
-        "jsCode": "// Normaliza as tres saidas que nao sao sucesso (radar-etl fora, ocupado, HTTP != 200)\n// para uma linha de bronze.execucao. O status do container nunca e inventado:\n// vem do JSON de resposta do disparador.\nconst j = $json;\nlet status = 'erro';\nlet mensagem;\nif (j.error) {\n  mensagem = `n8n: radar-etl inalcancavel ou sem resposta (${j.error.message ?? j.error})`;\n} else if (j.statusCode === undefined && j.status === 'ocupado') {\n  status = 'ignorada_trava';\n  mensagem = 'n8n: radar-etl ocupado com outro job (/saude); disparo nao feito';\n} else {\n  const corpo = typeof j.body === 'string' ? (() => { try { return JSON.parse(j.body); } catch { return { motivo: j.body }; } })() : (j.body ?? {});\n  if (j.statusCode === 409) status = 'ignorada_trava';\n  mensagem = `n8n: HTTP ${j.statusCode} ${corpo.status ?? ''}: ${corpo.motivo ?? ''}`.trim();\n}\nreturn [{ json: { status, mensagem: mensagem.slice(0, 1000), http: j.statusCode ?? null } }];\n"
-      },
       "id": "66ebcf44-2c32-54de-bb43-1ecff689a184",
       "name": "Monta o registro",
       "type": "n8n-nodes-base.code",
@@ -198,16 +195,12 @@
       "position": [
         900,
         140
-      ]
+      ],
+      "parameters": {
+        "jsCode": "// Normaliza as tres saidas que nao sao sucesso (radar-etl fora, ocupado, HTTP != 200)\n// para uma linha de bronze.execucao. O status do container nunca e inventado:\n// vem do JSON de resposta do disparador.\nconst j = $json;\nlet status = 'erro';\nlet mensagem;\nif (j.error) {\n  mensagem = `n8n: radar-etl inalcancavel ou sem resposta (${j.error.message ?? j.error})`;\n} else if (j.statusCode === undefined && j.status === 'ocupado') {\n  status = 'ignorada_trava';\n  mensagem = 'n8n: radar-etl ocupado com outro job (/saude); disparo nao feito';\n} else {\n  const corpo = typeof j.body === 'string' ? (() => { try { return JSON.parse(j.body); } catch { return { motivo: j.body }; } })() : (j.body ?? {});\n  if (j.statusCode === 409) status = 'ignorada_trava';\n  mensagem = `n8n: HTTP ${j.statusCode} ${corpo.status ?? ''}: ${corpo.motivo ?? ''}`.trim();\n}\nreturn [{ json: { status, mensagem: mensagem.slice(0, 1000), http: j.statusCode ?? null } }];\n"
+      }
     },
     {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO bronze.execucao\n       (rodada_id, origem_carga, disparado_por, modo, recurso, finalizado_em, status, mensagem)\nVALUES (gen_random_uuid(), 'python', 'agenda_n8n', 'incremental', 'rodada', now(), $1, $2)\nRETURNING execucao_id, status, mensagem;",
-        "options": {
-          "queryReplacement": "={{ [ $json.status, $json.mensagem ] }}"
-        }
-      },
       "id": "25b56df2-c748-5f67-adbf-4d69b58c5cc0",
       "name": "Registra em bronze.execucao",
       "type": "n8n-nodes-base.postgres",
@@ -216,6 +209,13 @@
         1120,
         140
       ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO bronze.execucao\n       (rodada_id, origem_carga, disparado_por, modo, recurso, finalizado_em, status, mensagem)\nVALUES (gen_random_uuid(), 'python', 'agenda_n8n', 'incremental', 'rodada', now(), $1, $2)\nRETURNING execucao_id, status, mensagem;",
+        "options": {
+          "queryReplacement": "={{ [ $json.status, $json.mensagem ] }}"
+        }
+      },
       "credentials": {
         "postgres": {
           "id": "CREDENCIAL_POSTGRES",
@@ -224,6 +224,14 @@
       }
     },
     {
+      "id": "8b3c2aad-9d97-507e-a1e9-21dda6874b44",
+      "name": "Só trava/ocupado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1340,
+        140
+      ],
       "parameters": {
         "conditions": {
           "options": {
@@ -247,18 +255,9 @@
         },
         "looseTypeValidation": true,
         "options": {}
-      },
-      "id": "8b3c2aad-9d97-507e-a1e9-21dda6874b44",
-      "name": "Só trava/ocupado?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        1340,
-        140
-      ]
+      }
     },
     {
-      "parameters": {},
       "id": "43c264eb-196b-544f-b0f7-2cf42d9c6dbc",
       "name": "Fim: não rodou (409)",
       "type": "n8n-nodes-base.noOp",
@@ -266,12 +265,10 @@
       "position": [
         1560,
         40
-      ]
+      ],
+      "parameters": {}
     },
     {
-      "parameters": {
-        "errorMessage": "={{ 'Cenário A falhou: ' + $json.mensagem }}"
-      },
       "id": "16005719-0221-5466-a62a-dba683e17852",
       "name": "Falha do cenário A",
       "type": "n8n-nodes-base.stopAndError",
@@ -279,7 +276,10 @@
       "position": [
         1560,
         240
-      ]
+      ],
+      "parameters": {
+        "errorMessage": "={{ 'Cenário A falhou: ' + $json.mensagem }}"
+      }
     }
   ],
   "connections": {
@@ -408,12 +408,12 @@
     }
   },
   "settings": {
-    "executionOrder": "v1",
-    "timezone": "America/Sao_Paulo",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": true,
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
-    "saveManualExecutions": true,
-    "saveExecutionProgress": false
+    "timezone": "America/Sao_Paulo",
+    "executionOrder": "v1"
   },
   "pinData": {},
   "meta": {

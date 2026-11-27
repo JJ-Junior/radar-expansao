@@ -2,12 +2,6 @@
   "name": "Radar · Cenário B",
   "nodes": [
     {
-      "parameters": {
-        "content": "## Radar · Cenário B (ingestão no próprio n8n)\nO n8n chama o IBGE e o BCB e grava o JSON **como veio** em `bronze.api_resposta` com `origem_carga = 'n8n'` (mesmo contrato do cenário A). A silver/gold roda no mesmo código Python do container (`POST /rodar/transformar`), só enquanto o n8n está com a trava.\n\n- Agenda **desligada** (workflow inativo); se ativado: segunda 07:00, uma hora depois do A\n- Trava em `bronze.trava_carga` (`em_uso_por = 'n8n'`); solta no fim, inclusive com erro (e o workflow **Radar · Cenário B · erro** solta se algo quebrar no meio)\n- Cada chamada roda no sub-workflow **Radar · Cenário B · grava resposta**: a memória de cada JSON é liberada logo depois de gravado\n- Parâmetros no nó **Config**",
-        "height": 300,
-        "width": 640,
-        "color": 7
-      },
       "id": "bae54ea2-ef23-5bd0-be41-5bf1a4ba6bcd",
       "name": "Nota · Cenário B",
       "type": "n8n-nodes-base.stickyNote",
@@ -15,10 +9,15 @@
       "position": [
         -460,
         -420
-      ]
+      ],
+      "parameters": {
+        "content": "## Radar · Cenário B (ingestão no próprio n8n)\nO n8n chama o IBGE e o BCB e grava o JSON **como veio** em `bronze.api_resposta` com `origem_carga = 'n8n'` (mesmo contrato do cenário A). A silver/gold roda no mesmo código Python do container (`POST /rodar/transformar`), só enquanto o n8n está com a trava.\n\n- Agenda **desligada** (workflow inativo); se ativado: segunda 07:00, uma hora depois do A\n- Trava em `bronze.trava_carga` (`em_uso_por = 'n8n'`); solta no fim, inclusive com erro (e o workflow **Radar · Cenário B · erro** solta se algo quebrar no meio)\n- Cada chamada roda no sub-workflow **Radar · Cenário B · grava resposta**: a memória de cada JSON é liberada logo depois de gravado\n- Parâmetros no nó **Config**",
+        "height": 300,
+        "width": 640,
+        "color": 7
+      }
     },
     {
-      "parameters": {},
       "id": "33ef065d-687c-5ea6-9025-5f3c90a15898",
       "name": "Manual",
       "type": "n8n-nodes-base.manualTrigger",
@@ -26,9 +25,18 @@
       "position": [
         -400,
         0
-      ]
+      ],
+      "parameters": {}
     },
     {
+      "id": "1c6d3c45-8f7e-58c0-84aa-d7ab4ce9eb35",
+      "name": "Segunda 07:00 (desligada)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -400,
+        180
+      ],
       "parameters": {
         "rule": {
           "interval": [
@@ -43,20 +51,9 @@
             }
           ]
         }
-      },
-      "id": "1c6d3c45-8f7e-58c0-84aa-d7ab4ce9eb35",
-      "name": "Segunda 07:00 (desligada)",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        -400,
-        180
-      ]
+      }
     },
     {
-      "parameters": {
-        "jsCode": "// ============================== CONFIG ==============================\n// Mesmos recursos, lotes e janelas do cenario A (src/ingestao/), com duas\n// diferencas documentadas no spec.md (secoes 6 e 8.2):\n//   - agregados municipais sempre por ano x UF (N6[N3[uf]]), para respostas pequenas;\n//   - ANO_INICIO: o n8n so cuida dos anos recentes; o historico completo e do cenario A.\nconst MODO = 'incremental';          // 'incremental' | 'inicial' (ignora o que ja foi salvo)\nconst ANO_INICIO = 2022;             // agregados municipais: lotes deste ano em diante\nconst DATA_INICIO_BCB = '2015-01-01';\nconst UFS = [11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25, 26, 27, 28, 29,\n             31, 32, 33, 35, 41, 42, 43, 50, 51, 52, 53];\nconst LOCALIDADES = [\n  ['ibge_regioes', '/v1/localidades/regioes', {}],\n  ['ibge_estados', '/v1/localidades/estados', {}],\n  ['ibge_municipios', '/v1/localidades/municipios', { view: 'nivelado' }],\n  ['ibge_malha_municipios', '/v4/malhas/paises/BR/metadados', { intrarregiao: 'municipio' }],\n];\nconst AGREGADOS = {\n  '6579': { variaveis: [9324] },\n  '4714': { variaveis: [93, 6318, 614] },\n  '10295': { variaveis: [13431], classificacao: '2[6794]|86[95251]|58[95253]' },\n  '5938': { variaveis: [37], variaveis_extras: [498, 513, 517, 6575, 525, 543], extras_ate_ano: 2021 },\n  '7060': { variaveis: [63, 2265], classificacao: '315[7169]', nivel: 'N1', agrupar_por_ano: true },\n  '9509': { variaveis: [10143] },\n  '9418': { variaveis: [2585], classificacao: '12762[117856]', timeout: 120 },\n};\nconst SERIES_BCB = ['432', '10813', '433'];\n// ====================================================================\n\nconst agendado = $('Segunda 07:00 (desligada)').isExecuted;\nreturn [{ json: {\n  modo: MODO, disparado_por: agendado ? 'agenda_n8n' : 'manual',\n  ano_inicio: ANO_INICIO, data_inicio_bcb: DATA_INICIO_BCB, ufs: UFS,\n  localidades: LOCALIDADES, agregados: AGREGADOS, series_bcb: SERIES_BCB,\n} }];\n"
-      },
       "id": "a5de3dfb-cfbc-5488-bc63-fe9c33d246f2",
       "name": "Config",
       "type": "n8n-nodes-base.code",
@@ -64,14 +61,12 @@
       "position": [
         -180,
         80
-      ]
+      ],
+      "parameters": {
+        "jsCode": "// ============================== CONFIG ==============================\n// Mesmos recursos, lotes e janelas do cenario A (src/ingestao/), com duas\n// diferencas documentadas no spec.md (secoes 6 e 8.2):\n//   - agregados municipais sempre por ano x UF (N6[N3[uf]]), para respostas pequenas;\n//   - ANO_INICIO: o n8n so cuida dos anos recentes; o historico completo e do cenario A.\nconst MODO = 'incremental';          // 'incremental' | 'inicial' (ignora o que ja foi salvo)\nconst ANO_INICIO = 2022;             // agregados municipais: lotes deste ano em diante\nconst DATA_INICIO_BCB = '2015-01-01';\nconst UFS = [11, 12, 13, 14, 15, 16, 17, 21, 22, 23, 24, 25, 26, 27, 28, 29,\n             31, 32, 33, 35, 41, 42, 43, 50, 51, 52, 53];\nconst LOCALIDADES = [\n  ['ibge_regioes', '/v1/localidades/regioes', {}],\n  ['ibge_estados', '/v1/localidades/estados', {}],\n  ['ibge_municipios', '/v1/localidades/municipios', { view: 'nivelado' }],\n  ['ibge_malha_municipios', '/v4/malhas/paises/BR/metadados', { intrarregiao: 'municipio' }],\n];\nconst AGREGADOS = {\n  '6579': { variaveis: [9324] },\n  '4714': { variaveis: [93, 6318, 614] },\n  '10295': { variaveis: [13431], classificacao: '2[6794]|86[95251]|58[95253]' },\n  '5938': { variaveis: [37], variaveis_extras: [498, 513, 517, 6575, 525, 543], extras_ate_ano: 2021 },\n  '7060': { variaveis: [63, 2265], classificacao: '315[7169]', nivel: 'N1', agrupar_por_ano: true },\n  '9509': { variaveis: [10143] },\n  '9418': { variaveis: [2585], classificacao: '12762[117856]', timeout: 120 },\n};\nconst SERIES_BCB = ['432', '10813', '433'];\n// ====================================================================\n\nconst agendado = $('Segunda 07:00 (desligada)').isExecuted;\nreturn [{ json: {\n  modo: MODO, disparado_por: agendado ? 'agenda_n8n' : 'manual',\n  ano_inicio: ANO_INICIO, data_inicio_bcb: DATA_INICIO_BCB, ufs: UFS,\n  localidades: LOCALIDADES, agregados: AGREGADOS, series_bcb: SERIES_BCB,\n} }];\n"
+      }
     },
     {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "WITH pegou AS (\n    UPDATE bronze.trava_carga\n       SET em_uso_por = 'n8n', rodada_id = gen_random_uuid(), desde = now()\n     WHERE trava_id = 1\n       AND (em_uso_por IS NULL OR desde < now() - interval '2 hours')   -- expira trava esquecida\n    RETURNING rodada_id\n)\nSELECT (SELECT rodada_id::text FROM pegou) AS rodada_id;",
-        "options": {}
-      },
       "id": "f8fc2aad-342f-56e2-9f60-11bba1997291",
       "name": "Pega a trava",
       "type": "n8n-nodes-base.postgres",
@@ -80,6 +75,11 @@
         40,
         80
       ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH pegou AS (\n    UPDATE bronze.trava_carga\n       SET em_uso_por = 'n8n', rodada_id = gen_random_uuid(), desde = now()\n     WHERE trava_id = 1\n       AND (em_uso_por IS NULL OR desde < now() - interval '2 hours')   -- expira trava esquecida\n    RETURNING rodada_id\n)\nSELECT (SELECT rodada_id::text FROM pegou) AS rodada_id;",
+        "options": {}
+      },
       "credentials": {
         "postgres": {
           "id": "CREDENCIAL_POSTGRES",
@@ -88,6 +88,14 @@
       }
     },
     {
+      "id": "3ca611ab-1c70-54c8-b4a6-96b0853b9ccc",
+      "name": "Pegou a trava?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        260,
+        80
+      ],
       "parameters": {
         "conditions": {
           "options": {
@@ -111,24 +119,9 @@
         },
         "looseTypeValidation": true,
         "options": {}
-      },
-      "id": "3ca611ab-1c70-54c8-b4a6-96b0853b9ccc",
-      "name": "Pegou a trava?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        260,
-        80
-      ]
+      }
     },
     {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO bronze.execucao\n       (rodada_id, origem_carga, disparado_por, modo, recurso, finalizado_em, status, mensagem)\nVALUES (gen_random_uuid(), 'n8n', $1, $2, 'rodada', now(), 'ignorada_trava', 'outra carga esta em andamento')\nRETURNING execucao_id;",
-        "options": {
-          "queryReplacement": "={{ [ $('Config').first().json.disparado_por, $('Config').first().json.modo ] }}"
-        }
-      },
       "id": "993568c6-67e6-5f2f-a5fb-b23f99ae5965",
       "name": "Registra: ignorada pela trava",
       "type": "n8n-nodes-base.postgres",
@@ -137,6 +130,13 @@
         480,
         300
       ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO bronze.execucao\n       (rodada_id, origem_carga, disparado_por, modo, recurso, finalizado_em, status, mensagem)\nVALUES (gen_random_uuid(), 'n8n', $1, $2, 'rodada', now(), 'ignorada_trava', 'outra carga esta em andamento')\nRETURNING execucao_id;",
+        "options": {
+          "queryReplacement": "={{ [ $('Config').first().json.disparado_por, $('Config').first().json.modo ] }}"
+        }
+      },
       "credentials": {
         "postgres": {
           "id": "CREDENCIAL_POSTGRES",
@@ -145,32 +145,29 @@
       }
     },
     {
+      "id": "d50f175a-cecd-5ca3-b61b-58ac5f637cfb",
+      "name": "Último período salvo (n8n)",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "position": [
+        480,
+        -20
+      ],
       "parameters": {
         "operation": "executeQuery",
         "query": "SELECT recurso, lote,\n       modificacao_fonte::text AS modificacao_fonte,\n       ultima_data::text       AS ultima_data\n  FROM bronze.vw_ultimo_periodo\n WHERE origem_carga = 'n8n';",
         "options": {}
       },
-      "id": "d50f175a-cecd-5ca3-b61b-58ac5f637cfb",
-      "name": "Último período salvo (n8n)",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        480,
-        -20
-      ],
       "credentials": {
         "postgres": {
           "id": "CREDENCIAL_POSTGRES",
           "name": "Radar · Postgres etl_radar"
         }
-      },
-      "alwaysOutputData": true,
-      "executeOnce": true
+      }
     },
     {
-      "parameters": {
-        "jsCode": "return Object.keys($('Config').first().json.agregados).map(agregado => ({ json: { agregado } }));\n"
-      },
       "id": "6cfba7a0-465e-56c2-9d35-b3223545f047",
       "name": "Agregados do CONFIG",
       "type": "n8n-nodes-base.code",
@@ -178,9 +175,24 @@
       "position": [
         700,
         -20
-      ]
+      ],
+      "parameters": {
+        "jsCode": "return Object.keys($('Config').first().json.agregados).map(agregado => ({ json: { agregado } }));\n"
+      }
     },
     {
+      "id": "551af81f-b2ec-5149-96d8-22858c3b6d5a",
+      "name": "IBGE /periodos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "onError": "continueRegularOutput",
+      "position": [
+        920,
+        -20
+      ],
       "parameters": {
         "url": "=https://servicodados.ibge.gov.br/api/v3/agregados/{{ $json.agregado }}/periodos",
         "sendHeaders": true,
@@ -201,24 +213,9 @@
             }
           }
         }
-      },
-      "id": "551af81f-b2ec-5149-96d8-22858c3b6d5a",
-      "name": "IBGE /periodos",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        920,
-        -20
-      ],
-      "retryOnFail": true,
-      "maxTries": 3,
-      "waitBetweenTries": 2000,
-      "onError": "continueRegularOutput"
+      }
     },
     {
-      "parameters": {
-        "jsCode": "// So monta URLs e parametros: nenhuma chamada de API e nenhum dado transformado aqui.\nconst cfg = $('Config').first().json;\nconst rodada_id = $('Pega a trava').first().json.rodada_id;\nconst salvos = $('Último período salvo (n8n)').all().map(i => i.json).filter(r => r.recurso);\nconst agregados = $('Agregados do CONFIG').all().map(i => i.json.agregado);\nconst IBGE = 'https://servicodados.ibge.gov.br/api';\nconst BCB = 'https://api.bcb.gov.br';\nconst hoje = DateTime.now().setZone('America/Sao_Paulo').startOf('day');\n\nconst recursos = {};\nconst rec = r => (recursos[r] ??= { chamadas_ok: 0, chamadas_erro: 0, mensagens: [] });\nconst chamadas = [];\nconst url = (base, endpoint, params) => {\n  const q = new URLSearchParams(params).toString();\n  return base + endpoint + (q ? '?' + q : '');\n};\nconst add = (c) => chamadas.push({ ...c, url: url(c.base, c.endpoint, c.params) });\n\n// 1. Localidades: snapshot toda semana (barato)\nfor (const [recurso, endpoint, params] of cfg.localidades) {\n  rec(recurso);\n  add({ fonte: 'IBGE', recurso, base: IBGE, endpoint, params, parametros: params,\n        lote: 'snapshot', modificacao: null, timeout_ms: 60000 });\n}\n\n// 2. Agregados: /periodos -> lotes novos ou modificados (mesma regra do cenario A)\nconst dataIbge = t => (t ? `${t.slice(6, 10)}-${t.slice(3, 5)}-${t.slice(0, 2)}` : null);\nconst precisaBaixar = (recurso, lote, modificacao) => {\n  const datas = salvos.filter(s => s.recurso === recurso && (s.lote === lote || s.lote.startsWith(lote + '-')));\n  if (!datas.length) return true;\n  const recente = datas.map(s => s.modificacao_fonte).filter(Boolean).sort().at(-1);\n  return modificacao !== null && (!recente || modificacao > recente);\n};\n$input.all().forEach((item, i) => {\n  const ag = agregados[i];\n  const a = cfg.agregados[ag];\n  const recurso = `ibge_agregado_${ag}`;\n  const r = rec(recurso);\n  const resp = item.json;\n  if (resp.error || resp.statusCode !== 200 || !Array.isArray(resp.body)) {\n    r.chamadas_erro++;\n    r.mensagens.push(`/periodos falhou: ${resp.error?.message ?? resp.statusCode}`);\n    return;\n  }\n  r.chamadas_ok++;\n  const lotes = {};\n  for (const p of resp.body) {\n    const chave = a.agrupar_por_ano ? p.id.slice(0, 4) : p.id;\n    const l = (lotes[chave] ??= { periodos: [], modificacao: null });\n    l.periodos.push(p.id);\n    const m = dataIbge(p.modificacao);\n    if (m && (!l.modificacao || m > l.modificacao)) l.modificacao = m;\n  }\n  const municipal = (a.nivel ?? 'N6') === 'N6';\n  for (const lote of Object.keys(lotes).sort()) {\n    const info = lotes[lote];\n    const ano = Number(lote.slice(0, 4));\n    if (municipal && ano < cfg.ano_inicio) continue;\n    if (cfg.modo === 'incremental' && !precisaBaixar(recurso, lote, info.modificacao)) continue;\n    const variaveis = [...a.variaveis, ...(a.variaveis_extras && ano <= a.extras_ate_ano ? a.variaveis_extras : [])];\n    const endpoint = `/v3/agregados/${ag}/periodos/${info.periodos.join('|')}/variaveis/${variaveis.join('|')}`;\n    const extra = a.classificacao ? { classificacao: a.classificacao } : {};\n    const locais = municipal\n      ? cfg.ufs.map(uf => [`${lote}-${uf}`, { localidades: `N6[N3[${uf}]]`, ...extra }])\n      : [[lote, { localidades: 'N1[all]', ...extra }]];\n    for (const [nomeLote, params] of locais) {\n      add({ fonte: 'IBGE', recurso, base: IBGE, endpoint, params,\n            parametros: { agregado: ag, periodos: info.periodos, variaveis, ...params },\n            lote: nomeLote, modificacao: info.modificacao, timeout_ms: (a.timeout ?? 60) * 1000 });\n    }\n  }\n});\n\n// 3. BCB: incremental = ultima data salva (n8n) - 30 dias, sem data final; senao janelas de 10 anos\nconst br = d => d.toFormat('dd/MM/yyyy');\nfor (const serie of cfg.series_bcb) {\n  const recurso = `bcb_sgs_${serie}`;\n  rec(recurso);\n  const endpoint = `/dados/serie/bcdata.sgs.${serie}/dados`;\n  const ultima = cfg.modo === 'incremental'\n    ? salvos.filter(s => s.recurso === recurso && s.ultima_data).map(s => s.ultima_data).sort().at(-1)\n    : undefined;\n  const janelas = [];\n  if (ultima) {\n    const u = DateTime.fromISO(ultima, { zone: 'America/Sao_Paulo' });\n    janelas.push([(u < hoje ? u : hoje).minus({ days: 30 }), null]);\n  } else {\n    let atual = DateTime.fromISO(cfg.data_inicio_bcb, { zone: 'America/Sao_Paulo' });\n    while (atual <= hoje) {\n      const limite = atual.plus({ years: 10 }).minus({ days: 1 });\n      janelas.push([atual, limite < hoje ? limite : hoje]);\n      atual = limite.plus({ days: 1 });\n    }\n  }\n  for (const [ini, fim] of janelas) {\n    const params = { formato: 'json', dataInicial: br(ini), ...(fim ? { dataFinal: br(fim) } : {}) };\n    add({ fonte: 'BCB', recurso, base: BCB, endpoint, params, parametros: { serie, ...params },\n          lote: `${ini.toISODate()}_${fim ? fim.toISODate() : 'aberto'}`, modificacao: null, timeout_ms: 60000 });\n  }\n}\n\nreturn [{ json: { rodada_id, modo: cfg.modo, disparado_por: cfg.disparado_por, recursos, chamadas } }];\n"
-      },
       "id": "22027e7e-7884-56bd-b6c4-03f85f30ad6e",
       "name": "Monta as chamadas",
       "type": "n8n-nodes-base.code",
@@ -226,16 +223,12 @@
       "position": [
         1140,
         -20
-      ]
+      ],
+      "parameters": {
+        "jsCode": "// So monta URLs e parametros: nenhuma chamada de API e nenhum dado transformado aqui.\nconst cfg = $('Config').first().json;\nconst rodada_id = $('Pega a trava').first().json.rodada_id;\nconst salvos = $('Último período salvo (n8n)').all().map(i => i.json).filter(r => r.recurso);\nconst agregados = $('Agregados do CONFIG').all().map(i => i.json.agregado);\nconst IBGE = 'https://servicodados.ibge.gov.br/api';\nconst BCB = 'https://api.bcb.gov.br';\nconst hoje = DateTime.now().setZone('America/Sao_Paulo').startOf('day');\n\nconst recursos = {};\nconst rec = r => (recursos[r] ??= { chamadas_ok: 0, chamadas_erro: 0, mensagens: [] });\nconst chamadas = [];\nconst url = (base, endpoint, params) => {\n  // (o sandbox do Code nao tem URLSearchParams)\n  const q = Object.entries(params).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');\n  return base + endpoint + (q ? '?' + q : '');\n};\nconst add = (c) => chamadas.push({ ...c, url: url(c.base, c.endpoint, c.params) });\n\n// 1. Localidades: snapshot toda semana (barato)\nfor (const [recurso, endpoint, params] of cfg.localidades) {\n  rec(recurso);\n  add({ fonte: 'IBGE', recurso, base: IBGE, endpoint, params, parametros: params,\n        lote: 'snapshot', modificacao: null, timeout_ms: 60000 });\n}\n\n// 2. Agregados: /periodos -> lotes novos ou modificados (mesma regra do cenario A)\nconst dataIbge = t => (t ? `${t.slice(6, 10)}-${t.slice(3, 5)}-${t.slice(0, 2)}` : null);\nconst precisaBaixar = (recurso, lote, modificacao) => {\n  const datas = salvos.filter(s => s.recurso === recurso && (s.lote === lote || s.lote.startsWith(lote + '-')));\n  if (!datas.length) return true;\n  const recente = datas.map(s => s.modificacao_fonte).filter(Boolean).sort().at(-1);\n  return modificacao !== null && (!recente || modificacao > recente);\n};\n$input.all().forEach((item, i) => {\n  const ag = agregados[i];\n  const a = cfg.agregados[ag];\n  const recurso = `ibge_agregado_${ag}`;\n  const r = rec(recurso);\n  const resp = item.json;\n  if (resp.error || resp.statusCode !== 200 || !Array.isArray(resp.body)) {\n    r.chamadas_erro++;\n    r.mensagens.push(`/periodos falhou: ${resp.error?.message ?? resp.statusCode}`);\n    return;\n  }\n  r.chamadas_ok++;\n  const lotes = {};\n  for (const p of resp.body) {\n    const chave = a.agrupar_por_ano ? p.id.slice(0, 4) : p.id;\n    const l = (lotes[chave] ??= { periodos: [], modificacao: null });\n    l.periodos.push(p.id);\n    const m = dataIbge(p.modificacao);\n    if (m && (!l.modificacao || m > l.modificacao)) l.modificacao = m;\n  }\n  const municipal = (a.nivel ?? 'N6') === 'N6';\n  for (const lote of Object.keys(lotes).sort()) {\n    const info = lotes[lote];\n    const ano = Number(lote.slice(0, 4));\n    if (municipal && ano < cfg.ano_inicio) continue;\n    if (cfg.modo === 'incremental' && !precisaBaixar(recurso, lote, info.modificacao)) continue;\n    const variaveis = [...a.variaveis, ...(a.variaveis_extras && ano <= a.extras_ate_ano ? a.variaveis_extras : [])];\n    const endpoint = `/v3/agregados/${ag}/periodos/${info.periodos.join('|')}/variaveis/${variaveis.join('|')}`;\n    const extra = a.classificacao ? { classificacao: a.classificacao } : {};\n    const locais = municipal\n      ? cfg.ufs.map(uf => [`${lote}-${uf}`, { localidades: `N6[N3[${uf}]]`, ...extra }])\n      : [[lote, { localidades: 'N1[all]', ...extra }]];\n    for (const [nomeLote, params] of locais) {\n      add({ fonte: 'IBGE', recurso, base: IBGE, endpoint, params,\n            parametros: { agregado: ag, periodos: info.periodos, variaveis, ...params },\n            lote: nomeLote, modificacao: info.modificacao, timeout_ms: (a.timeout ?? 60) * 1000 });\n    }\n  }\n});\n\n// 3. BCB: incremental = ultima data salva (n8n) - 30 dias, sem data final; senao janelas de 10 anos\nconst br = d => d.toFormat('dd/MM/yyyy');\nfor (const serie of cfg.series_bcb) {\n  const recurso = `bcb_sgs_${serie}`;\n  rec(recurso);\n  const endpoint = `/dados/serie/bcdata.sgs.${serie}/dados`;\n  const ultima = cfg.modo === 'incremental'\n    ? salvos.filter(s => s.recurso === recurso && s.ultima_data).map(s => s.ultima_data).sort().at(-1)\n    : undefined;\n  const janelas = [];\n  if (ultima) {\n    const u = DateTime.fromISO(ultima, { zone: 'America/Sao_Paulo' });\n    janelas.push([(u < hoje ? u : hoje).minus({ days: 30 }), null]);\n  } else {\n    let atual = DateTime.fromISO(cfg.data_inicio_bcb, { zone: 'America/Sao_Paulo' });\n    while (atual <= hoje) {\n      const limite = atual.plus({ years: 10 }).minus({ days: 1 });\n      janelas.push([atual, limite < hoje ? limite : hoje]);\n      atual = limite.plus({ days: 1 });\n    }\n  }\n  for (const [ini, fim] of janelas) {\n    const params = { formato: 'json', dataInicial: br(ini), ...(fim ? { dataFinal: br(fim) } : {}) };\n    add({ fonte: 'BCB', recurso, base: BCB, endpoint, params, parametros: { serie, ...params },\n          lote: `${ini.toISODate()}_${fim ? fim.toISODate() : 'aberto'}`, modificacao: null, timeout_ms: 60000 });\n  }\n}\n\nreturn [{ json: { rodada_id, modo: cfg.modo, disparado_por: cfg.disparado_por, recursos, chamadas } }];\n"
+      }
     },
     {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "INSERT INTO bronze.execucao (rodada_id, origem_carga, disparado_por, modo, recurso)\nSELECT $1::uuid, 'n8n', $2, $3, t.recurso\n  FROM jsonb_array_elements_text($4::jsonb) WITH ORDINALITY AS t(recurso, ordem)\n ORDER BY t.ordem\nRETURNING execucao_id, recurso;",
-        "options": {
-          "queryReplacement": "={{ [ $json.rodada_id, $json.disparado_por, $json.modo, JSON.stringify(Object.keys($json.recursos)) ] }}"
-        }
-      },
       "id": "937eaedb-3d98-507b-93cb-149531f35dbf",
       "name": "Abre as execuções",
       "type": "n8n-nodes-base.postgres",
@@ -244,6 +237,13 @@
         1360,
         -20
       ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "INSERT INTO bronze.execucao (rodada_id, origem_carga, disparado_por, modo, recurso)\nSELECT $1::uuid, 'n8n', $2, $3, t.recurso\n  FROM jsonb_array_elements_text($4::jsonb) WITH ORDINALITY AS t(recurso, ordem)\n ORDER BY t.ordem\nRETURNING execucao_id, recurso;",
+        "options": {
+          "queryReplacement": "={{ [ $json.rodada_id, $json.disparado_por, $json.modo, JSON.stringify(Object.keys($json.recursos)) ] }}"
+        }
+      },
       "credentials": {
         "postgres": {
           "id": "CREDENCIAL_POSTGRES",
@@ -252,9 +252,6 @@
       }
     },
     {
-      "parameters": {
-        "jsCode": "const plano = $('Monta as chamadas').first().json;\nconst ids = Object.fromEntries($input.all().map(i => [i.json.recurso, i.json.execucao_id]));\nreturn plano.chamadas.map(c => ({ json: { ...c, execucao_id: ids[c.recurso] } }));\n"
-      },
       "id": "3aee5414-028d-5d68-951b-256f403b838a",
       "name": "Uma chamada por item",
       "type": "n8n-nodes-base.code",
@@ -262,9 +259,21 @@
       "position": [
         1580,
         -20
-      ]
+      ],
+      "parameters": {
+        "jsCode": "const plano = $('Monta as chamadas').first().json;\nconst ids = Object.fromEntries($input.all().map(i => [i.json.recurso, i.json.execucao_id]));\nreturn plano.chamadas.map(c => ({ json: { ...c, execucao_id: ids[c.recurso] } }));\n"
+      }
     },
     {
+      "id": "6caa990c-8c24-567e-b23e-386c8403a368",
+      "name": "Grava cada resposta",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        1800,
+        -20
+      ],
       "parameters": {
         "source": "database",
         "workflowId": {
@@ -276,21 +285,9 @@
         "options": {
           "waitForSubWorkflow": true
         }
-      },
-      "id": "6caa990c-8c24-567e-b23e-386c8403a368",
-      "name": "Grava cada resposta",
-      "type": "n8n-nodes-base.executeWorkflow",
-      "typeVersion": 1.2,
-      "position": [
-        1800,
-        -20
-      ],
-      "onError": "continueRegularOutput"
+      }
     },
     {
-      "parameters": {
-        "jsCode": "// Junta o resultado de cada chamada por recurso e aplica a regra de status do spec.md (3.1).\nconst plano = $('Monta as chamadas').first().json;\nconst ids = Object.fromEntries($('Abre as execuções').all().map(i => [i.json.recurso, i.json.execucao_id]));\nconst enviados = $('Uma chamada por item').all();\nconst tot = {};\nfor (const [recurso, r] of Object.entries(plano.recursos)) {\n  tot[recurso] = { execucao_id: ids[recurso], chamadas_ok: r.chamadas_ok, chamadas_erro: r.chamadas_erro,\n                   respostas_novas: 0, mensagens: [...r.mensagens] };\n}\n$input.all().forEach((item, i) => {\n  const enviado = enviados[i]?.json ?? {};\n  const res = item.json;\n  const t = tot[res.recurso ?? enviado.recurso];\n  if (!t) return;\n  if (res.resultado === 'nova' || res.resultado === 'ja_existia' || res.resultado === 'nada_novo') {\n    t.chamadas_ok++;\n    if (res.resultado === 'nova') t.respostas_novas++;\n  } else {\n    t.chamadas_erro++;\n    t.mensagens.push(`${res.lote ?? enviado.lote}: ${res.mensagem ?? res.error?.message ?? 'erro no sub-workflow'}`);\n  }\n});\nconst linhas = Object.values(tot).map(t => ({\n  execucao_id: t.execucao_id,\n  status: t.chamadas_erro > 0 ? 'erro' : t.respostas_novas > 0 ? 'sucesso' : 'sem_novidade',\n  mensagem: t.mensagens.length ? ('lotes com erro: ' + t.mensagens.join('; ')).slice(0, 1000) : null,\n  chamadas_ok: t.chamadas_ok, chamadas_erro: t.chamadas_erro, respostas_novas: t.respostas_novas,\n}));\nreturn [{ json: { linhas } }];\n"
-      },
       "id": "edc0aa61-39a0-506b-bc86-6806a8fab36a",
       "name": "Fecha as execuções",
       "type": "n8n-nodes-base.code",
@@ -298,16 +295,12 @@
       "position": [
         2020,
         -20
-      ]
+      ],
+      "parameters": {
+        "jsCode": "// Junta o resultado de cada chamada por recurso e aplica a regra de status do spec.md (3.1).\nconst plano = $('Monta as chamadas').first().json;\nconst ids = Object.fromEntries($('Abre as execuções').all().map(i => [i.json.recurso, i.json.execucao_id]));\nconst enviados = $('Uma chamada por item').all();\nconst tot = {};\nfor (const [recurso, r] of Object.entries(plano.recursos)) {\n  tot[recurso] = { execucao_id: ids[recurso], chamadas_ok: r.chamadas_ok, chamadas_erro: r.chamadas_erro,\n                   respostas_novas: 0, mensagens: [...r.mensagens] };\n}\n$input.all().forEach((item, i) => {\n  const enviado = enviados[i]?.json ?? {};\n  const res = item.json;\n  const t = tot[res.recurso ?? enviado.recurso];\n  if (!t) return;\n  if (res.resultado === 'nova' || res.resultado === 'ja_existia' || res.resultado === 'nada_novo') {\n    t.chamadas_ok++;\n    if (res.resultado === 'nova') t.respostas_novas++;\n  } else {\n    t.chamadas_erro++;\n    t.mensagens.push(`${res.lote ?? enviado.lote}: ${res.mensagem ?? res.error?.message ?? 'erro no sub-workflow'}`);\n  }\n});\nconst linhas = Object.values(tot).map(t => ({\n  execucao_id: t.execucao_id,\n  status: t.chamadas_erro > 0 ? 'erro' : t.respostas_novas > 0 ? 'sucesso' : 'sem_novidade',\n  mensagem: t.mensagens.length ? ('lotes com erro: ' + t.mensagens.join('; ')).slice(0, 1000) : null,\n  chamadas_ok: t.chamadas_ok, chamadas_erro: t.chamadas_erro, respostas_novas: t.respostas_novas,\n}));\nreturn [{ json: { linhas } }];\n"
+      }
     },
     {
-      "parameters": {
-        "operation": "executeQuery",
-        "query": "WITH r AS (\n    SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(execucao_id bigint, status text, mensagem text,\n                                                    chamadas_ok int, chamadas_erro int, respostas_novas int)\n), fechadas AS (\n    UPDATE bronze.execucao e\n       SET finalizado_em = now(), status = r.status, mensagem = r.mensagem,\n           chamadas_ok = r.chamadas_ok, chamadas_erro = r.chamadas_erro, respostas_novas = r.respostas_novas\n      FROM r\n     WHERE e.execucao_id = r.execucao_id\n    RETURNING e.recurso, e.status, e.respostas_novas, e.mensagem\n)\nSELECT count(*) AS recursos,\n       coalesce(sum(respostas_novas), 0) AS novas,\n       count(*) FILTER (WHERE status = 'erro') AS com_erro,\n       string_agg(recurso || ': ' || mensagem, ' | ') FILTER (WHERE status = 'erro') AS erros\n  FROM fechadas;",
-        "options": {
-          "queryReplacement": "={{ [ JSON.stringify($json.linhas) ] }}"
-        }
-      },
       "id": "62e46d28-e011-51d3-9352-75181e9514da",
       "name": "Grava o fechamento",
       "type": "n8n-nodes-base.postgres",
@@ -316,6 +309,13 @@
         2240,
         -20
       ],
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "WITH r AS (\n    SELECT * FROM jsonb_to_recordset($1::jsonb) AS x(execucao_id bigint, status text, mensagem text,\n                                                    chamadas_ok int, chamadas_erro int, respostas_novas int)\n), fechadas AS (\n    UPDATE bronze.execucao e\n       SET finalizado_em = now(), status = r.status, mensagem = r.mensagem,\n           chamadas_ok = r.chamadas_ok, chamadas_erro = r.chamadas_erro, respostas_novas = r.respostas_novas\n      FROM r\n     WHERE e.execucao_id = r.execucao_id\n    RETURNING e.recurso, e.status, e.respostas_novas, e.mensagem\n)\nSELECT count(*) AS recursos,\n       coalesce(sum(respostas_novas), 0) AS novas,\n       count(*) FILTER (WHERE status = 'erro') AS com_erro,\n       string_agg(recurso || ': ' || mensagem, ' | ') FILTER (WHERE status = 'erro') AS erros\n  FROM fechadas;",
+        "options": {
+          "queryReplacement": "={{ [ JSON.stringify($json.linhas) ] }}"
+        }
+      },
       "credentials": {
         "postgres": {
           "id": "CREDENCIAL_POSTGRES",
@@ -324,6 +324,14 @@
       }
     },
     {
+      "id": "f3f6074e-a95c-5a6f-847f-36c5afb44f7e",
+      "name": "Houve resposta nova?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2460,
+        -20
+      ],
       "parameters": {
         "conditions": {
           "options": {
@@ -347,17 +355,18 @@
         },
         "looseTypeValidation": true,
         "options": {}
-      },
-      "id": "f3f6074e-a95c-5a6f-847f-36c5afb44f7e",
-      "name": "Houve resposta nova?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        2460,
-        -20
-      ]
+      }
     },
     {
+      "id": "2dd2de10-82af-5124-ad56-e3c995b4f704",
+      "name": "Transforma (radar-etl)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "onError": "continueRegularOutput",
+      "position": [
+        2680,
+        -120
+      ],
       "parameters": {
         "method": "POST",
         "url": "http://radar-etl:9000/rodar/transformar",
@@ -374,23 +383,24 @@
           }
         }
       },
-      "id": "2dd2de10-82af-5124-ad56-e3c995b4f704",
-      "name": "Transforma (radar-etl)",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        2680,
-        -120
-      ],
       "credentials": {
         "httpHeaderAuth": {
           "id": "CREDENCIAL_TOKEN",
           "name": "Radar · X-Radar-Token"
         }
-      },
-      "onError": "continueRegularOutput"
+      }
     },
     {
+      "id": "ca29dcba-1b9e-5620-a344-d9b95627320e",
+      "name": "Solta a trava",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.5,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "position": [
+        2900,
+        -20
+      ],
       "parameters": {
         "operation": "executeQuery",
         "query": "UPDATE bronze.trava_carga\n   SET em_uso_por = NULL, rodada_id = NULL, desde = NULL\n WHERE trava_id = 1 AND rodada_id = $1::uuid\nRETURNING trava_id;",
@@ -398,27 +408,14 @@
           "queryReplacement": "={{ [ $('Pega a trava').first().json.rodada_id ] }}"
         }
       },
-      "id": "ca29dcba-1b9e-5620-a344-d9b95627320e",
-      "name": "Solta a trava",
-      "type": "n8n-nodes-base.postgres",
-      "typeVersion": 2.5,
-      "position": [
-        2900,
-        -20
-      ],
       "credentials": {
         "postgres": {
           "id": "CREDENCIAL_POSTGRES",
           "name": "Radar · Postgres etl_radar"
         }
-      },
-      "alwaysOutputData": true,
-      "executeOnce": true
+      }
     },
     {
-      "parameters": {
-        "jsCode": "const fech = $('Grava o fechamento').first().json;\nconst transformou = $('Transforma (radar-etl)').isExecuted;\nlet transformacao = 'não rodou: nenhuma resposta nova';\nlet ok_transf = true;\nif (transformou) {\n  const t = $('Transforma (radar-etl)').first().json;\n  const corpo = t.body ?? {};\n  ok_transf = t.statusCode === 200 && corpo.status === 'sucesso';\n  transformacao = t.error ? `erro: ${t.error.message ?? t.error}` : `HTTP ${t.statusCode} ${corpo.status ?? ''} ${corpo.motivo ?? ''}`.trim();\n}\nconst trava_solta = $('Solta a trava').all().some(i => i.json.trava_id);\nconst ok = Number(fech.com_erro) === 0 && ok_transf && trava_solta;\nreturn [{ json: {\n  ok, rodada_id: $('Pega a trava').first().json.rodada_id,\n  recursos: Number(fech.recursos), respostas_novas: Number(fech.novas), recursos_com_erro: Number(fech.com_erro),\n  detalhe_erros: fech.erros, transformacao, trava_solta,\n} }];\n"
-      },
       "id": "35aedbcd-1925-5e2d-b3b1-0ff0d4ac64ab",
       "name": "Resumo da rodada",
       "type": "n8n-nodes-base.code",
@@ -426,9 +423,20 @@
       "position": [
         3120,
         -20
-      ]
+      ],
+      "parameters": {
+        "jsCode": "const fech = $('Grava o fechamento').first().json;\nconst transformou = $('Transforma (radar-etl)').isExecuted;\nlet transformacao = 'não rodou: nenhuma resposta nova';\nlet ok_transf = true;\nif (transformou) {\n  const t = $('Transforma (radar-etl)').first().json;\n  const corpo = t.body ?? {};\n  ok_transf = t.statusCode === 200 && corpo.status === 'sucesso';\n  transformacao = t.error ? `erro: ${t.error.message ?? t.error}` : `HTTP ${t.statusCode} ${corpo.status ?? ''} ${corpo.motivo ?? ''}`.trim();\n}\nconst trava_solta = $('Solta a trava').all().some(i => i.json.trava_id);\nconst ok = Number(fech.com_erro) === 0 && ok_transf && trava_solta;\nreturn [{ json: {\n  ok, rodada_id: $('Pega a trava').first().json.rodada_id,\n  recursos: Number(fech.recursos), respostas_novas: Number(fech.novas), recursos_com_erro: Number(fech.com_erro),\n  detalhe_erros: fech.erros, transformacao, trava_solta,\n} }];\n"
+      }
     },
     {
+      "id": "cebbf802-951c-5fd5-9eea-67f3e519de9d",
+      "name": "Tudo certo?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        3340,
+        -20
+      ],
       "parameters": {
         "conditions": {
           "options": {
@@ -452,18 +460,9 @@
         },
         "looseTypeValidation": true,
         "options": {}
-      },
-      "id": "cebbf802-951c-5fd5-9eea-67f3e519de9d",
-      "name": "Tudo certo?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.2,
-      "position": [
-        3340,
-        -20
-      ]
+      }
     },
     {
-      "parameters": {},
       "id": "953cae3b-330e-5b6d-bfcf-bd630b2aa718",
       "name": "Fim",
       "type": "n8n-nodes-base.noOp",
@@ -471,12 +470,10 @@
       "position": [
         3560,
         -120
-      ]
+      ],
+      "parameters": {}
     },
     {
-      "parameters": {
-        "errorMessage": "={{ 'Cenário B terminou com erro. Recursos com erro: ' + $json.recursos_com_erro + ' (' + ($json.detalhe_erros ?? '') + '). Transformação: ' + $json.transformacao + '. Trava solta: ' + $json.trava_solta }}"
-      },
       "id": "5b04d980-123f-579e-86cf-720920f94e2d",
       "name": "Cenário B com erro",
       "type": "n8n-nodes-base.stopAndError",
@@ -484,7 +481,10 @@
       "position": [
         3560,
         80
-      ]
+      ],
+      "parameters": {
+        "errorMessage": "={{ 'Cenário B terminou com erro. Recursos com erro: ' + $json.recursos_com_erro + ' (' + ($json.detalhe_erros ?? '') + '). Transformação: ' + $json.transformacao + '. Trava solta: ' + $json.trava_solta }}"
+      }
     }
   ],
   "connections": {
@@ -720,13 +720,13 @@
     }
   },
   "settings": {
-    "executionOrder": "v1",
-    "timezone": "America/Sao_Paulo",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": true,
     "saveDataErrorExecution": "all",
     "saveDataSuccessExecution": "all",
-    "saveManualExecutions": true,
-    "saveExecutionProgress": false,
-    "errorWorkflow": "ID_DO_WORKFLOW_DE_ERRO"
+    "errorWorkflow": "ID_DO_WORKFLOW_DE_ERRO",
+    "timezone": "America/Sao_Paulo",
+    "executionOrder": "v1"
   },
   "pinData": {},
   "meta": {
