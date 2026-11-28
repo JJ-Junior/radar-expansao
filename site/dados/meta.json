@@ -1,5 +1,5 @@
 {
-  "gerado_em": "2026-11-26T17:31:04-03:00",
+  "gerado_em": "2026-11-28T06:41:29-03:00",
   "fonte": "gold",
   "eh_previa": false,
   "versao_pesos": "prd-v0.4",
@@ -16,11 +16,11 @@
     "bronze": [
       {
         "tabela": "bronze.api_resposta",
-        "linhas": 72
+        "linhas": 443
       },
       {
         "tabela": "bronze.execucao",
-        "linhas": 36
+        "linhas": 93
       },
       {
         "tabela": "bronze.trava_carga",
@@ -50,7 +50,7 @@
       },
       {
         "tabela": "silver.fato_indicador_macro",
-        "linhas": 7639
+        "linhas": 7642
       },
       {
         "tabela": "silver.fato_indicador_municipal",
